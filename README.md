@@ -31,7 +31,7 @@ uv sync --all-groups
 Run the app:
 
 ```bash
-uv run python main.py
+uv run hoophigher
 ```
 
 Run tests:
