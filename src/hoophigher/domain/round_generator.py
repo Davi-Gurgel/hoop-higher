@@ -79,16 +79,7 @@ def _group_candidates_by_source(
         grouped[candidate.source_id].append(candidate)
 
     return {
-        player_id: tuple(
-            sorted(
-                player_candidates,
-                key=lambda candidate: (
-                    _DIFFICULTY_ORDER[candidate.question.difficulty],
-                    candidate.question.point_difference,
-                    candidate.target_id,
-                ),
-            )
-        )
+        player_id: tuple(player_candidates)
         for player_id, player_candidates in grouped.items()
     }
 
