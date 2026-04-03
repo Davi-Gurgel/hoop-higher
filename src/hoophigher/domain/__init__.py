@@ -11,6 +11,8 @@ from hoophigher.domain.models import (
     RunState,
     TeamGameInfo,
 )
+from hoophigher.domain.difficulty import classify_question_difficulty, pick_target_difficulty
+from hoophigher.domain.round_generator import generate_round
 from hoophigher.domain.scoring import (
     ARCADE_CORRECT_POINTS,
     ENDLESS_CORRECT_POINTS,
@@ -24,9 +26,11 @@ __all__ = [
     "Difficulty",
     "GameBoxScore",
     "GameMode",
+    "generate_round",
     "GuessDirection",
     "is_guess_correct",
     "PlayerLine",
+    "pick_target_difficulty",
     "Question",
     "QuestionResult",
     "RoundDefinition",
@@ -34,6 +38,7 @@ __all__ = [
     "RunEndReason",
     "RunState",
     "TeamGameInfo",
+    "classify_question_difficulty",
     "ARCADE_CORRECT_POINTS",
     "ENDLESS_CORRECT_POINTS",
     "ENDLESS_WRONG_POINTS",
