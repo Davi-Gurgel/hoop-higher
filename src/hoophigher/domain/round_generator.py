@@ -25,13 +25,17 @@ _DIFFICULTY_ORDER = {
     Difficulty.HARD: 2,
 }
 
+# Represents an arbitrarily large point gap that serves as the EASY bucket's ideal target
+# so that within-bucket tie-breaking always prefers the largest available gap.
+_EASY_IDEAL_DIFF = 999
+
 # Ideal point_difference for each difficulty bucket.
-# Used as tie-breaker so candidates closest to the "center" of their bucket are preferred.
-# EASY: largest possible gap (farther from threshold => more clearly easy)
-# MEDIUM: midpoint of the [5, 9] range
-# HARD: smallest possible gap (closest to 0 => most evenly matched)
+# Used as tie-breaker so candidates closest to the "center" of their bucket are preferred:
+# EASY -> _EASY_IDEAL_DIFF (farther from boundary => more clearly easy)
+# MEDIUM -> 7 (midpoint of the [5, 9] range)
+# HARD -> 0 (closest to 0 => most evenly matched)
 _DIFFICULTY_IDEAL_DIFF = {
-    Difficulty.EASY: 999,
+    Difficulty.EASY: _EASY_IDEAL_DIFF,
     Difficulty.MEDIUM: 7,
     Difficulty.HARD: 0,
 }
@@ -170,7 +174,10 @@ def _sort_candidates_for_target(
         sorted(
             candidates,
             key=lambda candidate: (
+                # Primary: prefer candidates whose bucket matches the target.
                 abs(_DIFFICULTY_ORDER[candidate.question.difficulty] - target_rank),
+                # Tie-breaker: prefer candidates closest to the ideal diff for the target bucket,
+                # so EASY favours large gaps and HARD favours small ones.
                 abs(candidate.question.point_difference - ideal_diff),
                 candidate.source_id,
                 candidate.target_id,
