@@ -50,10 +50,12 @@ class Question:
     def __post_init__(self) -> None:
         if self.player_a.player_id == self.player_b.player_id:
             raise ValueError("Question players must be different.")
+        if self.player_a.points == self.player_b.points:
+            raise ValueError("Question players must not have tied points.")
 
     @property
     def answer(self) -> GuessDirection:
-        if self.player_b.points >= self.player_a.points:
+        if self.player_b.points > self.player_a.points:
             return GuessDirection.HIGHER
 
         return GuessDirection.LOWER

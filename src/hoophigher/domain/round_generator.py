@@ -15,8 +15,12 @@ class QuestionCandidate:
     target_id: str
 
     @property
-    def key(self) -> tuple[str, str]:
+    def directed_key(self) -> tuple[str, str]:
         return (self.source_id, self.target_id)
+
+    @property
+    def matchup_key(self) -> frozenset[str]:
+        return frozenset((self.source_id, self.target_id))
 
 
 _DIFFICULTY_ORDER = {
@@ -70,6 +74,8 @@ def _build_question_candidates(players: tuple[PlayerLine, ...]) -> tuple[Questio
         for player_b in players:
             if player_a.player_id == player_b.player_id:
                 continue
+            if player_a.points == player_b.points:
+                continue
 
             candidates.append(
                 QuestionCandidate(
@@ -114,7 +120,7 @@ def _search_question_path(
             current_candidate=starting_candidate,
             by_source=by_source,
             total_questions=total_questions,
-            used_edges={starting_candidate.key},
+            used_matchups={starting_candidate.matchup_key},
             selected_questions=[starting_candidate.question],
         )
         if result is not None:
@@ -128,7 +134,7 @@ def _search_from_candidate(
     current_candidate: QuestionCandidate,
     by_source: dict[str, tuple[QuestionCandidate, ...]],
     total_questions: int,
-    used_edges: set[tuple[str, str]],
+    used_matchups: set[frozenset[str]],
     selected_questions: list[Question],
 ) -> list[Question] | None:
     if len(selected_questions) == total_questions:
@@ -139,25 +145,25 @@ def _search_from_candidate(
     next_candidates = tuple(
         candidate
         for candidate in by_source.get(next_source_id, ())
-        if candidate.key not in used_edges
+        if candidate.matchup_key not in used_matchups
     )
 
     for next_candidate in _sort_candidates_for_target(next_candidates, target=next_target_difficulty):
-        used_edges.add(next_candidate.key)
+        used_matchups.add(next_candidate.matchup_key)
         selected_questions.append(next_candidate.question)
 
         result = _search_from_candidate(
             current_candidate=next_candidate,
             by_source=by_source,
             total_questions=total_questions,
-            used_edges=used_edges,
+            used_matchups=used_matchups,
             selected_questions=selected_questions,
         )
         if result is not None:
             return result
 
         selected_questions.pop()
-        used_edges.remove(next_candidate.key)
+        used_matchups.remove(next_candidate.matchup_key)
 
     return None
 
