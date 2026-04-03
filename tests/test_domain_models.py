@@ -64,15 +64,15 @@ def test_game_box_score_filters_eligible_players() -> None:
     assert game.eligible_player_lines == (eligible_player,)
 
 
-def test_question_answer_is_higher_on_tie_or_greater() -> None:
+def test_question_answer_is_higher_when_player_b_scores_more() -> None:
     question = Question(
         player_a=make_player(player_id="1", points=20),
-        player_b=make_player(player_id="2", points=20),
+        player_b=make_player(player_id="2", points=24),
         difficulty=Difficulty.HARD,
     )
 
     assert question.answer is GuessDirection.HIGHER
-    assert question.point_difference == 0
+    assert question.point_difference == 4
 
 
 def test_question_rejects_duplicate_players() -> None:
@@ -80,6 +80,15 @@ def test_question_rejects_duplicate_players() -> None:
 
     with pytest.raises(ValueError, match="different"):
         Question(player_a=player, player_b=player, difficulty=Difficulty.EASY)
+
+
+def test_question_rejects_tied_scores() -> None:
+    with pytest.raises(ValueError, match="tied points"):
+        Question(
+            player_a=make_player(player_id="1", points=20),
+            player_b=make_player(player_id="2", points=20),
+            difficulty=Difficulty.HARD,
+        )
 
 
 def test_round_definition_requires_question_count_between_five_and_ten() -> None:

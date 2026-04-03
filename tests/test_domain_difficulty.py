@@ -9,11 +9,15 @@ from hoophigher.domain import Difficulty, classify_question_difficulty, pick_tar
         (10, 20, Difficulty.EASY),
         (20, 11, Difficulty.MEDIUM),
         (20, 17, Difficulty.HARD),
-        (20, 20, Difficulty.HARD),
     ],
 )
 def test_classify_question_difficulty(points_a: int, points_b: int, expected: Difficulty) -> None:
     assert classify_question_difficulty(points_a, points_b) is expected
+
+
+def test_classify_question_difficulty_rejects_ties() -> None:
+    with pytest.raises(ValueError, match="non-tied"):
+        classify_question_difficulty(20, 20)
 
 
 def test_pick_target_difficulty_progression() -> None:

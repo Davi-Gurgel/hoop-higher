@@ -49,9 +49,14 @@ def test_generate_round_creates_linked_question_chain() -> None:
 
     assert isinstance(round_definition, RoundDefinition)
     assert len(round_definition.questions) == 5
+    seen_matchups: set[frozenset[str]] = set()
 
     for index, question in enumerate(round_definition.questions):
         assert question.player_a.player_id != question.player_b.player_id
+        assert question.player_a.points != question.player_b.points
+        matchup_key = frozenset((question.player_a.player_id, question.player_b.player_id))
+        assert matchup_key not in seen_matchups
+        seen_matchups.add(matchup_key)
         if index > 0:
             assert question.player_a.player_id == round_definition.questions[index - 1].player_b.player_id
 
@@ -109,4 +114,18 @@ def test_generate_round_requires_enough_pair_capacity() -> None:
     game = make_game((make_player("a", 10), make_player("b", 14)))
 
     with pytest.raises(ValueError, match="Not enough valid player pairs"):
+        generate_round(game, total_questions=5)
+
+
+def test_generate_round_ignores_tied_pairs_and_can_fail_when_only_ties_remain() -> None:
+    game = make_game(
+        (
+            make_player("a", 20),
+            make_player("b", 20),
+            make_player("c", 19),
+            make_player("d", 19),
+        )
+    )
+
+    with pytest.raises(ValueError, match="Not enough valid player pairs|Unable to generate"):
         generate_round(game, total_questions=5)

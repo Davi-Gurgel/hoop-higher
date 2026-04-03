@@ -3,6 +3,8 @@ from hoophigher.domain.enums import Difficulty
 
 def classify_question_difficulty(points_a: int, points_b: int) -> Difficulty:
     difference = abs(points_a - points_b)
+    if difference == 0:
+        raise ValueError("Question difficulty requires a non-tied score difference.")
 
     if difference >= 10:
         return Difficulty.EASY
@@ -10,8 +12,6 @@ def classify_question_difficulty(points_a: int, points_b: int) -> Difficulty:
     if difference >= 5:
         return Difficulty.MEDIUM
 
-    # A tie is still a valid comparison in the current domain model and should be
-    # treated as the hardest bucket available.
     return Difficulty.HARD
 
 
