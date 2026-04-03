@@ -27,4 +27,9 @@ def init_db(engine: Engine) -> None:
 @contextmanager
 def session_scope(engine: Engine) -> Iterator[Session]:
     with Session(engine) as session:
-        yield session
+        try:
+            yield session
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise

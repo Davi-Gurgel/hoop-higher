@@ -11,13 +11,13 @@ class QuestionRepository:
 
     def create(self, question_record: QuestionRecord) -> QuestionRecord:
         self.session.add(question_record)
-        self.session.commit()
+        self.session.flush()
         self.session.refresh(question_record)
         return question_record
 
     def update(self, question_record: QuestionRecord) -> QuestionRecord:
         question_record = self.session.merge(question_record)
-        self.session.commit()
+        self.session.flush()
         self.session.refresh(question_record)
         return question_record
 
@@ -32,4 +32,3 @@ class QuestionRepository:
             QuestionRecord.created_at.asc()
         )
         return list(self.session.exec(statement))
-
