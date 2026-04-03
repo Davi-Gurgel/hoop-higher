@@ -25,6 +25,17 @@ _DIFFICULTY_ORDER = {
     Difficulty.HARD: 2,
 }
 
+# Ideal point_difference for each difficulty bucket.
+# Used as tie-breaker so candidates closest to the "center" of their bucket are preferred.
+# EASY: largest possible gap (farther from threshold => more clearly easy)
+# MEDIUM: midpoint of the [5, 9] range
+# HARD: smallest possible gap (closest to 0 => most evenly matched)
+_DIFFICULTY_IDEAL_DIFF = {
+    Difficulty.EASY: 999,
+    Difficulty.MEDIUM: 7,
+    Difficulty.HARD: 0,
+}
+
 
 def generate_round(game: GameBoxScore, *, total_questions: int = 5) -> RoundDefinition:
     if total_questions < 5 or total_questions > 10:
@@ -153,14 +164,14 @@ def _sort_candidates_for_target(
     target: Difficulty,
 ) -> tuple[QuestionCandidate, ...]:
     target_rank = _DIFFICULTY_ORDER[target]
+    ideal_diff = _DIFFICULTY_IDEAL_DIFF[target]
 
     return tuple(
         sorted(
             candidates,
             key=lambda candidate: (
                 abs(_DIFFICULTY_ORDER[candidate.question.difficulty] - target_rank),
-                _DIFFICULTY_ORDER[candidate.question.difficulty],
-                candidate.question.point_difference,
+                abs(candidate.question.point_difference - ideal_diff),
                 candidate.source_id,
                 candidate.target_id,
             ),
