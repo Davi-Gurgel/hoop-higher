@@ -99,8 +99,10 @@ def test_run_state_tracks_score_and_streaks() -> None:
     run_state = RunState(mode=GameMode.ENDLESS)
     round_progress = run_state.start_round(round_definition)
 
+    first_question = round_progress.current_question
+    assert first_question is not None
     first_result = QuestionResult(
-        question=round_progress.current_question,
+        question=first_question,
         guess=GuessDirection.HIGHER,
         is_correct=True,
         score_delta=100,
@@ -108,8 +110,10 @@ def test_run_state_tracks_score_and_streaks() -> None:
     )
     run_state.apply_result(first_result)
 
+    second_question = round_progress.current_question
+    assert second_question is not None
     second_result = QuestionResult(
-        question=round_progress.current_question,
+        question=second_question,
         guess=GuessDirection.LOWER,
         is_correct=False,
         score_delta=-60,
