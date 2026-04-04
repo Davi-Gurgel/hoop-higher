@@ -36,8 +36,7 @@ def _make_game(
     player_points: Sequence[int],
 ) -> GameBoxScore:
     players = tuple(
-        _make_player(game_id, index, points)
-        for index, points in enumerate(player_points, start=1)
+        _make_player(game_id, index, points) for index, points in enumerate(player_points, start=1)
     )
     return GameBoxScore(
         game_id=game_id,
