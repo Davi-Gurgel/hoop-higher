@@ -11,13 +11,13 @@ class RunRepository:
 
     def create(self, run: RunRecord) -> RunRecord:
         self.session.add(run)
-        self.session.commit()
+        self.session.flush()
         self.session.refresh(run)
         return run
 
     def update(self, run: RunRecord) -> RunRecord:
         run = self.session.merge(run)
-        self.session.commit()
+        self.session.flush()
         self.session.refresh(run)
         return run
 

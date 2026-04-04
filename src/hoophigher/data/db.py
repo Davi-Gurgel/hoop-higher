@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from contextlib import contextmanager
 from collections.abc import Iterator
+from contextlib import contextmanager
 
 from sqlalchemy.engine import Engine
 from sqlmodel import Session, SQLModel, create_engine
 
-from hoophigher.data import schema as _schema  # noqa: F401 - ensure tables are registered
+from hoophigher.data import (  # noqa: F401 - ensure tables are registered
+    schema as _schema,
+)
 
 DEFAULT_SQLITE_URL = "sqlite:///./hoophigher.db"
 
@@ -27,4 +29,9 @@ def init_db(engine: Engine) -> None:
 @contextmanager
 def session_scope(engine: Engine) -> Iterator[Session]:
     with Session(engine) as session:
-        yield session
+        try:
+            yield session
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise

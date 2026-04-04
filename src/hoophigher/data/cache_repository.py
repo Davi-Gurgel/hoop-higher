@@ -23,7 +23,7 @@ class CacheRepository:
     def set_games_by_date(self, game_date: date, games: Sequence[GameBoxScore]) -> CachedGameRecord:
         record = CachedGameRecord(game_date=game_date, payload_json=_serialize_game_list(games))
         record = self.session.merge(record)
-        self.session.commit()
+        self.session.flush()
         self.session.refresh(record)
         return record
 
@@ -36,7 +36,7 @@ class CacheRepository:
     def set_game_boxscore(self, game: GameBoxScore) -> CachedGameStatsRecord:
         record = CachedGameStatsRecord(game_id=game.game_id, payload_json=_serialize_game_boxscore(game))
         record = self.session.merge(record)
-        self.session.commit()
+        self.session.flush()
         self.session.refresh(record)
         return record
 

@@ -3,7 +3,10 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass
 
-from hoophigher.domain.difficulty import classify_question_difficulty, pick_target_difficulty
+from hoophigher.domain.difficulty import (
+    classify_question_difficulty,
+    pick_target_difficulty,
+)
 from hoophigher.domain.enums import Difficulty
 from hoophigher.domain.models import GameBoxScore, PlayerLine, Question, RoundDefinition
 
@@ -99,10 +102,7 @@ def _group_candidates_by_source(
     for candidate in candidates:
         grouped[candidate.source_id].append(candidate)
 
-    return {
-        player_id: tuple(player_candidates)
-        for player_id, player_candidates in grouped.items()
-    }
+    return {player_id: tuple(player_candidates) for player_id, player_candidates in grouped.items()}
 
 
 def _search_question_path(

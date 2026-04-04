@@ -1,7 +1,7 @@
 from datetime import date
 
-from sqlmodel import Session
-
+import pytest
+from sqlmodel import Session, select
 from hoophigher.data import (
     CacheRepository,
     QuestionRecord,
@@ -13,6 +13,7 @@ from hoophigher.data import (
     StatsRepository,
     create_sqlite_engine,
     init_db,
+    session_scope,
 )
 from hoophigher.domain.models import GameBoxScore, PlayerLine, TeamGameInfo
 
@@ -283,3 +284,51 @@ def test_cache_repository_round_trips_game_payloads(tmp_path) -> None:
     assert cache_repo.get_games_by_date(date(2025, 2, 1)) == [game_one, game_two]
     assert cache_repo.get_game_boxscore("game-1") == game_one
     assert cache_repo.get_game_boxscore("missing") is None
+
+
+def test_session_scope_commits_on_success(tmp_path) -> None:
+    engine = create_sqlite_engine(f"sqlite:///{tmp_path / 'hoophigher.db'}")
+    init_db(engine)
+
+    with session_scope(engine) as session:
+        repo = RunRepository(session)
+        created = repo.create(
+            RunRecord(
+                mode="endless",
+                source_date=date(2025, 2, 3),
+                final_score=100,
+                correct_answers=1,
+                wrong_answers=0,
+                best_streak=1,
+            )
+        )
+        assert created.id is not None
+        created_id = created.id
+
+    with Session(engine) as verification_session:
+        persisted = verification_session.get(RunRecord, created_id)
+        assert persisted is not None
+        assert persisted.final_score == 100
+
+
+def test_session_scope_rolls_back_on_error(tmp_path) -> None:
+    engine = create_sqlite_engine(f"sqlite:///{tmp_path / 'hoophigher.db'}")
+    init_db(engine)
+
+    with pytest.raises(RuntimeError, match="boom"):
+        with session_scope(engine) as session:
+            repo = RunRepository(session)
+            repo.create(
+                RunRecord(
+                    mode="arcade",
+                    source_date=date(2025, 2, 4),
+                    final_score=150,
+                    correct_answers=1,
+                    wrong_answers=1,
+                    best_streak=1,
+                )
+            )
+            raise RuntimeError("boom")
+
+    with Session(engine) as verification_session:
+        assert verification_session.exec(select(RunRecord)).all() == []
