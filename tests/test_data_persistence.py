@@ -1,5 +1,6 @@
 from datetime import date
 
+import pytest
 from sqlmodel import Session, select
 from hoophigher.data import (
     CacheRepository,
@@ -314,7 +315,7 @@ def test_session_scope_rolls_back_on_error(tmp_path) -> None:
     engine = create_sqlite_engine(f"sqlite:///{tmp_path / 'hoophigher.db'}")
     init_db(engine)
 
-    try:
+    with pytest.raises(RuntimeError, match="boom"):
         with session_scope(engine) as session:
             repo = RunRepository(session)
             repo.create(
@@ -328,8 +329,6 @@ def test_session_scope_rolls_back_on_error(tmp_path) -> None:
                 )
             )
             raise RuntimeError("boom")
-    except RuntimeError:
-        pass
 
     with Session(engine) as verification_session:
         assert verification_session.exec(select(RunRecord)).all() == []
