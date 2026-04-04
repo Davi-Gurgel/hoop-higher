@@ -1,7 +1,79 @@
 Screen {
-    align: center middle;
+    align: center top;
 }
 
-Label {
+#home-panel,
+#mode-panel {
+    width: 70;
+    height: auto;
+    margin-top: 3;
     padding: 1 2;
+    border: solid $accent;
+    background: $surface;
+}
+
+#home-title,
+#mode-title,
+#summary-title {
+    text-style: bold;
+    margin-bottom: 1;
+}
+
+#home-subtitle {
+    margin-bottom: 1;
+}
+
+#game-layout {
+    width: 120;
+    height: auto;
+    margin-top: 1;
+    padding: 1 2;
+    border: solid $accent;
+    background: $surface;
+}
+
+#status-line {
+    margin-bottom: 1;
+}
+
+#score-row {
+    height: auto;
+    margin-bottom: 1;
+}
+
+#score-label,
+#mode-label,
+#progress-label {
+    width: 1fr;
+}
+
+#question-panel {
+    height: auto;
+    padding: 1;
+    border: round $primary;
+    margin-bottom: 1;
+}
+
+#action-row {
+    height: auto;
+    margin-bottom: 1;
+}
+
+#action-row Button {
+    width: 1fr;
+    margin-right: 1;
+}
+
+#history-panel {
+    height: 10;
+    border: round $secondary;
+    padding: 0 1;
+}
+
+#summary-panel {
+    width: 70;
+    height: auto;
+    padding: 1 2;
+    border: round $accent;
+    background: $surface-darken-1;
 }

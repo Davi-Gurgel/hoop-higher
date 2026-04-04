@@ -1,23 +1,42 @@
+from __future__ import annotations
+
+from datetime import date
+
 from textual.app import App
-from textual.screen import Screen
-from textual.widgets import Footer, Header, Label
 
+from hoophigher.config import settings
+from hoophigher.data import create_sqlite_engine, init_db
+from hoophigher.data.api import MockProvider
+from hoophigher.domain.enums import GameMode
+from hoophigher.services import GameplayService
+from hoophigher.tui.screens import GameScreen, HomeScreen, ModeSelectScreen
 
-class HomeScreen(Screen[None]):
-    """Initial placeholder screen for the MVP scaffold."""
-
-    def compose(self):
-        yield Header(show_clock=False)
-        yield Label("Hoop Higher scaffold is ready.")
-        yield Footer()
+MOCK_CANDIDATE_DATES = (
+    date(2025, 1, 12),
+    date(2025, 1, 13),
+)
 
 
 class HoopHigherApp(App[None]):
-    """Base Textual application for the project scaffold."""
-
     CSS_PATH = "tui/styles.tcss"
     TITLE = "Hoop Higher"
-    SUB_TITLE = "Project scaffold"
+    SUB_TITLE = "Mock gameplay"
 
     def on_mount(self) -> None:
-        self.push_screen(HomeScreen())
+        engine = create_sqlite_engine(settings.database_url)
+        init_db(engine)
+        self.gameplay_service = GameplayService(
+            engine=engine,
+            provider=MockProvider(),
+        )
+        self.install_screen(HomeScreen(), name="home")
+        self.install_screen(ModeSelectScreen(), name="mode-select")
+        self.push_screen("home")
+
+    async def start_game(self, mode: GameMode) -> None:
+        snapshot = await self.gameplay_service.start_run(
+            mode,
+            candidate_dates=MOCK_CANDIDATE_DATES,
+            total_questions=5,
+        )
+        self.push_screen(GameScreen(snapshot))
