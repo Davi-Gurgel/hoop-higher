@@ -79,7 +79,7 @@ class GameplayService:
             source_date=source_date,
             candidate_dates=candidate_dates,
         )
-        selected_index = self._rng.randrange(len(games))
+        selected_index = 0
         selected_game = games[selected_index]
         run_state = RunState(mode=mode, source_date=selected_date)
         round_definition = generate_round(selected_game, total_questions=total_questions)

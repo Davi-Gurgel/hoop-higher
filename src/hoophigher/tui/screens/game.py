@@ -69,8 +69,9 @@ class GameScreen(Screen[None]):
     BINDINGS = [
         ("h", "guess_higher", "Higher"),
         ("l", "guess_lower", "Lower"),
-        ("up", "focus_higher", "Focus Higher"),
-        ("down", "focus_lower", "Focus Lower"),
+        ("left", "focus_higher", "Focus Higher"),
+        ("right", "focus_lower", "Focus Lower"),
+        ("enter", "submit_focused_guess", "Confirm"),
         ("escape", "go_home", "Home"),
         ("q", "quit_run", "Quit"),
     ]
@@ -129,7 +130,7 @@ class GameScreen(Screen[None]):
                         yield Label("", id="pb-minutes", classes="player-minutes-label")
                         yield Label("", id="pb-compare", classes="compare-hint")
             with Vertical(id="actions-panel"):
-                yield Label("Use H/L or ↑/↓ + Enter", id="controls-hint")
+                yield Label("Use H/L or ←/→ + Enter", id="controls-hint")
                 with Horizontal(id="guess-actions"):
                     yield Button(
                         "▲  HIGHER  [H]",
@@ -171,6 +172,15 @@ class GameScreen(Screen[None]):
 
     def action_focus_lower(self) -> None:
         self.query_one("#guess-lower", Button).focus()
+
+    async def action_submit_focused_guess(self) -> None:
+        focused = self.focused
+        if not isinstance(focused, Button):
+            return
+        if focused.id == "guess-higher":
+            await self._submit_guess(GuessDirection.HIGHER)
+        elif focused.id == "guess-lower":
+            await self._submit_guess(GuessDirection.LOWER)
 
     def action_go_home(self) -> None:
         if self._snapshot.is_finished:
