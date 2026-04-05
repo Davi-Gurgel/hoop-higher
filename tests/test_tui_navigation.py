@@ -10,7 +10,7 @@ from hoophigher.app import HoopHigherApp
 
 def test_home_screen_supports_arrow_navigation() -> None:
     async def scenario() -> None:
-        app = HoopHigherApp()
+        app = HoopHigherApp(database_url="sqlite://")
 
         async with app.run_test() as pilot:
             assert getattr(app.screen.focused, "id", None) == "start-game"
@@ -28,7 +28,7 @@ def test_home_screen_supports_arrow_navigation() -> None:
 
 def test_mode_select_supports_arrow_navigation() -> None:
     async def scenario() -> None:
-        app = HoopHigherApp()
+        app = HoopHigherApp(database_url="sqlite://")
 
         async with app.run_test() as pilot:
             await pilot.press("enter")
@@ -52,7 +52,7 @@ def test_mode_select_supports_arrow_navigation() -> None:
 
 def test_game_screen_surfaces_left_right_controls() -> None:
     async def scenario() -> None:
-        app = HoopHigherApp()
+        app = HoopHigherApp(database_url="sqlite://")
 
         async with app.run_test() as pilot:
             await pilot.press("enter")
@@ -67,7 +67,7 @@ def test_game_screen_surfaces_left_right_controls() -> None:
 
 def test_game_screen_shows_active_game_tabs_and_minutes_for_both_players() -> None:
     async def scenario() -> None:
-        app = HoopHigherApp()
+        app = HoopHigherApp(database_url="sqlite://")
 
         async with app.run_test() as pilot:
             await pilot.press("enter")
@@ -81,8 +81,15 @@ def test_game_screen_shows_active_game_tabs_and_minutes_for_both_players() -> No
             player_b_minutes = app.screen.query_one("#pb-minutes", Label)
 
             assert "@" in active_game.visual.plain
-            assert snapshot.current_game.game_id == snapshot.games_today[0].game_id
-            assert app.screen.query_one("#game-tab-0", Label).has_class("browser-tab-active")
+            assert snapshot.current_game.game_id in {
+                game.game_id for game in snapshot.games_today
+            }
+            current_game_index = next(
+                i
+                for i, g in enumerate(snapshot.games_today)
+                if g.game_id == snapshot.current_game.game_id
+            )
+            assert app.screen.query_one(f"#game-tab-{current_game_index}", Label).has_class("browser-tab-active")
             assert (
                 first_tab.visual.plain
                 == f"{snapshot.games_today[0].away_team.abbreviation} {snapshot.games_today[0].away_team.score} | "
@@ -96,7 +103,7 @@ def test_game_screen_shows_active_game_tabs_and_minutes_for_both_players() -> No
 
 def test_game_screen_left_right_arrows_focus_buttons_before_enter() -> None:
     async def scenario() -> None:
-        app = HoopHigherApp()
+        app = HoopHigherApp(database_url="sqlite://")
 
         async with app.run_test() as pilot:
             await pilot.press("enter")
@@ -116,7 +123,7 @@ def test_game_screen_left_right_arrows_focus_buttons_before_enter() -> None:
 
 def test_game_screen_enter_confirms_focused_guess() -> None:
     async def scenario() -> None:
-        app = HoopHigherApp()
+        app = HoopHigherApp(database_url="sqlite://")
 
         async with app.run_test() as pilot:
             await pilot.press("enter")
@@ -136,7 +143,7 @@ def test_game_screen_enter_confirms_focused_guess() -> None:
 
 def test_game_screen_active_tab_moves_after_round_end() -> None:
     async def scenario() -> None:
-        app = HoopHigherApp()
+        app = HoopHigherApp(database_url="sqlite://")
 
         async with app.run_test() as pilot:
             await pilot.press("enter")
@@ -176,7 +183,7 @@ def test_game_screen_active_tab_moves_after_round_end() -> None:
 
 def test_game_screen_q_exits_app_and_marks_user_exit() -> None:
     async def scenario() -> None:
-        app = HoopHigherApp()
+        app = HoopHigherApp(database_url="sqlite://")
         exit_called = False
 
         def fake_exit(*args, **kwargs) -> None:

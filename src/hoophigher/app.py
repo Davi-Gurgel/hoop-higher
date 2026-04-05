@@ -22,8 +22,12 @@ class HoopHigherApp(App[None]):
     TITLE = "Hoop Higher"
     SUB_TITLE = "Mock gameplay"
 
+    def __init__(self, *, database_url: str | None = None, **kwargs: object) -> None:
+        super().__init__(**kwargs)
+        self._database_url = database_url or settings.database_url
+
     def on_mount(self) -> None:
-        engine = create_sqlite_engine(settings.database_url)
+        engine = create_sqlite_engine(self._database_url)
         init_db(engine)
         self.gameplay_service = GameplayService(
             engine=engine,

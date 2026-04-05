@@ -13,7 +13,7 @@ def _wrong_guess_key(app: HoopHigherApp) -> str:
 
 def test_escape_during_finished_feedback_does_not_stack_game_over() -> None:
     async def scenario() -> None:
-        app = HoopHigherApp()
+        app = HoopHigherApp(database_url="sqlite://")
 
         async with app.run_test() as pilot:
             await pilot.press("enter")
