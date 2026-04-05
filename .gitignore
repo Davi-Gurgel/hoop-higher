@@ -214,3 +214,9 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# db
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
