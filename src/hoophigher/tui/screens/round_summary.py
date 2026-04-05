@@ -26,14 +26,20 @@ class RoundSummaryScreen(ModalScreen[None]):
         self._summary = summary
 
     def compose(self) -> ComposeResult:
-        with Vertical(id="summary-panel"):
-            yield Label(f"Round {self._summary.round_index + 1} Complete", id="summary-title")
-            yield Label(f"Game: {self._summary.game_id}")
+        s = self._summary
+        sign = "+" if s.score_delta >= 0 else ""
+        with Vertical(id="summary-overlay"):
+            yield Label(f"ROUND {s.round_index + 1} COMPLETE", id="summary-title")
+            yield Label(f"Game: {s.game_id}", classes="summary-stat")
             yield Label(
-                f"Questions: {self._summary.questions} | Correct: {self._summary.correct_answers} | Wrong: {self._summary.wrong_answers}"
+                f"✓ {s.correct_answers}   ✕ {s.wrong_answers}   ({s.questions} questions)",
+                classes="summary-stat",
             )
-            yield Label(f"Score Delta: {self._summary.score_delta}")
-            yield Button("Continue", id="summary-continue", variant="success")
+            yield Label(
+                f"Score Delta: {sign}{s.score_delta}",
+                classes="summary-stat-highlight",
+            )
+            yield Button("Continue  [Enter]", id="summary-continue", variant="success")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "summary-continue":
