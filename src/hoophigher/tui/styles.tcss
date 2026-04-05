@@ -94,6 +94,11 @@ ModeSelectScreen {
    GAME SCREEN
    ═══════════════════════════════════════════════════════════════ */
 
+#game-layout {
+    width: 100%;
+    height: 1fr;
+}
+
 /* Status bar at the top */
 #status-bar {
     height: 3;
@@ -127,28 +132,91 @@ ModeSelectScreen {
     content-align: right middle;
 }
 
+/* Active game + day tabs */
+#day-games-panel {
+    width: 100%;
+    height: auto;
+    padding: 1 2 0 2;
+    background: #11161d;
+    border-bottom: solid #30363d;
+}
+
+#active-game-title {
+    width: 100%;
+    text-align: center;
+    text-style: bold;
+    color: #f0883e;
+}
+
+#active-game-score {
+    width: 100%;
+    text-align: center;
+    color: #8b949e;
+    margin-bottom: 1;
+}
+
+#games-tabs {
+    width: 100%;
+    height: 3;
+}
+
+.browser-tab {
+    width: auto;
+    min-width: 18;
+    height: 3;
+    padding: 0 2;
+    margin-right: 1;
+    background: #161b22;
+    color: #8b949e;
+    border: round #30363d;
+    text-align: center;
+    content-align: center middle;
+}
+
+.browser-tab-active {
+    background: #173a68;
+    color: #f0f6fc;
+    border: round #1f6feb;
+    text-style: bold;
+}
+
 /* Main matchup area */
 #matchup-area {
     width: 100%;
-    height: 1fr;
+    height: auto;
+    padding: 1 2 1 2;
 }
 
 /* Player halves */
+.player-panel {
+    width: 1fr;
+    height: auto;
+    content-align: center middle;
+}
+
 #player-a-half {
     width: 1fr;
-    height: 100%;
-    padding: 2 4;
-    background: #161b22;
-    border-right: solid #30363d;
-    content-align: center middle;
+    height: auto;
+    padding: 0 2;
 }
 
 #player-b-half {
     width: 1fr;
-    height: 100%;
-    padding: 2 4;
-    background: #1a2828;
+    height: auto;
+    padding: 0 2;
+}
+
+.player-card {
+    width: 100%;
+    height: 18;
+    padding: 2 3;
+    background: #161b22;
+    border: round #30363d;
     content-align: center middle;
+}
+
+.player-card-b {
+    background: #162226;
 }
 
 /* VS divider */
@@ -177,9 +245,13 @@ ModeSelectScreen {
 .player-name-label {
     text-align: center;
     text-style: bold;
-    color: #e6edf3;
+    color: #f0f6fc;
     width: 100%;
-    margin-bottom: 1;
+    margin-bottom: 2;
+}
+
+.player-name-primary {
+    margin-top: 1;
 }
 
 .player-pts-value {
@@ -187,6 +259,7 @@ ModeSelectScreen {
     text-style: bold;
     color: #f0883e;
     width: 100%;
+    margin-bottom: 1;
 }
 
 .player-pts-label {
@@ -214,7 +287,7 @@ ModeSelectScreen {
 
 .compare-hint {
     text-align: center;
-    color: #8b949e;
+    color: #79c0ff;
     width: 100%;
     margin-bottom: 1;
 }
@@ -223,13 +296,25 @@ ModeSelectScreen {
     text-align: center;
     color: #58a6ff;
     width: 100%;
-    margin-bottom: 1;
+    margin: 1 0;
+}
+
+#actions-panel {
+    width: 100%;
+    height: auto;
+    padding: 0 4 1 4;
+    content-align: center middle;
+}
+
+#guess-actions {
+    width: 100%;
+    height: auto;
 }
 
 /* Guess buttons */
 .guess-btn {
-    width: 100%;
-    margin-top: 1;
+    width: 1fr;
+    margin: 0 1;
 }
 
 /* Bottom info bar */

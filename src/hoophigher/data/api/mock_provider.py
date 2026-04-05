@@ -7,6 +7,21 @@ from typing import Sequence
 from hoophigher.data.api.base import StatsProvider
 from hoophigher.domain.models import GameBoxScore, PlayerLine, TeamGameInfo
 
+_MOCK_PLAYER_NAMES = (
+    "Jalen Hart",
+    "Marcus Reed",
+    "Tyrese Cole",
+    "Devin Brooks",
+    "Malik Hayes",
+    "Isaiah Price",
+    "Noah Foster",
+    "Miles Bell",
+    "Andre Lewis",
+    "Caleb Shaw",
+    "Jordan Wells",
+    "Avery Scott",
+)
+
 
 @dataclass(frozen=True, slots=True)
 class _MockDataset:
@@ -14,12 +29,25 @@ class _MockDataset:
     games_by_id: dict[str, GameBoxScore]
 
 
-def _make_player(game_id: str, index: int, points: int, minutes: int = 24) -> PlayerLine:
+def _player_name_for(game_id: str, index: int) -> str:
+    seed = sum(ord(char) for char in game_id)
+    return _MOCK_PLAYER_NAMES[(seed + index - 1) % len(_MOCK_PLAYER_NAMES)]
+
+
+def _make_player(
+    *,
+    game_id: str,
+    index: int,
+    points: int,
+    team_id: str,
+    team_abbreviation: str,
+    minutes: int,
+) -> PlayerLine:
     return PlayerLine(
         player_id=f"{game_id}-p{index}",
-        player_name=f"{game_id.upper()} Player {index}",
-        team_id=f"{game_id}-team-{index % 2}",
-        team_abbreviation=f"T{index % 2}",
+        player_name=_player_name_for(game_id, index),
+        team_id=team_id,
+        team_abbreviation=team_abbreviation,
         points=points,
         minutes=minutes,
     )
@@ -35,25 +63,40 @@ def _make_game(
     away_score: int,
     player_points: Sequence[int],
 ) -> GameBoxScore:
-    players = tuple(
-        _make_player(game_id, index, points) for index, points in enumerate(player_points, start=1)
-    )
+    home_team_id = f"{game_id}-home"
+    away_team_id = f"{game_id}-away"
+    split_index = len(player_points) // 2
+    players = []
+    for index, points in enumerate(player_points, start=1):
+        is_away_player = index <= split_index
+        team_id = away_team_id if is_away_player else home_team_id
+        team_abbreviation = away_abbreviation if is_away_player else home_abbreviation
+        players.append(
+            _make_player(
+                game_id=game_id,
+                index=index,
+                points=points,
+                team_id=team_id,
+                team_abbreviation=team_abbreviation,
+                minutes=max(18, 36 - (index * 2)),
+            )
+        )
     return GameBoxScore(
         game_id=game_id,
         game_date=game_date,
         home_team=TeamGameInfo(
-            team_id=f"{game_id}-home",
+            team_id=home_team_id,
             name=f"{home_abbreviation} Home",
             abbreviation=home_abbreviation,
             score=home_score,
         ),
         away_team=TeamGameInfo(
-            team_id=f"{game_id}-away",
+            team_id=away_team_id,
             name=f"{away_abbreviation} Away",
             abbreviation=away_abbreviation,
             score=away_score,
         ),
-        player_lines=players,
+        player_lines=tuple(players),
     )
 
 
