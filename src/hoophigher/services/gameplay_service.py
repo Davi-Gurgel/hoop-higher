@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from datetime import date
 from random import Random
@@ -314,9 +315,12 @@ class GameplayService:
             raise ValueError("candidate_dates is required when source_date is not provided.")
 
         if mode is GameMode.HISTORICAL:
+            games_per_date = await asyncio.gather(
+                *(self._provider.get_games_by_date(current_date) for current_date in candidate_dates)
+            )
             eligible_dates: list[tuple[date, tuple[GameBoxScore, ...]]] = []
-            for current_date in candidate_dates:
-                games_for_date = tuple(await self._provider.get_games_by_date(current_date))
+            for current_date, games_for_date in zip(candidate_dates, games_per_date, strict=True):
+                games_for_date = tuple(games_for_date)
                 if len(games_for_date) >= MIN_HISTORICAL_GAMES:
                     eligible_dates.append((current_date, games_for_date))
             if not eligible_dates:
