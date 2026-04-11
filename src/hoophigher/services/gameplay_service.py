@@ -243,37 +243,33 @@ class GameplayService:
                 )
             )
 
-            round_record = round_repo.get(active_run.round_id)
-            run_record = run_repo.get(active_run.run_id)
-            if round_record is None or run_record is None:
-                raise RuntimeError("Run progress records were not found during persistence.")
-
-            round_record.correct_answers = sum(1 for item in round_progress.results if item.is_correct)
-            round_record.wrong_answers = sum(1 for item in round_progress.results if not item.is_correct)
-            round_record.score_delta = sum(item.score_delta for item in round_progress.results)
-            round_repo.update(round_record)
-            self._update_run_record(run_repo, run_record, active_run.run_state)
+            round_repo.update_progress(
+                active_run.round_id,
+                correct_answers=sum(1 for item in round_progress.results if item.is_correct),
+                wrong_answers=sum(1 for item in round_progress.results if not item.is_correct),
+                score_delta=sum(item.score_delta for item in round_progress.results),
+            )
+            self._update_run_record(run_repo, active_run.run_id, active_run.run_state)
 
     def _persist_run_state(self, active_run: _ActiveRun) -> None:
         with session_scope(self._engine) as session:
             run_repo = RunRepository(session)
-            run_record = run_repo.get(active_run.run_id)
-            if run_record is None:
-                raise RuntimeError("Run record was not found during persistence.")
-            self._update_run_record(run_repo, run_record, active_run.run_state)
+            self._update_run_record(run_repo, active_run.run_id, active_run.run_state)
 
     def _update_run_record(
         self,
         run_repo: RunRepository,
-        run_record: RunRecord,
+        run_id: int,
         run_state: RunState,
     ) -> None:
-        run_record.final_score = run_state.score
-        run_record.correct_answers = run_state.correct_answers
-        run_record.wrong_answers = run_state.wrong_answers
-        run_record.best_streak = run_state.best_streak
-        run_record.end_reason = run_state.end_reason.value if run_state.end_reason is not None else None
-        run_repo.update(run_record)
+        run_repo.update_progress(
+            run_id,
+            final_score=run_state.score,
+            correct_answers=run_state.correct_answers,
+            wrong_answers=run_state.wrong_answers,
+            best_streak=run_state.best_streak,
+            end_reason=run_state.end_reason.value if run_state.end_reason is not None else None,
+        )
 
     async def _start_next_round(self, active_run: _ActiveRun) -> None:
         game = active_run.games[active_run.next_game_index]
