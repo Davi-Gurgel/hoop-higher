@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 
+from sqlalchemy import event
 from sqlalchemy.engine import Engine
 from sqlmodel import Session, SQLModel, create_engine
 
@@ -19,7 +20,18 @@ def create_sqlite_engine(
     echo: bool = False,
 ) -> Engine:
     connect_args = {"check_same_thread": False} if database_url.startswith("sqlite") else {}
-    return create_engine(database_url, echo=echo, connect_args=connect_args)
+    engine = create_engine(database_url, echo=echo, connect_args=connect_args)
+
+    if database_url.startswith("sqlite"):
+        @event.listens_for(engine, "connect")
+        def _configure_sqlite(dbapi_connection, _connection_record) -> None:
+            cursor = dbapi_connection.cursor()
+            cursor.execute("PRAGMA journal_mode=WAL;")
+            cursor.execute("PRAGMA synchronous=NORMAL;")
+            cursor.execute("PRAGMA busy_timeout=5000;")
+            cursor.close()
+
+    return engine
 
 
 def init_db(engine: Engine) -> None:
