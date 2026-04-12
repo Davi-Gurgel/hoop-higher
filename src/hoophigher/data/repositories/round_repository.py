@@ -16,7 +16,7 @@ class RoundRepository:
         return round_record
 
     def update(self, round_record: RoundRecord) -> RoundRecord:
-        self.session.add(round_record)
+        round_record = self.session.merge(round_record)
         self.session.flush()
         return round_record
 

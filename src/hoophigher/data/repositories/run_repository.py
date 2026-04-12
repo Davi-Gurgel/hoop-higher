@@ -16,7 +16,7 @@ class RunRepository:
         return run
 
     def update(self, run: RunRecord) -> RunRecord:
-        self.session.add(run)
+        run = self.session.merge(run)
         self.session.flush()
         return run
 

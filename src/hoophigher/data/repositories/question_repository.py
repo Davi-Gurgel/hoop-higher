@@ -15,7 +15,7 @@ class QuestionRepository:
         return question_record
 
     def update(self, question_record: QuestionRecord) -> QuestionRecord:
-        self.session.add(question_record)
+        question_record = self.session.merge(question_record)
         self.session.flush()
         return question_record
 
