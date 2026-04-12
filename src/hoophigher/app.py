@@ -27,7 +27,12 @@ class HoopHigherApp(App[None]):
         self._database_url = database_url or settings.database_url
 
     def on_mount(self) -> None:
-        engine = create_sqlite_engine(self._database_url)
+        engine = create_sqlite_engine(
+            self._database_url,
+            sqlite_journal_mode=settings.sqlite_journal_mode,
+            sqlite_synchronous=settings.sqlite_synchronous,
+            sqlite_busy_timeout_ms=settings.sqlite_busy_timeout_ms,
+        )
         init_db(engine)
         self.gameplay_service = GameplayService(
             engine=engine,

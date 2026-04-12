@@ -12,13 +12,11 @@ class QuestionRepository:
     def create(self, question_record: QuestionRecord) -> QuestionRecord:
         self.session.add(question_record)
         self.session.flush()
-        self.session.refresh(question_record)
         return question_record
 
     def update(self, question_record: QuestionRecord) -> QuestionRecord:
         question_record = self.session.merge(question_record)
         self.session.flush()
-        self.session.refresh(question_record)
         return question_record
 
     def list_by_round(self, round_id: int) -> list[QuestionRecord]:

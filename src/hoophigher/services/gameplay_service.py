@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from datetime import date
 from random import Random
@@ -17,6 +18,7 @@ from hoophigher.domain.round_generator import generate_round
 from hoophigher.domain.scoring import calculate_score_delta, get_run_end_reason_for_answer, is_guess_correct
 
 MIN_HISTORICAL_GAMES = 5
+DEFAULT_HISTORICAL_FETCH_CONCURRENCY = 8
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,10 +62,14 @@ class GameplayService:
         engine: Engine,
         provider: StatsProvider,
         rng: Random | None = None,
+        historical_fetch_concurrency: int = DEFAULT_HISTORICAL_FETCH_CONCURRENCY,
     ) -> None:
+        if historical_fetch_concurrency < 1:
+            raise ValueError("historical_fetch_concurrency must be at least 1.")
         self._engine = engine
         self._provider = provider
         self._rng = rng or Random()
+        self._historical_fetch_concurrency = historical_fetch_concurrency
         self._active_run: _ActiveRun | None = None
 
     async def start_run(
@@ -243,37 +249,33 @@ class GameplayService:
                 )
             )
 
-            round_record = round_repo.get(active_run.round_id)
-            run_record = run_repo.get(active_run.run_id)
-            if round_record is None or run_record is None:
-                raise RuntimeError("Run progress records were not found during persistence.")
-
-            round_record.correct_answers = sum(1 for item in round_progress.results if item.is_correct)
-            round_record.wrong_answers = sum(1 for item in round_progress.results if not item.is_correct)
-            round_record.score_delta = sum(item.score_delta for item in round_progress.results)
-            round_repo.update(round_record)
-            self._update_run_record(run_repo, run_record, active_run.run_state)
+            round_repo.update_progress(
+                active_run.round_id,
+                correct_answers=sum(1 for item in round_progress.results if item.is_correct),
+                wrong_answers=sum(1 for item in round_progress.results if not item.is_correct),
+                score_delta=sum(item.score_delta for item in round_progress.results),
+            )
+            self._update_run_record(run_repo, active_run.run_id, active_run.run_state)
 
     def _persist_run_state(self, active_run: _ActiveRun) -> None:
         with session_scope(self._engine) as session:
             run_repo = RunRepository(session)
-            run_record = run_repo.get(active_run.run_id)
-            if run_record is None:
-                raise RuntimeError("Run record was not found during persistence.")
-            self._update_run_record(run_repo, run_record, active_run.run_state)
+            self._update_run_record(run_repo, active_run.run_id, active_run.run_state)
 
     def _update_run_record(
         self,
         run_repo: RunRepository,
-        run_record: RunRecord,
+        run_id: int,
         run_state: RunState,
     ) -> None:
-        run_record.final_score = run_state.score
-        run_record.correct_answers = run_state.correct_answers
-        run_record.wrong_answers = run_state.wrong_answers
-        run_record.best_streak = run_state.best_streak
-        run_record.end_reason = run_state.end_reason.value if run_state.end_reason is not None else None
-        run_repo.update(run_record)
+        run_repo.update_progress(
+            run_id,
+            final_score=run_state.score,
+            correct_answers=run_state.correct_answers,
+            wrong_answers=run_state.wrong_answers,
+            best_streak=run_state.best_streak,
+            end_reason=run_state.end_reason.value if run_state.end_reason is not None else None,
+        )
 
     async def _start_next_round(self, active_run: _ActiveRun) -> None:
         game = active_run.games[active_run.next_game_index]
@@ -318,9 +320,10 @@ class GameplayService:
             raise ValueError("candidate_dates is required when source_date is not provided.")
 
         if mode is GameMode.HISTORICAL:
+            games_per_date = await self._fetch_games_for_dates(candidate_dates)
             eligible_dates: list[tuple[date, tuple[GameBoxScore, ...]]] = []
-            for current_date in candidate_dates:
-                games_for_date = tuple(await self._provider.get_games_by_date(current_date))
+            for current_date, games_for_date in zip(candidate_dates, games_per_date, strict=True):
+                games_for_date = tuple(games_for_date)
                 if len(games_for_date) >= MIN_HISTORICAL_GAMES:
                     eligible_dates.append((current_date, games_for_date))
             if not eligible_dates:
@@ -333,6 +336,15 @@ class GameplayService:
                 return current_date, games_for_date
 
         raise LookupError("No games found for provided candidate dates.")
+
+    async def _fetch_games_for_dates(self, candidate_dates: Sequence[date]) -> tuple[tuple[GameBoxScore, ...], ...]:
+        results: list[tuple[GameBoxScore, ...]] = []
+        step = self._historical_fetch_concurrency
+        for start_index in range(0, len(candidate_dates), step):
+            chunk = candidate_dates[start_index : start_index + step]
+            chunk_results = await asyncio.gather(*(self._provider.get_games_by_date(current_date) for current_date in chunk))
+            results.extend(tuple(games_for_date) for games_for_date in chunk_results)
+        return tuple(results)
 
     def _require_active_run(self) -> _ActiveRun:
         if self._active_run is None:

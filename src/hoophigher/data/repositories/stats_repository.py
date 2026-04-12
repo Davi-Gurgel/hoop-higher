@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from collections import Counter
-
+from sqlalchemy import func
 from sqlmodel import Session, select
 
 from hoophigher.data.schema import QuestionRecord, RoundRecord, RunRecord
@@ -16,53 +15,60 @@ class StatsRepository:
         return list(self.session.exec(statement))
 
     def count_runs(self) -> int:
-        return len(self.list_runs())
+        statement = select(func.count(RunRecord.id))
+        return int(self.session.exec(statement).one())
 
     def list_rounds(self) -> list[RoundRecord]:
         statement = select(RoundRecord).order_by(RoundRecord.created_at.asc(), RoundRecord.id.asc())
         return list(self.session.exec(statement))
 
     def count_rounds(self) -> int:
-        return len(self.list_rounds())
+        statement = select(func.count(RoundRecord.id))
+        return int(self.session.exec(statement).one())
 
     def list_questions(self) -> list[QuestionRecord]:
         statement = select(QuestionRecord).order_by(QuestionRecord.created_at.asc(), QuestionRecord.id.asc())
         return list(self.session.exec(statement))
 
     def count_questions(self) -> int:
-        return len(self.list_questions())
+        statement = select(func.count(QuestionRecord.id))
+        return int(self.session.exec(statement).one())
 
     def count_correct_questions(self) -> int:
-        return sum(1 for question in self.list_questions() if question.is_correct)
+        statement = select(func.count(QuestionRecord.id)).where(QuestionRecord.is_correct.is_(True))
+        return int(self.session.exec(statement).one())
 
     def count_wrong_questions(self) -> int:
-        return sum(1 for question in self.list_questions() if not question.is_correct)
+        statement = select(func.count(QuestionRecord.id)).where(QuestionRecord.is_correct.is_(False))
+        return int(self.session.exec(statement).one())
 
     def best_score(self) -> int | None:
-        runs = self.list_runs()
-        if not runs:
-            return None
-        return max(run.final_score for run in runs)
+        statement = select(func.max(RunRecord.final_score))
+        return self.session.exec(statement).one()
 
     def best_streak(self) -> int | None:
-        runs = self.list_runs()
-        if not runs:
-            return None
-        return max(run.best_streak for run in runs)
+        statement = select(func.max(RunRecord.best_streak))
+        return self.session.exec(statement).one()
 
     def mode_distribution(self) -> dict[str, int]:
-        counter = Counter(run.mode for run in self.list_runs())
-        return dict(sorted(counter.items()))
+        statement = (
+            select(RunRecord.mode, func.count(RunRecord.id))
+            .group_by(RunRecord.mode)
+            .order_by(RunRecord.mode.asc())
+        )
+        rows = self.session.exec(statement).all()
+        return {mode: int(count) for mode, count in rows}
 
     def leaderboard(self, *, limit: int = 10) -> list[RunRecord]:
-        runs = sorted(
-            self.list_runs(),
-            key=lambda run: (
-                -run.final_score,
-                -run.best_streak,
-                -run.correct_answers,
-                run.created_at,
-                run.id or 0,
-            ),
+        statement = (
+            select(RunRecord)
+            .order_by(
+                RunRecord.final_score.desc(),
+                RunRecord.best_streak.desc(),
+                RunRecord.correct_answers.desc(),
+                RunRecord.created_at.asc(),
+                RunRecord.id.asc(),
+            )
+            .limit(limit)
         )
-        return runs[:limit]
+        return list(self.session.exec(statement))
