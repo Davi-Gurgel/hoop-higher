@@ -356,3 +356,27 @@ def test_create_sqlite_engine_does_not_apply_file_pragmas_to_memory_db() -> None
     with default_engine.connect() as conn:
         timeout_default = conn.execute(text("PRAGMA busy_timeout")).scalar_one()
     assert timeout_with_override == timeout_default
+
+
+def test_create_sqlite_engine_rejects_invalid_journal_mode(tmp_path) -> None:
+    with pytest.raises(ValueError, match="sqlite_journal_mode must be one of"):
+        create_sqlite_engine(
+            f"sqlite:///{tmp_path / 'hoophigher.db'}",
+            sqlite_journal_mode="invalid",
+        )
+
+
+def test_create_sqlite_engine_rejects_invalid_synchronous_value(tmp_path) -> None:
+    with pytest.raises(ValueError, match="sqlite_synchronous must be one of"):
+        create_sqlite_engine(
+            f"sqlite:///{tmp_path / 'hoophigher.db'}",
+            sqlite_synchronous="invalid",
+        )
+
+
+def test_create_sqlite_engine_rejects_negative_busy_timeout(tmp_path) -> None:
+    with pytest.raises(ValueError, match="sqlite_busy_timeout_ms must be >= 0"):
+        create_sqlite_engine(
+            f"sqlite:///{tmp_path / 'hoophigher.db'}",
+            sqlite_busy_timeout_ms=-1,
+        )
