@@ -4,6 +4,8 @@ from hoophigher.domain import (
     ARCADE_CORRECT_POINTS,
     ENDLESS_CORRECT_POINTS,
     ENDLESS_WRONG_POINTS,
+    HISTORICAL_CORRECT_POINTS,
+    HISTORICAL_WRONG_POINTS,
     Difficulty,
     GameMode,
     GuessDirection,
@@ -55,6 +57,11 @@ def test_calculate_score_delta_for_arcade_mode() -> None:
     assert calculate_score_delta(GameMode.ARCADE, is_correct=False) == 0
 
 
+def test_calculate_score_delta_for_historical_mode() -> None:
+    assert calculate_score_delta(GameMode.HISTORICAL, is_correct=True) == HISTORICAL_CORRECT_POINTS
+    assert calculate_score_delta(GameMode.HISTORICAL, is_correct=False) == HISTORICAL_WRONG_POINTS
+
+
 def test_get_run_end_reason_for_arcade_wrong_answer() -> None:
     assert get_run_end_reason_for_answer(GameMode.ARCADE, is_correct=False) is RunEndReason.WRONG_ANSWER
 
@@ -63,11 +70,13 @@ def test_get_run_end_reason_for_non_ending_answers() -> None:
     assert get_run_end_reason_for_answer(GameMode.ARCADE, is_correct=True) is None
     assert get_run_end_reason_for_answer(GameMode.ENDLESS, is_correct=True) is None
     assert get_run_end_reason_for_answer(GameMode.ENDLESS, is_correct=False) is None
+    assert get_run_end_reason_for_answer(GameMode.HISTORICAL, is_correct=True) is None
+    assert get_run_end_reason_for_answer(GameMode.HISTORICAL, is_correct=False) is None
 
 
 def test_scoring_raises_for_unsupported_modes() -> None:
     with pytest.raises(ValueError, match="not configured"):
-        calculate_score_delta(GameMode.HISTORICAL, is_correct=True)
+        calculate_score_delta(GameMode.YESTERDAY, is_correct=True)
 
     with pytest.raises(ValueError, match="not configured"):
         get_run_end_reason_for_answer(GameMode.YESTERDAY, is_correct=True)

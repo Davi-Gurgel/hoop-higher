@@ -95,6 +95,10 @@ Após a resposta:
 ### Historical
 - usa uma data aleatória do passado
 - a data escolhida precisa ter **pelo menos 5 jogos**
+- usa score explícito de modo histórico no MVP: acerto `+100`, erro `-60`
+- erro **não encerra** a run
+- a run percorre os jogos da data escolhida **uma vez cada**
+- ao consumir todos os jogos da data, a run encerra com `no_more_games`
 - no início pode ser mockado; depois será integrado a dados reais
 
 ### Yesterday
@@ -114,6 +118,13 @@ Sugestão padrão do MVP:
 Sugestão padrão do MVP:
 - acerto: `+150`
 - erro: game over
+
+### Historical
+Sugestão padrão do MVP:
+- acerto: `+100`
+- erro: `-60`
+- erro não encerra a run
+- a run termina quando não houver mais jogos disponíveis na data histórica selecionada
 
 ### Observação
 Os valores de score devem ficar centralizados em constantes ou configuração de domínio, nunca hardcoded em callbacks de UI.
