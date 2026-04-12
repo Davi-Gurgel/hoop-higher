@@ -8,6 +8,9 @@ class Settings(BaseSettings):
 
     app_name: str = "Hoop Higher"
     database_url: str = f"sqlite:///{Path('hoophigher.db').resolve()}"
+    sqlite_journal_mode: str | None = "WAL"
+    sqlite_synchronous: str | None = "NORMAL"
+    sqlite_busy_timeout_ms: int | None = 5000
 
     model_config = SettingsConfigDict(
         env_prefix="HOOPHIGHER_",

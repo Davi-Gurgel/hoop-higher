@@ -1,6 +1,7 @@
 from datetime import date
 
 import pytest
+from sqlalchemy import text
 from sqlmodel import Session, select
 from hoophigher.data import (
     CacheRepository,
@@ -332,3 +333,26 @@ def test_session_scope_rolls_back_on_error(tmp_path) -> None:
 
     with Session(engine) as verification_session:
         assert verification_session.exec(select(RunRecord)).all() == []
+
+
+def test_create_sqlite_engine_applies_configured_busy_timeout_for_file_db(tmp_path) -> None:
+    engine = create_sqlite_engine(
+        f"sqlite:///{tmp_path / 'hoophigher.db'}",
+        sqlite_busy_timeout_ms=1234,
+    )
+    with engine.connect() as conn:
+        timeout_ms = conn.execute(text("PRAGMA busy_timeout")).scalar_one()
+    assert timeout_ms == 1234
+
+
+def test_create_sqlite_engine_does_not_apply_file_pragmas_to_memory_db() -> None:
+    engine_with_override = create_sqlite_engine(
+        "sqlite:///:memory:",
+        sqlite_busy_timeout_ms=1234,
+    )
+    default_engine = create_sqlite_engine("sqlite:///:memory:")
+    with engine_with_override.connect() as conn:
+        timeout_with_override = conn.execute(text("PRAGMA busy_timeout")).scalar_one()
+    with default_engine.connect() as conn:
+        timeout_default = conn.execute(text("PRAGMA busy_timeout")).scalar_one()
+    assert timeout_with_override == timeout_default
