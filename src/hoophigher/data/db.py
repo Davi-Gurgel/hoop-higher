@@ -2,17 +2,18 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Final
 
 from sqlalchemy import event
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Engine, make_url
 from sqlmodel import Session, SQLModel, create_engine
 
 from hoophigher.data import (  # noqa: F401 - ensure tables are registered
     schema as _schema,
 )
 
-DEFAULT_SQLITE_URL = "sqlite:///./hoophigher.db"
+DEFAULT_SQLITE_URL = f"sqlite:///{Path('var/hoophigher.db').resolve()}"
 _ALLOWED_SQLITE_JOURNAL_MODES: Final[frozenset[str]] = frozenset(
     {"DELETE", "TRUNCATE", "PERSIST", "MEMORY", "WAL", "OFF"}
 )
@@ -30,6 +31,7 @@ def create_sqlite_engine(
     sqlite_busy_timeout_ms: int | None = 5000,
 ) -> Engine:
     connect_args = {"check_same_thread": False} if database_url.startswith("sqlite") else {}
+    _ensure_sqlite_parent_directory(database_url)
     engine = create_engine(database_url, echo=echo, connect_args=connect_args)
 
     if _is_file_backed_sqlite_url(database_url):
@@ -57,6 +59,15 @@ def create_sqlite_engine(
             cursor.close()
 
     return engine
+
+
+def _ensure_sqlite_parent_directory(database_url: str) -> None:
+    if not _is_file_backed_sqlite_url(database_url):
+        return
+    sqlite_path = make_url(database_url).database
+    if sqlite_path is None:
+        return
+    Path(sqlite_path).expanduser().parent.mkdir(parents=True, exist_ok=True)
 
 
 def _is_file_backed_sqlite_url(database_url: str) -> bool:
