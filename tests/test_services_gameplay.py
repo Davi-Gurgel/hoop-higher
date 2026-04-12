@@ -2,6 +2,7 @@ import asyncio
 from datetime import date
 from random import Random
 
+import pytest
 from sqlmodel import Session
 
 from hoophigher.data import (
@@ -13,6 +14,7 @@ from hoophigher.data import (
 )
 from hoophigher.data.api import MockProvider
 from hoophigher.domain.enums import GameMode, GuessDirection, RunEndReason
+from hoophigher.domain.models import GameBoxScore
 from hoophigher.services import GameplayService
 
 
@@ -101,3 +103,56 @@ def test_historical_uses_only_eligible_dates(tmp_path) -> None:
 
     assert snapshot.source_date == date(2025, 1, 12)
 
+
+class _TrackingProvider(MockProvider):
+    def __init__(self) -> None:
+        super().__init__()
+        self.in_flight = 0
+        self.max_in_flight = 0
+
+    async def get_games_by_date(self, game_date: date) -> list[GameBoxScore]:
+        self.in_flight += 1
+        self.max_in_flight = max(self.max_in_flight, self.in_flight)
+        try:
+            await asyncio.sleep(0.001)
+            return await super().get_games_by_date(game_date)
+        finally:
+            self.in_flight -= 1
+
+
+def test_historical_fetches_are_bounded_by_configured_concurrency(tmp_path) -> None:
+    engine = _make_engine(tmp_path)
+    provider = _TrackingProvider()
+    service = GameplayService(
+        engine=engine,
+        provider=provider,
+        rng=Random(1),
+        historical_fetch_concurrency=2,
+    )
+
+    snapshot = asyncio.run(
+        service.start_run(
+            GameMode.HISTORICAL,
+            candidate_dates=[
+                date(2025, 1, 13),
+                date(2025, 1, 13),
+                date(2025, 1, 13),
+                date(2025, 1, 12),
+            ],
+            total_questions=5,
+        )
+    )
+
+    assert snapshot.source_date == date(2025, 1, 12)
+    assert provider.max_in_flight <= 2
+
+
+def test_historical_fetch_concurrency_must_be_positive(tmp_path) -> None:
+    engine = _make_engine(tmp_path)
+
+    with pytest.raises(ValueError, match="historical_fetch_concurrency"):
+        GameplayService(
+            engine=engine,
+            provider=MockProvider(),
+            historical_fetch_concurrency=0,
+        )

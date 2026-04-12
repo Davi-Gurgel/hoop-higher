@@ -18,6 +18,7 @@ from hoophigher.domain.round_generator import generate_round
 from hoophigher.domain.scoring import calculate_score_delta, get_run_end_reason_for_answer, is_guess_correct
 
 MIN_HISTORICAL_GAMES = 5
+DEFAULT_HISTORICAL_FETCH_CONCURRENCY = 8
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,10 +62,14 @@ class GameplayService:
         engine: Engine,
         provider: StatsProvider,
         rng: Random | None = None,
+        historical_fetch_concurrency: int = DEFAULT_HISTORICAL_FETCH_CONCURRENCY,
     ) -> None:
+        if historical_fetch_concurrency < 1:
+            raise ValueError("historical_fetch_concurrency must be at least 1.")
         self._engine = engine
         self._provider = provider
         self._rng = rng or Random()
+        self._historical_fetch_concurrency = historical_fetch_concurrency
         self._active_run: _ActiveRun | None = None
 
     async def start_run(
@@ -315,9 +320,7 @@ class GameplayService:
             raise ValueError("candidate_dates is required when source_date is not provided.")
 
         if mode is GameMode.HISTORICAL:
-            games_per_date = await asyncio.gather(
-                *(self._provider.get_games_by_date(current_date) for current_date in candidate_dates)
-            )
+            games_per_date = await self._fetch_games_for_dates(candidate_dates)
             eligible_dates: list[tuple[date, tuple[GameBoxScore, ...]]] = []
             for current_date, games_for_date in zip(candidate_dates, games_per_date, strict=True):
                 games_for_date = tuple(games_for_date)
@@ -333,6 +336,15 @@ class GameplayService:
                 return current_date, games_for_date
 
         raise LookupError("No games found for provided candidate dates.")
+
+    async def _fetch_games_for_dates(self, candidate_dates: Sequence[date]) -> tuple[tuple[GameBoxScore, ...], ...]:
+        results: list[tuple[GameBoxScore, ...]] = []
+        step = self._historical_fetch_concurrency
+        for start_index in range(0, len(candidate_dates), step):
+            chunk = candidate_dates[start_index : start_index + step]
+            chunk_results = await asyncio.gather(*(self._provider.get_games_by_date(current_date) for current_date in chunk))
+            results.extend(tuple(games_for_date) for games_for_date in chunk_results)
+        return tuple(results)
 
     def _require_active_run(self) -> _ActiveRun:
         if self._active_run is None:
