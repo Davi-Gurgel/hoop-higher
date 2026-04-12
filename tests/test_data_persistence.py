@@ -345,6 +345,16 @@ def test_create_sqlite_engine_applies_configured_busy_timeout_for_file_db(tmp_pa
     assert timeout_ms == 1234
 
 
+def test_create_sqlite_engine_creates_parent_directory_for_file_db(tmp_path) -> None:
+    database_path = tmp_path / "nested" / "hoophigher.db"
+
+    create_sqlite_engine(f"sqlite:///{database_path}")
+
+    assert database_path.parent == tmp_path / "nested"
+    assert database_path.parent.exists()
+    assert database_path.parent.is_dir()
+
+
 def test_create_sqlite_engine_does_not_apply_file_pragmas_to_memory_db() -> None:
     engine_with_override = create_sqlite_engine(
         "sqlite:///:memory:",
