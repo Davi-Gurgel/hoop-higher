@@ -11,6 +11,7 @@ from hoophigher.domain import (
     Question,
     QuestionResult,
     RoundDefinition,
+    RoundProgress,
     RunEndReason,
     RunState,
     TeamGameInfo,
@@ -156,3 +157,68 @@ def test_run_state_requires_active_round_before_applying_result() -> None:
 
     with pytest.raises(ValueError, match="active round"):
         run_state.apply_result(result)
+
+
+def test_round_progress_rejects_result_for_wrong_question() -> None:
+    round_definition = make_round_definition()
+    round_progress = RoundProgress(round_definition=round_definition)
+    wrong_question = round_definition.questions[1]
+    result = QuestionResult(
+        question=wrong_question,
+        guess=wrong_question.answer,
+        is_correct=True,
+        score_delta=100,
+        revealed_points=wrong_question.player_b.points,
+    )
+
+    with pytest.raises(ValueError, match="does not match the current question"):
+        round_progress.record_result(result)
+
+
+def test_round_progress_rejects_result_after_completion() -> None:
+    round_definition = make_round_definition()
+    round_progress = RoundProgress(round_definition=round_definition)
+
+    for question in round_definition.questions:
+        round_progress.record_result(
+            QuestionResult(
+                question=question,
+                guess=question.answer,
+                is_correct=True,
+                score_delta=100,
+                revealed_points=question.player_b.points,
+            )
+        )
+
+    with pytest.raises(ValueError, match="completed round"):
+        round_progress.record_result(
+            QuestionResult(
+                question=round_definition.questions[-1],
+                guess=round_definition.questions[-1].answer,
+                is_correct=True,
+                score_delta=100,
+                revealed_points=round_definition.questions[-1].player_b.points,
+            )
+        )
+
+
+def test_run_state_cannot_start_round_after_finish() -> None:
+    round_definition = make_round_definition()
+    run_state = RunState(mode=GameMode.ARCADE)
+    round_progress = run_state.start_round(round_definition)
+    question = round_progress.current_question
+    assert question is not None
+
+    run_state.apply_result(
+        QuestionResult(
+            question=question,
+            guess=question.answer,
+            is_correct=True,
+            score_delta=150,
+            revealed_points=question.player_b.points,
+        ),
+        end_reason=RunEndReason.WRONG_ANSWER,
+    )
+
+    with pytest.raises(ValueError, match="finished run"):
+        run_state.start_round(round_definition)
