@@ -104,6 +104,35 @@ def test_historical_uses_only_eligible_dates(tmp_path) -> None:
     assert snapshot.source_date == date(2025, 1, 12)
 
 
+def test_historical_carries_configured_total_questions_into_next_round(tmp_path) -> None:
+    engine = _make_engine(tmp_path)
+    service = GameplayService(engine=engine, provider=MockProvider(), rng=Random(1))
+
+    start_snapshot = asyncio.run(
+        service.start_run(
+            GameMode.HISTORICAL,
+            source_date=date(2025, 1, 12),
+            total_questions=6,
+        )
+    )
+
+    for _ in range(start_snapshot.total_questions):
+        question = service.snapshot().current_question
+        assert question is not None
+        asyncio.run(service.submit_answer(question.answer))
+
+    snapshot = service.snapshot()
+
+    assert snapshot.round_index == 1
+    assert snapshot.total_questions == 6
+    assert snapshot.current_question is not None
+
+    with Session(engine) as session:
+        rounds = RoundRepository(session).list_by_run(start_snapshot.run_id)
+
+    assert [round_record.total_questions for round_record in rounds[:2]] == [6, 6]
+
+
 def test_historical_wrong_answer_keeps_run_active_and_applies_score(tmp_path) -> None:
     engine = _make_engine(tmp_path)
     service = GameplayService(engine=engine, provider=MockProvider(), rng=Random(5))
