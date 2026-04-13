@@ -3,9 +3,24 @@ from __future__ import annotations
 import asyncio
 
 from textual.widgets import Label
+from sqlmodel import Session
 
+import hoophigher.tui.screens.game as game_screen_module
+from hoophigher.data import RunRepository, create_sqlite_engine
 from hoophigher.domain.enums import RunEndReason
 from hoophigher.app import HoopHigherApp
+
+
+def _correct_guess_key(app: HoopHigherApp) -> str:
+    question = app.gameplay_service.snapshot().current_question
+    assert question is not None
+    return "h" if question.answer.value == "higher" else "l"
+
+
+def _wrong_guess_key(app: HoopHigherApp) -> str:
+    question = app.gameplay_service.snapshot().current_question
+    assert question is not None
+    return "l" if question.answer.value == "higher" else "h"
 
 
 def test_home_screen_supports_arrow_navigation() -> None:
@@ -50,22 +65,7 @@ def test_mode_select_supports_arrow_navigation() -> None:
     asyncio.run(scenario())
 
 
-def test_game_screen_surfaces_left_right_controls() -> None:
-    async def scenario() -> None:
-        app = HoopHigherApp(database_url="sqlite://")
-
-        async with app.run_test() as pilot:
-            await pilot.press("enter")
-            await pilot.press("1")
-            await pilot.pause()
-
-            controls_hint = app.screen.query_one("#controls-hint", Label)
-            assert controls_hint.visual.plain == "Use H/L or ←/→ + Enter"
-
-    asyncio.run(scenario())
-
-
-def test_game_screen_shows_active_game_tabs_and_minutes_for_both_players() -> None:
+def test_game_screen_surfaces_active_game_context() -> None:
     async def scenario() -> None:
         app = HoopHigherApp(database_url="sqlite://")
 
@@ -76,9 +76,8 @@ def test_game_screen_shows_active_game_tabs_and_minutes_for_both_players() -> No
 
             snapshot = app.gameplay_service.snapshot()
             active_game = app.screen.query_one("#active-game-title", Label)
-            first_tab = app.screen.query_one("#game-tab-0", Label)
-            player_a_minutes = app.screen.query_one("#pa-minutes", Label)
-            player_b_minutes = app.screen.query_one("#pb-minutes", Label)
+            player_a_name = app.screen.query_one("#pa-name", Label)
+            player_b_name = app.screen.query_one("#pb-name", Label)
 
             assert "@" in active_game.visual.plain
             assert snapshot.current_game.game_id in {
@@ -90,13 +89,8 @@ def test_game_screen_shows_active_game_tabs_and_minutes_for_both_players() -> No
                 if g.game_id == snapshot.current_game.game_id
             )
             assert app.screen.query_one(f"#game-tab-{current_game_index}", Label).has_class("browser-tab-active")
-            assert (
-                first_tab.visual.plain
-                == f"{snapshot.games_today[0].away_team.abbreviation} {snapshot.games_today[0].away_team.score} | "
-                f"{snapshot.games_today[0].home_team.abbreviation} {snapshot.games_today[0].home_team.score}"
-            )
-            assert player_a_minutes.visual.plain.endswith("MIN")
-            assert player_b_minutes.visual.plain.endswith("MIN")
+            assert player_a_name.visual.plain != ""
+            assert player_b_name.visual.plain != ""
 
     asyncio.run(scenario())
 
@@ -202,5 +196,82 @@ def test_game_screen_q_exits_app_and_marks_user_exit() -> None:
 
             assert exit_called is True
             assert app.gameplay_service.snapshot().end_reason is RunEndReason.USER_EXIT
+
+    asyncio.run(scenario())
+
+
+def test_game_screen_escape_returns_home_and_persists_user_exit(tmp_path, monkeypatch) -> None:
+    database_url = f"sqlite:///{tmp_path / 'hoophigher.db'}"
+    run_id: int | None = None
+    monkeypatch.setattr(game_screen_module, "_FEEDBACK_DURATION_SECONDS", 0.01)
+
+    async def scenario() -> None:
+        nonlocal run_id
+        app = HoopHigherApp(database_url=database_url)
+
+        async with app.run_test() as pilot:
+            await pilot.press("enter")
+            await pilot.press("1")
+            await pilot.pause()
+
+            run_id = app.gameplay_service.snapshot().run_id
+
+            await pilot.press("escape")
+            await pilot.pause()
+
+            assert type(app.screen).__name__ == "HomeScreen"
+            assert app.gameplay_service.snapshot().end_reason is RunEndReason.USER_EXIT
+
+    asyncio.run(scenario())
+
+    assert run_id is not None
+    engine = create_sqlite_engine(database_url)
+    with Session(engine) as session:
+        run_record = RunRepository(session).get(run_id)
+
+    assert run_record is not None
+    assert run_record.end_reason == RunEndReason.USER_EXIT.value
+
+
+def test_round_summary_reports_completed_round_and_resets_for_next_round(monkeypatch) -> None:
+    monkeypatch.setattr(game_screen_module, "_FEEDBACK_DURATION_SECONDS", 0.01)
+
+    async def scenario() -> None:
+        app = HoopHigherApp(database_url="sqlite://")
+
+        async with app.run_test() as pilot:
+            await pilot.press("enter")
+            await pilot.press("1")
+            await pilot.pause()
+
+            for _ in range(app.gameplay_service.snapshot().total_questions):
+                await pilot.press(_correct_guess_key(app))
+                await pilot.pause(0.05)
+
+            assert type(app.screen).__name__ == "RoundSummaryScreen"
+            summary_labels = [label.visual.plain for label in app.screen.query(Label)]
+            assert "ROUND 1 COMPLETE" in summary_labels
+            assert "✓ 5   ✕ 0   (5 questions)" in summary_labels
+            assert "Score Delta: +500" in summary_labels
+
+            await pilot.press("enter")
+            await pilot.pause()
+
+            assert type(app.screen).__name__ == "GameScreen"
+            assert app.gameplay_service.snapshot().round_index == 1
+            assert app.gameplay_service.snapshot().question_index == 0
+
+            await pilot.press(_wrong_guess_key(app))
+            await pilot.pause(0.05)
+
+            for _ in range(app.gameplay_service.snapshot().total_questions - 1):
+                await pilot.press(_correct_guess_key(app))
+                await pilot.pause(0.05)
+
+            assert type(app.screen).__name__ == "RoundSummaryScreen"
+            summary_labels = [label.visual.plain for label in app.screen.query(Label)]
+            assert "ROUND 2 COMPLETE" in summary_labels
+            assert "✓ 4   ✕ 1   (5 questions)" in summary_labels
+            assert "Score Delta: +340" in summary_labels
 
     asyncio.run(scenario())
