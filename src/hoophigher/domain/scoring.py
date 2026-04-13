@@ -4,6 +4,8 @@ from hoophigher.domain.models import Question
 ENDLESS_CORRECT_POINTS = 100
 ENDLESS_WRONG_POINTS = -60
 ARCADE_CORRECT_POINTS = 150
+HISTORICAL_CORRECT_POINTS = 100
+HISTORICAL_WRONG_POINTS = -60
 
 
 def is_guess_correct(question: Question, guess: GuessDirection) -> bool:
@@ -13,6 +15,9 @@ def is_guess_correct(question: Question, guess: GuessDirection) -> bool:
 def calculate_score_delta(mode: GameMode, *, is_correct: bool) -> int:
     if mode is GameMode.ENDLESS:
         return ENDLESS_CORRECT_POINTS if is_correct else ENDLESS_WRONG_POINTS
+
+    if mode is GameMode.HISTORICAL:
+        return HISTORICAL_CORRECT_POINTS if is_correct else HISTORICAL_WRONG_POINTS
 
     if mode is GameMode.ARCADE:
         return ARCADE_CORRECT_POINTS if is_correct else 0
@@ -25,6 +30,9 @@ def get_run_end_reason_for_answer(mode: GameMode, *, is_correct: bool) -> RunEnd
         return RunEndReason.WRONG_ANSWER
 
     if mode is GameMode.ENDLESS:
+        return None
+
+    if mode is GameMode.HISTORICAL:
         return None
 
     if mode is GameMode.ARCADE:

@@ -17,6 +17,8 @@ from hoophigher.domain.scoring import (
     ARCADE_CORRECT_POINTS,
     ENDLESS_CORRECT_POINTS,
     ENDLESS_WRONG_POINTS,
+    HISTORICAL_CORRECT_POINTS,
+    HISTORICAL_WRONG_POINTS,
     calculate_score_delta,
     get_run_end_reason_for_answer,
     is_guess_correct,
@@ -42,6 +44,8 @@ __all__ = [
     "ARCADE_CORRECT_POINTS",
     "ENDLESS_CORRECT_POINTS",
     "ENDLESS_WRONG_POINTS",
+    "HISTORICAL_CORRECT_POINTS",
+    "HISTORICAL_WRONG_POINTS",
     "calculate_score_delta",
     "get_run_end_reason_for_answer",
 ]

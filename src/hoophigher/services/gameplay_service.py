@@ -53,6 +53,8 @@ class _ActiveRun:
     round_id: int
     games: tuple[GameBoxScore, ...]
     next_game_index: int
+    total_questions: int
+    rounds_started: int
 
 
 class GameplayService:
@@ -129,6 +131,8 @@ class GameplayService:
             round_id=round_id,
             games=games,
             next_game_index=(selected_index + 1) % len(games),
+            total_questions=total_questions,
+            rounds_started=1,
         )
         return self.snapshot()
 
@@ -171,7 +175,11 @@ class GameplayService:
         )
 
         if round_progress.is_complete and not active_run.run_state.is_finished:
-            await self._start_next_round(active_run)
+            if self._should_end_historical_run(active_run):
+                active_run.run_state.end_reason = RunEndReason.NO_MORE_GAMES
+                self._persist_run_state(active_run)
+            else:
+                await self._start_next_round(active_run)
 
         return result
 
@@ -280,8 +288,9 @@ class GameplayService:
     async def _start_next_round(self, active_run: _ActiveRun) -> None:
         game = active_run.games[active_run.next_game_index]
         active_run.next_game_index = (active_run.next_game_index + 1) % len(active_run.games)
-        round_definition = generate_round(game)
+        round_definition = generate_round(game, total_questions=active_run.total_questions)
         active_run.run_state.start_round(round_definition)
+        active_run.rounds_started += 1
         round_index = len(active_run.run_state.rounds) - 1
 
         with session_scope(self._engine) as session:
@@ -350,3 +359,9 @@ class GameplayService:
         if self._active_run is None:
             raise ValueError("No active run. Start a run before answering.")
         return self._active_run
+
+    def _should_end_historical_run(self, active_run: _ActiveRun) -> bool:
+        return (
+            active_run.run_state.mode is GameMode.HISTORICAL
+            and active_run.rounds_started >= len(active_run.games)
+        )

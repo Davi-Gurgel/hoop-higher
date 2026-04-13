@@ -104,6 +104,118 @@ def test_historical_uses_only_eligible_dates(tmp_path) -> None:
     assert snapshot.source_date == date(2025, 1, 12)
 
 
+def test_historical_carries_configured_total_questions_into_next_round(tmp_path) -> None:
+    engine = _make_engine(tmp_path)
+    service = GameplayService(engine=engine, provider=MockProvider(), rng=Random(1))
+
+    start_snapshot = asyncio.run(
+        service.start_run(
+            GameMode.HISTORICAL,
+            source_date=date(2025, 1, 12),
+            total_questions=6,
+        )
+    )
+
+    for _ in range(start_snapshot.total_questions):
+        question = service.snapshot().current_question
+        assert question is not None
+        asyncio.run(service.submit_answer(question.answer))
+
+    snapshot = service.snapshot()
+
+    assert snapshot.round_index == 1
+    assert snapshot.total_questions == 6
+    assert snapshot.current_question is not None
+
+    with Session(engine) as session:
+        rounds = RoundRepository(session).list_by_run(start_snapshot.run_id)
+
+    assert [round_record.total_questions for round_record in rounds[:2]] == [6, 6]
+
+
+def test_historical_wrong_answer_keeps_run_active_and_applies_score(tmp_path) -> None:
+    engine = _make_engine(tmp_path)
+    service = GameplayService(engine=engine, provider=MockProvider(), rng=Random(5))
+
+    start_snapshot = asyncio.run(
+        service.start_run(
+            GameMode.HISTORICAL,
+            source_date=date(2025, 1, 12),
+            total_questions=5,
+        )
+    )
+    question = start_snapshot.current_question
+    assert question is not None
+
+    wrong_guess = _opposite_guess(question.answer)
+    result = asyncio.run(service.submit_answer(wrong_guess, response_time_ms=700))
+    snapshot = service.snapshot()
+
+    assert result.is_correct is False
+    assert snapshot.is_finished is False
+    assert snapshot.wrong_answers == 1
+    assert snapshot.score == -60
+
+
+def test_historical_advances_to_next_game_after_round_completion(tmp_path) -> None:
+    engine = _make_engine(tmp_path)
+    service = GameplayService(engine=engine, provider=MockProvider(), rng=Random(1))
+
+    start_snapshot = asyncio.run(
+        service.start_run(
+            GameMode.HISTORICAL,
+            source_date=date(2025, 1, 12),
+            total_questions=5,
+        )
+    )
+    initial_game_id = start_snapshot.game_id
+
+    for _ in range(start_snapshot.total_questions):
+        question = service.snapshot().current_question
+        assert question is not None
+        asyncio.run(service.submit_answer(question.answer))
+
+    snapshot = service.snapshot()
+
+    assert snapshot.is_finished is False
+    assert snapshot.round_index == 1
+    assert snapshot.game_id != initial_game_id
+
+
+def test_historical_ends_after_all_games_for_date_are_consumed(tmp_path) -> None:
+    engine = _make_engine(tmp_path)
+    service = GameplayService(engine=engine, provider=MockProvider(), rng=Random(1))
+
+    start_snapshot = asyncio.run(
+        service.start_run(
+            GameMode.HISTORICAL,
+            source_date=date(2025, 1, 12),
+            total_questions=5,
+        )
+    )
+    total_rounds = len(start_snapshot.games_today)
+
+    for _ in range(total_rounds):
+        round_snapshot = service.snapshot()
+        for _ in range(round_snapshot.total_questions):
+            question = service.snapshot().current_question
+            assert question is not None
+            asyncio.run(service.submit_answer(question.answer))
+
+    snapshot = service.snapshot()
+
+    assert snapshot.is_finished is True
+    assert snapshot.end_reason is RunEndReason.NO_MORE_GAMES
+    assert snapshot.round_index == total_rounds - 1
+    assert snapshot.current_question is None
+
+    with Session(engine) as session:
+        run_record = RunRepository(session).get(start_snapshot.run_id)
+
+    assert run_record is not None
+    assert run_record.end_reason == RunEndReason.NO_MORE_GAMES.value
+
+
 class _TrackingProvider(MockProvider):
     def __init__(self) -> None:
         super().__init__()
