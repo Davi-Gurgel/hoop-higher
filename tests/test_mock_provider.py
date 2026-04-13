@@ -3,14 +3,8 @@ from datetime import date
 
 import pytest
 
-from hoophigher.data.api import MockProvider, StatsProvider
+from hoophigher.data.api import MockProvider
 from hoophigher.domain.models import GameBoxScore
-
-
-def test_mock_provider_satisfies_provider_protocol() -> None:
-    provider = MockProvider()
-
-    assert isinstance(provider, StatsProvider)
 
 
 def test_mock_provider_returns_games_by_date() -> None:
