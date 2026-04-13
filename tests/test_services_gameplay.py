@@ -66,6 +66,20 @@ def test_endless_continues_after_wrong_answer_and_persists_progress(tmp_path) ->
     assert questions[0].is_correct is False
 
 
+def test_service_requires_active_run_for_snapshot_submit_and_end_run(tmp_path) -> None:
+    engine = _make_engine(tmp_path)
+    service = GameplayService(engine=engine, provider=MockProvider(), rng=Random(1))
+
+    with pytest.raises(ValueError, match="No active run"):
+        service.snapshot()
+
+    with pytest.raises(ValueError, match="No active run"):
+        asyncio.run(service.submit_answer(GuessDirection.HIGHER))
+
+    with pytest.raises(ValueError, match="No active run"):
+        service.end_run()
+
+
 def test_arcade_ends_on_first_error(tmp_path) -> None:
     engine = _make_engine(tmp_path)
     service = GameplayService(engine=engine, provider=MockProvider(), rng=Random(3))
@@ -87,6 +101,173 @@ def test_arcade_ends_on_first_error(tmp_path) -> None:
     assert snapshot.is_finished is True
     assert snapshot.end_reason is RunEndReason.WRONG_ANSWER
     assert snapshot.score == 0
+
+
+def test_submit_answer_rejects_finished_run(tmp_path) -> None:
+    engine = _make_engine(tmp_path)
+    service = GameplayService(engine=engine, provider=MockProvider(), rng=Random(3))
+
+    start_snapshot = asyncio.run(
+        service.start_run(
+            GameMode.ARCADE,
+            source_date=date(2025, 1, 12),
+            total_questions=5,
+        )
+    )
+    question = start_snapshot.current_question
+    assert question is not None
+
+    asyncio.run(service.submit_answer(_opposite_guess(question.answer)))
+
+    with pytest.raises(ValueError, match="finished run"):
+        asyncio.run(service.submit_answer(GuessDirection.HIGHER))
+
+
+def test_start_run_requires_candidate_dates_without_source_date(tmp_path) -> None:
+    engine = _make_engine(tmp_path)
+    service = GameplayService(engine=engine, provider=MockProvider(), rng=Random(1))
+
+    with pytest.raises(ValueError, match="candidate_dates is required"):
+        asyncio.run(service.start_run(GameMode.ENDLESS))
+
+
+def test_start_run_raises_when_source_date_has_no_games(tmp_path) -> None:
+    engine = _make_engine(tmp_path)
+    service = GameplayService(engine=engine, provider=MockProvider(), rng=Random(1))
+
+    with pytest.raises(LookupError, match="No games found for source date"):
+        asyncio.run(
+            service.start_run(
+                GameMode.ENDLESS,
+                source_date=date(2025, 1, 14),
+                total_questions=5,
+            )
+        )
+
+
+def test_non_historical_start_run_raises_when_candidate_dates_have_no_games(tmp_path) -> None:
+    engine = _make_engine(tmp_path)
+    service = GameplayService(engine=engine, provider=MockProvider(), rng=Random(1))
+
+    with pytest.raises(LookupError, match="No games found for provided candidate dates"):
+        asyncio.run(
+            service.start_run(
+                GameMode.ENDLESS,
+                candidate_dates=[date(2025, 1, 14)],
+                total_questions=5,
+            )
+        )
+
+
+def test_historical_start_run_raises_when_no_candidate_date_has_enough_games(tmp_path) -> None:
+    engine = _make_engine(tmp_path)
+    service = GameplayService(engine=engine, provider=MockProvider(), rng=Random(1))
+
+    with pytest.raises(LookupError, match="No historical date with enough games was found"):
+        asyncio.run(
+            service.start_run(
+                GameMode.HISTORICAL,
+                candidate_dates=[date(2025, 1, 13)],
+                total_questions=5,
+            )
+        )
+
+
+def test_endless_starts_next_round_after_perfect_round_and_persists_rounds(tmp_path) -> None:
+    engine = _make_engine(tmp_path)
+    service = GameplayService(engine=engine, provider=MockProvider(), rng=Random(1))
+
+    start_snapshot = asyncio.run(
+        service.start_run(
+            GameMode.ENDLESS,
+            source_date=date(2025, 1, 12),
+            total_questions=5,
+        )
+    )
+
+    for _ in range(start_snapshot.total_questions):
+        question = service.snapshot().current_question
+        assert question is not None
+        asyncio.run(service.submit_answer(question.answer))
+
+    snapshot = service.snapshot()
+
+    assert snapshot.is_finished is False
+    assert snapshot.round_index == 1
+    assert snapshot.current_question is not None
+    assert snapshot.score == 500
+
+    with Session(engine) as session:
+        run_record = RunRepository(session).get(start_snapshot.run_id)
+        rounds = RoundRepository(session).list_by_run(start_snapshot.run_id)
+
+    assert run_record is not None
+    assert run_record.final_score == 500
+    assert run_record.correct_answers == 5
+    assert [round_record.round_index for round_record in rounds] == [0, 1]
+    assert [round_record.total_questions for round_record in rounds] == [5, 5]
+
+
+def test_arcade_starts_next_round_after_perfect_round_and_persists_rounds(tmp_path) -> None:
+    engine = _make_engine(tmp_path)
+    service = GameplayService(engine=engine, provider=MockProvider(), rng=Random(1))
+
+    start_snapshot = asyncio.run(
+        service.start_run(
+            GameMode.ARCADE,
+            source_date=date(2025, 1, 12),
+            total_questions=5,
+        )
+    )
+
+    for _ in range(start_snapshot.total_questions):
+        question = service.snapshot().current_question
+        assert question is not None
+        asyncio.run(service.submit_answer(question.answer))
+
+    snapshot = service.snapshot()
+
+    assert snapshot.is_finished is False
+    assert snapshot.round_index == 1
+    assert snapshot.current_question is not None
+    assert snapshot.score == 750
+
+    with Session(engine) as session:
+        run_record = RunRepository(session).get(start_snapshot.run_id)
+        rounds = RoundRepository(session).list_by_run(start_snapshot.run_id)
+
+    assert run_record is not None
+    assert run_record.final_score == 750
+    assert run_record.correct_answers == 5
+    assert [round_record.round_index for round_record in rounds] == [0, 1]
+    assert [round_record.total_questions for round_record in rounds] == [5, 5]
+
+
+def test_end_run_persists_user_exit_and_is_idempotent(tmp_path) -> None:
+    engine = _make_engine(tmp_path)
+    service = GameplayService(engine=engine, provider=MockProvider(), rng=Random(1))
+
+    start_snapshot = asyncio.run(
+        service.start_run(
+            GameMode.ENDLESS,
+            source_date=date(2025, 1, 12),
+            total_questions=5,
+        )
+    )
+
+    first_snapshot = service.end_run()
+    second_snapshot = service.end_run()
+
+    assert first_snapshot.run_id == start_snapshot.run_id
+    assert first_snapshot.end_reason is RunEndReason.USER_EXIT
+    assert second_snapshot.end_reason is RunEndReason.USER_EXIT
+    assert second_snapshot.score == first_snapshot.score
+
+    with Session(engine) as session:
+        run_record = RunRepository(session).get(start_snapshot.run_id)
+
+    assert run_record is not None
+    assert run_record.end_reason == RunEndReason.USER_EXIT.value
 
 
 def test_historical_uses_only_eligible_dates(tmp_path) -> None:

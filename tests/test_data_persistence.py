@@ -287,6 +287,23 @@ def test_cache_repository_round_trips_game_payloads(tmp_path) -> None:
     assert cache_repo.get_game_boxscore("missing") is None
 
 
+def test_cache_repository_overwrites_existing_payloads(tmp_path) -> None:
+    session = make_session(tmp_path)
+    cache_repo = CacheRepository(session)
+    original_game = make_game("game-1", date(2025, 2, 1), 110, 104)
+    updated_game = make_game("game-1", date(2025, 2, 1), 118, 112)
+    original_games_for_date = [make_game("game-1", date(2025, 2, 1), 110, 104)]
+    updated_games_for_date = [make_game("game-2", date(2025, 2, 1), 99, 97)]
+
+    cache_repo.set_games_by_date(date(2025, 2, 1), original_games_for_date)
+    cache_repo.set_game_boxscore(original_game)
+    cache_repo.set_games_by_date(date(2025, 2, 1), updated_games_for_date)
+    cache_repo.set_game_boxscore(updated_game)
+
+    assert cache_repo.get_games_by_date(date(2025, 2, 1)) == updated_games_for_date
+    assert cache_repo.get_game_boxscore("game-1") == updated_game
+
+
 def test_session_scope_commits_on_success(tmp_path) -> None:
     engine = create_sqlite_engine(f"sqlite:///{tmp_path / 'hoophigher.db'}")
     init_db(engine)
@@ -389,4 +406,32 @@ def test_create_sqlite_engine_rejects_negative_busy_timeout(tmp_path) -> None:
         create_sqlite_engine(
             f"sqlite:///{tmp_path / 'hoophigher.db'}",
             sqlite_busy_timeout_ms=-1,
+        )
+
+
+def test_run_repository_update_progress_raises_for_missing_record(tmp_path) -> None:
+    session = make_session(tmp_path)
+    run_repo = RunRepository(session)
+
+    with pytest.raises(RuntimeError, match="Run record not found for update"):
+        run_repo.update_progress(
+            999,
+            final_score=100,
+            correct_answers=1,
+            wrong_answers=0,
+            best_streak=1,
+            end_reason=None,
+        )
+
+
+def test_round_repository_update_progress_raises_for_missing_record(tmp_path) -> None:
+    session = make_session(tmp_path)
+    round_repo = RoundRepository(session)
+
+    with pytest.raises(RuntimeError, match="Round record not found for update"):
+        round_repo.update_progress(
+            999,
+            correct_answers=1,
+            wrong_answers=0,
+            score_delta=100,
         )
