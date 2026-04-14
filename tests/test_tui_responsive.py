@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 
-import pytest
 from textual.geometry import Size
 from textual.widget import Widget
 from textual.widgets import Button
@@ -75,10 +74,6 @@ def test_game_screen_guess_buttons_render_across_terminal_sizes() -> None:
     asyncio.run(scenario())
 
 
-@pytest.mark.xfail(
-    reason="Current gameplay layout overflows on tiny terminals; fixed in responsive refactor commits.",
-    strict=True,
-)
 def test_game_screen_guess_buttons_fit_tiny_terminal_target() -> None:
     async def scenario() -> None:
         app = HoopHigherApp(database_url="sqlite://")

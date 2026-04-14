@@ -21,6 +21,18 @@ class HoopHigherApp(App[None]):
     CSS_PATH = "tui/styles.tcss"
     TITLE = "Hoop Higher"
     SUB_TITLE = "Mock gameplay"
+    HORIZONTAL_BREAKPOINTS = [
+        (0, "-w-xs"),
+        (72, "-w-sm"),
+        (96, "-w-md"),
+        (128, "-w-lg"),
+    ]
+    VERTICAL_BREAKPOINTS = [
+        (0, "-h-xs"),
+        (24, "-h-sm"),
+        (32, "-h-md"),
+        (40, "-h-lg"),
+    ]
 
     def __init__(self, *, database_url: str | None = None, **kwargs: object) -> None:
         super().__init__(**kwargs)
