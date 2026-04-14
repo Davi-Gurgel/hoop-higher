@@ -354,7 +354,7 @@ class GameScreen(Screen[None]):
             f"{question.player_b.minutes} MIN"
         )
         self.query_one("#pb-compare", Label).update(
-            f"More or fewer than {question.player_a.points} pts?"
+            f"Did {question.player_b.player_name} score more or fewer than {question.player_a.points} pts?"
         )
 
         self._set_buttons_disabled(False)
