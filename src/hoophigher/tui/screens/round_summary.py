@@ -3,9 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from textual.app import ComposeResult
-from textual.containers import Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Label
+
+from hoophigher.tui.widgets import DialogShell
 
 
 @dataclass(frozen=True, slots=True)
@@ -19,6 +20,44 @@ class RoundSummary:
 
 
 class RoundSummaryScreen(ModalScreen[None]):
+    DEFAULT_CSS = """
+    RoundSummaryScreen {
+        align: center middle;
+    }
+
+    RoundSummaryScreen #summary-overlay {
+        width: 56;
+        border: heavy #f0883e;
+    }
+
+    RoundSummaryScreen #summary-title {
+        text-align: center;
+        text-style: bold;
+        color: #f0883e;
+        width: 100%;
+        margin-bottom: 1;
+    }
+
+    RoundSummaryScreen .summary-stat {
+        text-align: center;
+        width: 100%;
+        margin-bottom: 1;
+    }
+
+    RoundSummaryScreen .summary-stat-highlight {
+        text-align: center;
+        text-style: bold;
+        color: #58a6ff;
+        width: 100%;
+        margin-bottom: 1;
+    }
+
+    RoundSummaryScreen #summary-continue {
+        width: 100%;
+        margin-top: 1;
+    }
+    """
+
     BINDINGS = [("enter", "continue_round", "Continue")]
 
     def __init__(self, summary: RoundSummary) -> None:
@@ -28,7 +67,7 @@ class RoundSummaryScreen(ModalScreen[None]):
     def compose(self) -> ComposeResult:
         s = self._summary
         sign = "+" if s.score_delta >= 0 else ""
-        with Vertical(id="summary-overlay"):
+        with DialogShell(id="summary-overlay"):
             yield Label(f"ROUND {s.round_index + 1} COMPLETE", id="summary-title")
             yield Label(f"Game: {s.game_id}", classes="summary-stat")
             yield Label(

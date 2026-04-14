@@ -2,13 +2,22 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from textual import events
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen, Screen
 from textual.widgets import Button, Footer, Header, Label
 
 from hoophigher.domain.enums import GuessDirection
+from hoophigher.domain.models import Question
 from hoophigher.services import GameplaySnapshot
+from hoophigher.tui.widgets import (
+    DialogShell,
+    GameContextStrip,
+    GameStatusStrip,
+    GuessBar,
+    MatchupPanel,
+)
 
 _MAX_HISTORY_ITEMS = 6
 _FEEDBACK_DURATION_SECONDS = 1.2
@@ -25,6 +34,44 @@ class AnswerHistoryItem:
 class GameOverScreen(ModalScreen[None]):
     """Shown when the run ends (arcade miss or user exit)."""
 
+    DEFAULT_CSS = """
+    GameOverScreen {
+        align: center middle;
+    }
+
+    GameOverScreen #gameover-overlay {
+        width: 56;
+        border: heavy #f85149;
+    }
+
+    GameOverScreen #gameover-title {
+        text-align: center;
+        text-style: bold;
+        color: #f85149;
+        width: 100%;
+        margin-bottom: 1;
+    }
+
+    GameOverScreen .gameover-stat {
+        text-align: center;
+        width: 100%;
+        margin-bottom: 1;
+    }
+
+    GameOverScreen .gameover-stat-highlight {
+        text-align: center;
+        text-style: bold;
+        color: #f0883e;
+        width: 100%;
+        margin-bottom: 1;
+    }
+
+    GameOverScreen #gameover-home {
+        width: 100%;
+        margin-top: 1;
+    }
+    """
+
     BINDINGS = [("enter", "go_home", "Home"), ("escape", "go_home", "Home")]
 
     def __init__(self, snapshot: GameplaySnapshot) -> None:
@@ -33,7 +80,7 @@ class GameOverScreen(ModalScreen[None]):
 
     def compose(self) -> ComposeResult:
         s = self._snapshot
-        with Vertical(id="gameover-overlay"):
+        with DialogShell(id="gameover-overlay"):
             yield Label("GAME OVER", id="gameover-title")
             yield Label(
                 f"Mode: {s.mode.value.upper()}",
@@ -66,6 +113,45 @@ class GameOverScreen(ModalScreen[None]):
 
 
 class GameScreen(Screen[None]):
+    DEFAULT_CSS = """
+    GameScreen #game-layout {
+        width: 100%;
+        height: 1fr;
+    }
+
+    GameScreen #game-scroll {
+        width: 100%;
+        height: 1fr;
+        overflow-y: hidden;
+    }
+
+    GameScreen #feedback-bar {
+        height: 3;
+        width: 100%;
+        padding: 1 2;
+        text-align: center;
+        text-style: bold;
+        display: none;
+    }
+
+    GameScreen #feedback-bar.feedback-correct {
+        background: #1a3a1a;
+        color: #3fb950;
+        display: block;
+    }
+
+    GameScreen #feedback-bar.feedback-wrong {
+        background: #3a1a1a;
+        color: #f85149;
+        display: block;
+    }
+
+    GameScreen.-h-sm #game-scroll,
+    GameScreen.-h-xs #game-scroll {
+        overflow-y: auto;
+    }
+    """
+
     BINDINGS = [
         ("h", "guess_higher", "Higher"),
         ("l", "guess_lower", "Lower"),
@@ -83,72 +169,26 @@ class GameScreen(Screen[None]):
         self._round_history: list[AnswerHistoryItem] = []
         self._awaiting_feedback = False
         self._game_over_screen_visible = False
+        self._status_strip = GameStatusStrip(id="status-bar")
+        self._context_strip = GameContextStrip(
+            len(snapshot.games_today),
+            id="day-games-panel",
+        )
+        self._matchup_panel = MatchupPanel(id="matchup-area")
+        self._guess_bar = GuessBar(id="actions-panel")
 
     # ── Layout ────────────────────────────────────────────────
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=False)
-
-        # Status bar
-        with Horizontal(id="status-bar"):
-            yield Label("", id="status-mode")
-            yield Label("", id="status-score")
-            yield Label("", id="status-streak")
-
-        # Feedback flash (hidden by default via CSS display:none)
+        yield self._status_strip
         yield Label("", id="feedback-bar")
 
         with Vertical(id="game-layout"):
-            with Vertical(id="day-games-panel"):
-                yield Label("", id="active-game-title")
-                yield Label("", id="active-game-score")
-                with Horizontal(id="games-tabs"):
-                    for index, _game in enumerate(self._snapshot.games_today):
-                        yield Label("", id=f"game-tab-{index}", classes="browser-tab")
-
-            # Main matchup panel
-            with Horizontal(id="matchup-area"):
-                # Player A (left)
-                with Vertical(id="player-a-half", classes="player-panel"):
-                    with Vertical(classes="player-card"):
-                        yield Label("", id="pa-name", classes="player-name-label player-name-primary")
-                        yield Label("", id="pa-team", classes="player-team-label")
-                        yield Label("", id="pa-pts", classes="player-pts-value")
-                        yield Label("POINTS", id="pa-pts-label", classes="player-pts-label")
-                        yield Label("", id="pa-minutes", classes="player-minutes-label")
-
-                # VS divider
-                with Vertical(id="vs-divider"):
-                    yield Label("VS", id="vs-text")
-
-                # Player B (right)
-                with Vertical(id="player-b-half", classes="player-panel"):
-                    with Vertical(classes="player-card player-card-b"):
-                        yield Label("", id="pb-name", classes="player-name-label player-name-primary")
-                        yield Label("", id="pb-team", classes="player-team-label")
-                        yield Label("?", id="mystery-label")
-                        yield Label("", id="pb-minutes", classes="player-minutes-label")
-                        yield Label("", id="pb-compare", classes="compare-hint")
-            with Vertical(id="actions-panel"):
-                yield Label("Use H/L or ←/→ + Enter", id="controls-hint")
-                with Horizontal(id="guess-actions"):
-                    yield Button(
-                        "▲  HIGHER  [H]",
-                        id="guess-higher",
-                        variant="success",
-                        classes="guess-btn",
-                    )
-                    yield Button(
-                        "▼  LOWER  [L]",
-                        id="guess-lower",
-                        variant="error",
-                        classes="guess-btn",
-                    )
-
-        # Bottom info bar
-        with Horizontal(id="info-bar"):
-            yield Label("", id="progress-text")
-            yield Label("", id="history-text")
+            with Vertical(id="game-scroll"):
+                yield self._context_strip
+                yield self._matchup_panel
+            yield self._guess_bar
 
         yield Footer()
 
@@ -156,8 +196,10 @@ class GameScreen(Screen[None]):
 
     def on_mount(self) -> None:
         self._refresh_view()
-        # Focus the higher button by default for arrow navigation
         self.query_one("#guess-higher", Button).focus()
+
+    def on_resize(self, event: events.Resize) -> None:
+        self._sync_responsive_copy(event.size.width, event.size.height)
 
     # ── Actions ───────────────────────────────────────────────
 
@@ -291,75 +333,63 @@ class GameScreen(Screen[None]):
     def _refresh_view(self) -> None:
         s = self._snapshot
 
-        self.query_one("#status-mode", Label).update(
-            f"  {s.mode.value.upper()}"
-        )
-        self.query_one("#status-score", Label).update(
-            f"SCORE: {s.score}"
-        )
-        self.query_one("#status-streak", Label).update(
-            f"STREAK: {s.current_streak}  (BEST: {s.best_streak})"
-        )
-        self._refresh_game_header()
-        self._refresh_game_tabs()
+        self._status_strip.update_snapshot(s)
+        self._context_strip.update_snapshot(s)
 
-        # Progress
-        self.query_one("#progress-text", Label).update(
-            f"Round {s.round_index + 1}  •  Q {s.question_index + 1}/{s.total_questions}"
-        )
-
-        # History text
         if self._history:
             last = self._history[-1]
-            self.query_one("#history-text", Label).update(last.description)
+            self._context_strip.update_history(last.description)
         else:
-            self.query_one("#history-text", Label).update("")
+            self._context_strip.update_history("")
 
         question = s.current_question
         if question is None:
-            self.query_one("#pa-name", Label).update("—")
-            self.query_one("#pa-pts", Label).update("")
-            self.query_one("#pa-team", Label).update("")
-            self.query_one("#pa-minutes", Label).update("")
-            self.query_one("#pb-name", Label).update("—")
-            self.query_one("#mystery-label", Label).update("?")
-            self.query_one("#pb-team", Label).update("")
-            self.query_one("#pb-minutes", Label).update("")
-            self.query_one("#pb-compare", Label).update("")
+            self._matchup_panel.clear()
+            self._guess_bar.set_prompt("")
+            self._guess_bar.set_controls_hint("Use H/L or ←/→ + Enter")
             self._set_buttons_disabled(True)
+            self._sync_responsive_copy(self.size.width, self.size.height)
             return
 
-        # Player A — show team, name, points, minutes
-        self.query_one("#pa-team", Label).update(
-            question.player_a.team_abbreviation
-        )
-        self.query_one("#pa-name", Label).update(
-            question.player_a.player_name.upper()
-        )
-        self.query_one("#pa-pts", Label).update(
-            str(question.player_a.points)
-        )
-        self.query_one("#pa-minutes", Label).update(
-            f"{question.player_a.minutes} MIN"
-        )
-
-        # Player B — show team, name, hidden points
-        self.query_one("#pb-team", Label).update(
-            question.player_b.team_abbreviation
-        )
-        self.query_one("#pb-name", Label).update(
-            question.player_b.player_name.upper()
-        )
-        self.query_one("#mystery-label", Label).update("?")
-        self.query_one("#pb-minutes", Label).update(
-            f"{question.player_b.minutes} MIN"
-        )
-        self.query_one("#pb-compare", Label).update(
-            f"More or fewer than {question.player_a.points} pts?"
-        )
-
+        self._matchup_panel.set_question(question)
         self._set_buttons_disabled(False)
+        self._sync_responsive_copy(self.size.width, self.size.height)
         self.query_one("#guess-higher", Button).focus()
+
+    def _sync_responsive_copy(self, width: int, height: int) -> None:
+        mode = "full"
+        if width < 72 or height < 24:
+            mode = "mini"
+        elif width < 80 and height < 26:
+            mode = "compact"
+
+        self._guess_bar.set_label_mode(mode)
+
+        question = self._snapshot.current_question
+        if question is None:
+            self._guess_bar.set_prompt("")
+        else:
+            self._guess_bar.set_prompt(self._build_compare_prompt(question, mode))
+
+        controls_hint = {
+            "full": "Use H/L or ←/→ + Enter",
+            "compact": "H/L or ←/→ + Enter",
+            "mini": "H/L or ←/→",
+        }[mode]
+        self._guess_bar.set_controls_hint(controls_hint)
+
+    def _build_compare_prompt(self, question: Question, mode: str) -> str:
+        if mode == "mini":
+            return f"{question.player_b.player_name} vs {question.player_a.points} pts?"
+        if mode == "compact":
+            return (
+                f"Did {question.player_b.player_name} score above or below "
+                f"{question.player_a.points} pts?"
+            )
+        return (
+            f"Did {question.player_b.player_name} score more or fewer than "
+            f"{question.player_a.points} pts?"
+        )
 
     def _show_reveal(
         self, revealed_points: int, is_correct: bool, score_delta: int
@@ -375,8 +405,7 @@ class GameScreen(Screen[None]):
             feedback.update(f"✕  WRONG!  {score_delta:+d} pts")
             feedback.add_class("feedback-wrong")
 
-        # Show revealed points on player B
-        self.query_one("#mystery-label", Label).update(str(revealed_points))
+        self._matchup_panel.reveal_points(revealed_points)
 
     def _hide_feedback(self) -> None:
         feedback = self.query_one("#feedback-bar", Label)
@@ -390,34 +419,9 @@ class GameScreen(Screen[None]):
         self.app.push_screen(GameOverScreen(self._snapshot))
 
     def _set_buttons_disabled(self, disabled: bool) -> None:
-        self.query_one("#guess-higher", Button).disabled = disabled
-        self.query_one("#guess-lower", Button).disabled = disabled
+        self._guess_bar.set_buttons_disabled(disabled)
 
     def _leave_run(self) -> None:
         self._snapshot = self.app.gameplay_service.end_run()
         self.app.pop_screen()
         self.app.pop_screen()
-
-    def _refresh_game_header(self) -> None:
-        game = self._snapshot.current_game
-        self.query_one("#active-game-title", Label).update(
-            f"{game.away_team.abbreviation} @ {game.home_team.abbreviation}"
-        )
-        away_score = game.away_team.score if game.away_team.score is not None else "?"
-        home_score = game.home_team.score if game.home_team.score is not None else "?"
-        self.query_one("#active-game-score", Label).update(
-            f"{game.away_team.abbreviation} {away_score}  •  {game.home_team.abbreviation} {home_score}"
-        )
-
-    def _refresh_game_tabs(self) -> None:
-        current_game_id = self._snapshot.current_game.game_id
-        for index, game in enumerate(self._snapshot.games_today):
-            tab = self.query_one(f"#game-tab-{index}", Label)
-            away_score = game.away_team.score if game.away_team.score is not None else "?"
-            home_score = game.home_team.score if game.home_team.score is not None else "?"
-            tab.update(
-                f"{game.away_team.abbreviation} {away_score} | {game.home_team.abbreviation} {home_score}"
-            )
-            tab.remove_class("browser-tab-active")
-            if game.game_id == current_game_id:
-                tab.add_class("browser-tab-active")

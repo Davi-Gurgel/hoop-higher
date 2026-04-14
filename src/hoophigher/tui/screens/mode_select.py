@@ -1,14 +1,45 @@
 from __future__ import annotations
 
 from textual.app import ComposeResult
-from textual.containers import Vertical
 from textual.screen import Screen
 from textual.widgets import Button, Footer, Header, Label
 
 from hoophigher.domain.enums import GameMode
+from hoophigher.tui.widgets import DialogShell
 
 
 class ModeSelectScreen(Screen[None]):
+    DEFAULT_CSS = """
+    ModeSelectScreen {
+        align: center middle;
+    }
+
+    ModeSelectScreen #mode-panel {
+        width: 60;
+        border: heavy #f0883e;
+    }
+
+    ModeSelectScreen #mode-title {
+        text-align: center;
+        text-style: bold;
+        color: #f0883e;
+        width: 100%;
+        margin-bottom: 2;
+    }
+
+    ModeSelectScreen .mode-btn {
+        width: 100%;
+        margin-bottom: 1;
+    }
+
+    ModeSelectScreen .mode-description {
+        text-align: center;
+        color: #8b949e;
+        width: 100%;
+        margin-bottom: 2;
+    }
+    """
+
     BINDINGS = [
         ("up", "focus_previous_button", "Prev"),
         ("down", "focus_next_button", "Next"),
@@ -21,7 +52,7 @@ class ModeSelectScreen(Screen[None]):
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=False)
-        with Vertical(id="mode-panel"):
+        with DialogShell(id="mode-panel"):
             yield Label("SELECT MODE", id="mode-title")
             yield Label(
                 "Endless: errors lose points, run continues\n"

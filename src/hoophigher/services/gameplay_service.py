@@ -87,7 +87,7 @@ class GameplayService:
             source_date=source_date,
             candidate_dates=candidate_dates,
         )
-        selected_index = self._rng.randrange(len(games))
+        selected_index = 0
         selected_game = games[selected_index]
         run_state = RunState(mode=mode, source_date=selected_date)
         round_definition = generate_round(selected_game, total_questions=total_questions)
@@ -323,7 +323,7 @@ class GameplayService:
             games = tuple(await self._provider.get_games_by_date(source_date))
             if not games:
                 raise LookupError(f"No games found for source date: {source_date.isoformat()}")
-            return source_date, games
+            return source_date, tuple(sorted(games, key=lambda g: g.game_id))
 
         if candidate_dates is None:
             raise ValueError("candidate_dates is required when source_date is not provided.")
@@ -332,9 +332,9 @@ class GameplayService:
             games_per_date = await self._fetch_games_for_dates(candidate_dates)
             eligible_dates: list[tuple[date, tuple[GameBoxScore, ...]]] = []
             for current_date, games_for_date in zip(candidate_dates, games_per_date, strict=True):
-                games_for_date = tuple(games_for_date)
-                if len(games_for_date) >= MIN_HISTORICAL_GAMES:
-                    eligible_dates.append((current_date, games_for_date))
+                games_for_date_sorted = tuple(sorted(games_for_date, key=lambda g: g.game_id))
+                if len(games_for_date_sorted) >= MIN_HISTORICAL_GAMES:
+                    eligible_dates.append((current_date, games_for_date_sorted))
             if not eligible_dates:
                 raise LookupError("No historical date with enough games was found.")
             return self._rng.choice(eligible_dates)
@@ -342,7 +342,7 @@ class GameplayService:
         for current_date in candidate_dates:
             games_for_date = tuple(await self._provider.get_games_by_date(current_date))
             if games_for_date:
-                return current_date, games_for_date
+                return current_date, tuple(sorted(games_for_date, key=lambda g: g.game_id))
 
         raise LookupError("No games found for provided candidate dates.")
 
