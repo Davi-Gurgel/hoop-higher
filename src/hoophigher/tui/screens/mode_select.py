@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 from textual.app import ComposeResult
-from textual.containers import Vertical
 from textual.screen import Screen
 from textual.widgets import Button, Footer, Header, Label
 
 from hoophigher.domain.enums import GameMode
+from hoophigher.tui.widgets import DialogShell
 
 
 class ModeSelectScreen(Screen[None]):
@@ -21,7 +21,7 @@ class ModeSelectScreen(Screen[None]):
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=False)
-        with Vertical(id="mode-panel"):
+        with DialogShell(id="mode-panel"):
             yield Label("SELECT MODE", id="mode-title")
             yield Label(
                 "Endless: errors lose points, run continues\n"

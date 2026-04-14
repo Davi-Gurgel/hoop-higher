@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from textual.app import ComposeResult
-from textual.containers import Vertical
 from textual.screen import Screen
 from textual.widgets import Button, Footer, Header, Label
+
+from hoophigher.tui.widgets import DialogShell
 
 
 class HomeScreen(Screen[None]):
@@ -16,7 +17,7 @@ class HomeScreen(Screen[None]):
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=False)
-        with Vertical(id="home-panel"):
+        with DialogShell(id="home-panel"):
             yield Label("🏀  HOOP HIGHER", id="home-logo")
             yield Label("Can you guess who scored more?", id="home-subtitle")
             yield Button("▶  Play  [Enter]", id="start-game", variant="success", classes="home-btn")

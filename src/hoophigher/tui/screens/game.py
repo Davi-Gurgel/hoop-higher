@@ -3,12 +3,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from textual.app import ComposeResult
-from textual.containers import Horizontal, Vertical
+from textual.containers import CenterMiddle, Horizontal, Vertical
 from textual.screen import ModalScreen, Screen
 from textual.widgets import Button, Footer, Header, Label
 
 from hoophigher.domain.enums import GuessDirection
 from hoophigher.services import GameplaySnapshot
+from hoophigher.tui.widgets import DialogShell
 
 _MAX_HISTORY_ITEMS = 6
 _FEEDBACK_DURATION_SECONDS = 1.2
@@ -33,7 +34,7 @@ class GameOverScreen(ModalScreen[None]):
 
     def compose(self) -> ComposeResult:
         s = self._snapshot
-        with Vertical(id="gameover-overlay"):
+        with DialogShell(id="gameover-overlay"):
             yield Label("GAME OVER", id="gameover-title")
             yield Label(
                 f"Mode: {s.mode.value.upper()}",
@@ -117,7 +118,7 @@ class GameScreen(Screen[None]):
                         yield Label("", id="pa-minutes", classes="player-minutes-label")
 
                 # VS divider
-                with Vertical(id="vs-divider"):
+                with CenterMiddle(id="vs-divider"):
                     yield Label("VS", id="vs-text")
 
                 # Player B (right)
