@@ -114,7 +114,6 @@ class GameScreen(Screen[None]):
                         yield Label("", id="pa-name", classes="player-name-label player-name-primary")
                         yield Label("", id="pa-team", classes="player-team-label")
                         yield Label("", id="pa-pts", classes="player-pts-value")
-                        yield Label("POINTS", id="pa-pts-label", classes="player-pts-label")
                         yield Label("", id="pa-minutes", classes="player-minutes-label")
 
                 # VS divider
@@ -126,7 +125,7 @@ class GameScreen(Screen[None]):
                     with Vertical(classes="player-card player-card-b"):
                         yield Label("", id="pb-name", classes="player-name-label player-name-primary")
                         yield Label("", id="pb-team", classes="player-team-label")
-                        yield Label("?", id="mystery-label")
+                        yield Label("? PTS", id="mystery-label")
                         yield Label("", id="pb-minutes", classes="player-minutes-label")
                         yield Label("", id="pb-compare", classes="compare-hint")
             with Vertical(id="actions-panel"):
@@ -322,7 +321,7 @@ class GameScreen(Screen[None]):
             self.query_one("#pa-team", Label).update("")
             self.query_one("#pa-minutes", Label).update("")
             self.query_one("#pb-name", Label).update("—")
-            self.query_one("#mystery-label", Label).update("?")
+            self.query_one("#mystery-label", Label).update("? PTS")
             self.query_one("#pb-team", Label).update("")
             self.query_one("#pb-minutes", Label).update("")
             self.query_one("#pb-compare", Label).update("")
@@ -337,7 +336,7 @@ class GameScreen(Screen[None]):
             question.player_a.player_name.upper()
         )
         self.query_one("#pa-pts", Label).update(
-            str(question.player_a.points)
+            f"{question.player_a.points} PTS"
         )
         self.query_one("#pa-minutes", Label).update(
             f"{question.player_a.minutes} MIN"
@@ -350,7 +349,7 @@ class GameScreen(Screen[None]):
         self.query_one("#pb-name", Label).update(
             question.player_b.player_name.upper()
         )
-        self.query_one("#mystery-label", Label).update("?")
+        self.query_one("#mystery-label", Label).update("? PTS")
         self.query_one("#pb-minutes", Label).update(
             f"{question.player_b.minutes} MIN"
         )
@@ -376,7 +375,7 @@ class GameScreen(Screen[None]):
             feedback.add_class("feedback-wrong")
 
         # Show revealed points on player B
-        self.query_one("#mystery-label", Label).update(str(revealed_points))
+        self.query_one("#mystery-label", Label).update(f"{revealed_points} PTS")
 
     def _hide_feedback(self) -> None:
         feedback = self.query_one("#feedback-bar", Label)

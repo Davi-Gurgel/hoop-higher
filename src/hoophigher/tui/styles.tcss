@@ -184,7 +184,7 @@ ModeSelectScreen {
 #matchup-area {
     width: 100%;
     height: auto;
-    padding: 1 2 1 2;
+    padding: 0 2;
 }
 
 /* Player halves */
@@ -257,14 +257,7 @@ ModeSelectScreen {
 .player-pts-value {
     text-align: center;
     text-style: bold;
-    color: #f0883e;
-    width: 100%;
-    margin-bottom: 1;
-}
-
-.player-pts-label {
-    text-align: center;
-    color: #8b949e;
+    color: #58a6ff;
     width: 100%;
     margin-bottom: 1;
 }
@@ -280,7 +273,7 @@ ModeSelectScreen {
 #mystery-label {
     text-align: center;
     text-style: bold;
-    color: #f0883e;
+    color: #58a6ff;
     width: 100%;
     margin-bottom: 1;
 }
@@ -302,7 +295,7 @@ ModeSelectScreen {
 #actions-panel {
     width: 100%;
     height: auto;
-    padding: 0 4 1 4;
+    padding: 0 4;
     content-align: center middle;
 }
 
