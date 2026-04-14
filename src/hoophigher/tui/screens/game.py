@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from textual import events
 from textual.app import ComposeResult
-from textual.containers import Horizontal, Vertical, VerticalScroll
+from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen, Screen
 from textual.widgets import Button, Footer, Header, Label
 
@@ -122,29 +122,7 @@ class GameScreen(Screen[None]):
     GameScreen #game-scroll {
         width: 100%;
         height: 1fr;
-    }
-
-    GameScreen #info-bar {
-        height: 3;
-        width: 100%;
-        background: #161b22;
-        border-top: solid #30363d;
-        padding: 0 2;
-    }
-
-    GameScreen #progress-text {
-        width: 1fr;
-        text-align: left;
-        color: #8b949e;
-        text-style: italic;
-        content-align: left middle;
-    }
-
-    GameScreen #history-text {
-        width: 2fr;
-        text-align: right;
-        color: #8b949e;
-        content-align: right middle;
+        overflow-y: hidden;
     }
 
     GameScreen #feedback-bar {
@@ -168,9 +146,8 @@ class GameScreen(Screen[None]):
         display: block;
     }
 
-    GameScreen.-w-xs #info-bar,
-    GameScreen.-h-xs #info-bar {
-        display: none;
+    GameScreen.-h-xs #game-scroll {
+        overflow-y: auto;
     }
     """
 
@@ -207,12 +184,9 @@ class GameScreen(Screen[None]):
         yield Label("", id="feedback-bar")
 
         with Vertical(id="game-layout"):
-            with VerticalScroll(id="game-scroll"):
+            with Vertical(id="game-scroll"):
                 yield self._context_strip
                 yield self._matchup_panel
-                with Horizontal(id="info-bar"):
-                    yield Label("", id="progress-text")
-                    yield Label("", id="history-text")
             yield self._guess_bar
 
         yield Footer()
@@ -361,15 +335,11 @@ class GameScreen(Screen[None]):
         self._status_strip.update_snapshot(s)
         self._context_strip.update_snapshot(s)
 
-        self.query_one("#progress-text", Label).update(
-            f"Round {s.round_index + 1}  •  Q {s.question_index + 1}/{s.total_questions}"
-        )
-
         if self._history:
             last = self._history[-1]
-            self.query_one("#history-text", Label).update(last.description)
+            self._context_strip.update_history(last.description)
         else:
-            self.query_one("#history-text", Label).update("")
+            self._context_strip.update_history("")
 
         question = s.current_question
         if question is None:

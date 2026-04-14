@@ -19,7 +19,7 @@ class GameStatusStrip(Horizontal):
     }
 
     GameStatusStrip #status-mode {
-        width: 1fr;
+        width: 2fr;
         text-align: left;
         color: #f0883e;
         text-style: bold;
@@ -35,7 +35,7 @@ class GameStatusStrip(Horizontal):
     }
 
     GameStatusStrip #status-streak {
-        width: 1fr;
+        width: 2fr;
         text-align: right;
         color: #3fb950;
         text-style: bold;
@@ -54,7 +54,9 @@ class GameStatusStrip(Horizontal):
         yield Label("", id="status-streak")
 
     def update_snapshot(self, snapshot: GameplaySnapshot) -> None:
-        self.query_one("#status-mode", Label).update(f"  {snapshot.mode.value.upper()}")
+        self.query_one("#status-mode", Label).update(
+            f"  {snapshot.mode.value.upper()}  •  ROUND {snapshot.round_index + 1}  •  Q {snapshot.question_index + 1}/{snapshot.total_questions}"
+        )
         self.query_one("#status-score", Label).update(f"SCORE: {snapshot.score}")
         self.query_one("#status-streak", Label).update(
             f"STREAK: {snapshot.current_streak}  (BEST: {snapshot.best_streak})"
@@ -66,9 +68,29 @@ class GameContextStrip(Vertical):
     GameContextStrip {
         width: 100%;
         height: auto;
-        padding: 1 2 0 2;
+        padding: 0 2 0 2;
         background: #11161d;
         border-bottom: solid #30363d;
+    }
+
+    GameContextStrip #context-meta {
+        width: 100%;
+        height: auto;
+    }
+
+    GameContextStrip #progress-text {
+        width: 1fr;
+        text-align: left;
+        color: #8b949e;
+        text-style: italic;
+        content-align: left middle;
+    }
+
+    GameContextStrip #history-text {
+        width: 100%;
+        text-align: right;
+        color: #8b949e;
+        content-align: right middle;
     }
 
     GameContextStrip #active-game-title {
@@ -104,7 +126,6 @@ class GameContextStrip(Vertical):
     }
 
     GameContextStrip .browser-tab-active {
-        background: #173a68;
         color: #f0f6fc;
         border: round #1f6feb;
         text-style: bold;
@@ -118,13 +139,15 @@ class GameContextStrip(Vertical):
 
     GameScreen.-w-xs GameContextStrip,
     GameScreen.-h-xs GameContextStrip {
-        padding: 1 1 0 1;
+        padding: 0 1 0 1;
     }
 
     GameScreen.-w-xs GameContextStrip #active-game-score,
     GameScreen.-h-xs GameContextStrip #active-game-score,
     GameScreen.-w-xs GameContextStrip #games-tabs,
-    GameScreen.-h-xs GameContextStrip #games-tabs {
+    GameScreen.-h-xs GameContextStrip #games-tabs,
+    GameScreen.-w-xs GameContextStrip #history-text,
+    GameScreen.-h-xs GameContextStrip #history-text {
         display: none;
     }
     """
@@ -134,6 +157,8 @@ class GameContextStrip(Vertical):
         self._total_games = total_games
 
     def compose(self) -> ComposeResult:
+        with Horizontal(id="context-meta"):
+            yield Label("", id="history-text")
         yield Label("", id="active-game-title")
         yield Label("", id="active-game-score")
         with Horizontal(id="games-tabs"):
@@ -143,6 +168,9 @@ class GameContextStrip(Vertical):
     def update_snapshot(self, snapshot: GameplaySnapshot) -> None:
         self._update_header(snapshot.current_game)
         self._update_tabs(snapshot.current_game.game_id, snapshot.games_today)
+
+    def update_history(self, text: str) -> None:
+        self.query_one("#history-text", Label).update(text)
 
     def _update_header(self, game: GameBoxScore) -> None:
         self.query_one("#active-game-title", Label).update(
@@ -171,7 +199,8 @@ class PlayerCard(Vertical):
     DEFAULT_CSS = """
     PlayerCard {
         width: 100%;
-        min-height: 11;
+        height: 100%;
+        min-height: 14;
         padding: 1 3;
         background: #161b22;
         border: round #30363d;
@@ -187,13 +216,14 @@ class PlayerCard(Vertical):
         text-style: bold;
         color: #f0f6fc;
         width: 100%;
-        margin-bottom: 1;
+        margin-bottom: 0;
     }
 
     PlayerCard .player-team-label {
         text-align: center;
         color: #8b949e;
         width: 100%;
+        margin-bottom: 1;
     }
 
     PlayerCard .player-pts-value,
@@ -214,7 +244,7 @@ class PlayerCard(Vertical):
 
     GameScreen.-w-xs PlayerCard,
     GameScreen.-h-xs PlayerCard {
-        min-height: 8;
+        min-height: 10;
         padding: 1 2;
     }
     """
@@ -243,50 +273,57 @@ class MatchupPanel(Vertical):
     DEFAULT_CSS = """
     MatchupPanel {
         width: 100%;
-        height: auto;
-        padding: 1 2;
+        height: 1fr;
+        min-height: 16;
+        padding: 1 4;
     }
 
     MatchupPanel #matchup-content {
         width: 100%;
-        height: auto;
+        height: 100%;
+        min-height: 16;
     }
 
     MatchupPanel .player-panel {
         width: 1fr;
-        height: auto;
+        height: 100%;
         content-align: center middle;
     }
 
     MatchupPanel #player-a-half,
     MatchupPanel #player-b-half {
         width: 1fr;
+        height: 100%;
         padding: 0 1;
     }
 
     MatchupPanel #vs-divider {
-        width: 5;
+        width: 6;
         height: 100%;
     }
 
     MatchupPanel #vs-text {
+        width: 100%;
         text-align: center;
         text-style: bold;
         color: #f0883e;
+        content-align: center middle;
     }
 
     GameScreen.-w-xs MatchupPanel,
     GameScreen.-h-xs MatchupPanel {
-        padding: 1 1;
+        min-height: 12;
+        padding: 0 1;
     }
 
     GameScreen.-w-xs MatchupPanel #matchup-content {
         layout: vertical;
+        min-height: 12;
     }
 
     GameScreen.-w-xs MatchupPanel #vs-divider {
         width: 100%;
-        height: 1;
+        height: 3;
     }
     """
 
