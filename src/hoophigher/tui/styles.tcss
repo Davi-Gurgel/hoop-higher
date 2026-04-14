@@ -183,7 +183,7 @@ ModeSelectScreen {
 /* Main matchup area */
 #matchup-area {
     width: 100%;
-    height: auto;
+    height: 1fr;
     padding: 0 2;
 }
 

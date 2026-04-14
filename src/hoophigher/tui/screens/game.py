@@ -127,8 +127,8 @@ class GameScreen(Screen[None]):
                         yield Label("", id="pb-team", classes="player-team-label")
                         yield Label("? PTS", id="mystery-label")
                         yield Label("", id="pb-minutes", classes="player-minutes-label")
-                        yield Label("", id="pb-compare", classes="compare-hint")
             with Vertical(id="actions-panel"):
+                yield Label("", id="pb-compare", classes="compare-hint")
                 yield Label("Use H/L or ←/→ + Enter", id="controls-hint")
                 with Horizontal(id="guess-actions"):
                     yield Button(
