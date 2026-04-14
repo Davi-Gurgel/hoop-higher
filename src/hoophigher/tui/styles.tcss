@@ -208,8 +208,8 @@ ModeSelectScreen {
 
 .player-card {
     width: 100%;
-    height: 18;
-    padding: 2 3;
+    height: auto;
+    padding: 1 3;
     background: #161b22;
     border: round #30363d;
     content-align: center middle;
@@ -239,7 +239,7 @@ ModeSelectScreen {
     text-align: center;
     color: #8b949e;
     width: 100%;
-    margin-bottom: 1;
+    margin-bottom: 0;
 }
 
 .player-name-label {
@@ -247,11 +247,11 @@ ModeSelectScreen {
     text-style: bold;
     color: #f0f6fc;
     width: 100%;
-    margin-bottom: 2;
+    margin-bottom: 1;
 }
 
 .player-name-primary {
-    margin-top: 1;
+    margin-top: 0;
 }
 
 .player-pts-value {
