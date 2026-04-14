@@ -20,6 +20,44 @@ class RoundSummary:
 
 
 class RoundSummaryScreen(ModalScreen[None]):
+    DEFAULT_CSS = """
+    RoundSummaryScreen {
+        align: center middle;
+    }
+
+    RoundSummaryScreen #summary-overlay {
+        width: 56;
+        border: heavy #f0883e;
+    }
+
+    RoundSummaryScreen #summary-title {
+        text-align: center;
+        text-style: bold;
+        color: #f0883e;
+        width: 100%;
+        margin-bottom: 1;
+    }
+
+    RoundSummaryScreen .summary-stat {
+        text-align: center;
+        width: 100%;
+        margin-bottom: 1;
+    }
+
+    RoundSummaryScreen .summary-stat-highlight {
+        text-align: center;
+        text-style: bold;
+        color: #58a6ff;
+        width: 100%;
+        margin-bottom: 1;
+    }
+
+    RoundSummaryScreen #summary-continue {
+        width: 100%;
+        margin-top: 1;
+    }
+    """
+
     BINDINGS = [("enter", "continue_round", "Continue")]
 
     def __init__(self, summary: RoundSummary) -> None:

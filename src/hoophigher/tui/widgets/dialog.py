@@ -10,5 +10,7 @@ class DialogShell(Vertical):
     DialogShell {
         width: auto;
         height: auto;
+        padding: 2 4;
+        background: #161b22;
     }
     """

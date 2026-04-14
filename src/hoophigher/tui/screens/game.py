@@ -26,6 +26,44 @@ class AnswerHistoryItem:
 class GameOverScreen(ModalScreen[None]):
     """Shown when the run ends (arcade miss or user exit)."""
 
+    DEFAULT_CSS = """
+    GameOverScreen {
+        align: center middle;
+    }
+
+    GameOverScreen #gameover-overlay {
+        width: 56;
+        border: heavy #f85149;
+    }
+
+    GameOverScreen #gameover-title {
+        text-align: center;
+        text-style: bold;
+        color: #f85149;
+        width: 100%;
+        margin-bottom: 1;
+    }
+
+    GameOverScreen .gameover-stat {
+        text-align: center;
+        width: 100%;
+        margin-bottom: 1;
+    }
+
+    GameOverScreen .gameover-stat-highlight {
+        text-align: center;
+        text-style: bold;
+        color: #f0883e;
+        width: 100%;
+        margin-bottom: 1;
+    }
+
+    GameOverScreen #gameover-home {
+        width: 100%;
+        margin-top: 1;
+    }
+    """
+
     BINDINGS = [("enter", "go_home", "Home"), ("escape", "go_home", "Home")]
 
     def __init__(self, snapshot: GameplaySnapshot) -> None:

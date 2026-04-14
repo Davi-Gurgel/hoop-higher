@@ -9,6 +9,37 @@ from hoophigher.tui.widgets import DialogShell
 
 
 class ModeSelectScreen(Screen[None]):
+    DEFAULT_CSS = """
+    ModeSelectScreen {
+        align: center middle;
+    }
+
+    ModeSelectScreen #mode-panel {
+        width: 60;
+        border: heavy #f0883e;
+    }
+
+    ModeSelectScreen #mode-title {
+        text-align: center;
+        text-style: bold;
+        color: #f0883e;
+        width: 100%;
+        margin-bottom: 2;
+    }
+
+    ModeSelectScreen .mode-btn {
+        width: 100%;
+        margin-bottom: 1;
+    }
+
+    ModeSelectScreen .mode-description {
+        text-align: center;
+        color: #8b949e;
+        width: 100%;
+        margin-bottom: 2;
+    }
+    """
+
     BINDINGS = [
         ("up", "focus_previous_button", "Prev"),
         ("down", "focus_next_button", "Next"),
