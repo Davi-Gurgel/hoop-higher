@@ -146,6 +146,7 @@ class GameScreen(Screen[None]):
         display: block;
     }
 
+    GameScreen.-h-sm #game-scroll,
     GameScreen.-h-xs #game-scroll {
         overflow-y: auto;
     }
