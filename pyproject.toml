@@ -18,6 +18,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pytest>=9.0.2",
+    "pytest-textual-snapshot>=1.0.0",
 ]
 
 [project.scripts]
