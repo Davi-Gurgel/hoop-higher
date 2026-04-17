@@ -32,11 +32,19 @@ def test_home_screen_supports_arrow_navigation() -> None:
 
             await pilot.press("down")
             await pilot.pause()
+            assert getattr(app.screen.focused, "id", None) == "open-leaderboard"
+
+            await pilot.press("down")
+            await pilot.pause()
+            assert getattr(app.screen.focused, "id", None) == "open-stats"
+
+            await pilot.press("down")
+            await pilot.pause()
             assert getattr(app.screen.focused, "id", None) == "quit-game"
 
             await pilot.press("up")
             await pilot.pause()
-            assert getattr(app.screen.focused, "id", None) == "start-game"
+            assert getattr(app.screen.focused, "id", None) == "open-stats"
 
     asyncio.run(scenario())
 
@@ -196,6 +204,36 @@ def test_game_screen_q_exits_app_and_marks_user_exit() -> None:
 
             assert exit_called is True
             assert app.gameplay_service.snapshot().end_reason is RunEndReason.USER_EXIT
+
+    asyncio.run(scenario())
+
+
+def test_home_screen_opens_leaderboard_screen() -> None:
+    async def scenario() -> None:
+        app = HoopHigherApp(database_url="sqlite://")
+
+        async with app.run_test() as pilot:
+            await pilot.press("l")
+            await pilot.pause()
+
+            assert type(app.screen).__name__ == "LeaderboardScreen"
+            title = app.screen.query_one("#leaderboard-title", Label)
+            assert title.visual.plain == "LOCAL LEADERBOARD"
+
+    asyncio.run(scenario())
+
+
+def test_home_screen_opens_stats_screen() -> None:
+    async def scenario() -> None:
+        app = HoopHigherApp(database_url="sqlite://")
+
+        async with app.run_test() as pilot:
+            await pilot.press("s")
+            await pilot.pause()
+
+            assert type(app.screen).__name__ == "StatsScreen"
+            title = app.screen.query_one("#stats-title", Label)
+            assert title.visual.plain == "LOCAL STATS"
 
     asyncio.run(scenario())
 

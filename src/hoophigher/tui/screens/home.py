@@ -43,6 +43,8 @@ class HomeScreen(Screen[None]):
         ("up", "focus_previous_button", "Prev"),
         ("down", "focus_next_button", "Next"),
         ("enter", "start", "Start"),
+        ("l", "open_leaderboard", "Leaderboard"),
+        ("s", "open_stats", "Stats"),
         ("q", "quit", "Quit"),
     ]
 
@@ -52,6 +54,8 @@ class HomeScreen(Screen[None]):
             yield Label("🏀  HOOP HIGHER", id="home-logo")
             yield Label("Can you guess who scored more?", id="home-subtitle")
             yield Button("▶  Play  [Enter]", id="start-game", variant="success", classes="home-btn")
+            yield Button("🏆  Leaderboard  [L]", id="open-leaderboard", classes="home-btn")
+            yield Button("📊  Stats  [S]", id="open-stats", classes="home-btn")
             yield Button("✕  Quit  [Q]", id="quit-game", variant="error", classes="home-btn")
         yield Footer()
 
@@ -61,11 +65,21 @@ class HomeScreen(Screen[None]):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "start-game":
             self.app.push_screen("mode-select")
+        elif event.button.id == "open-leaderboard":
+            self.app.push_screen("leaderboard")
+        elif event.button.id == "open-stats":
+            self.app.push_screen("stats")
         elif event.button.id == "quit-game":
             self.app.exit()
 
     def action_start(self) -> None:
         self.app.push_screen("mode-select")
+
+    def action_open_leaderboard(self) -> None:
+        self.app.push_screen("leaderboard")
+
+    def action_open_stats(self) -> None:
+        self.app.push_screen("stats")
 
     def action_focus_previous_button(self) -> None:
         self.focus_previous(Button)
