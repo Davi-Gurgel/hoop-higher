@@ -169,3 +169,38 @@ def test_stats_service_returns_zero_defaults_without_runs(tmp_path) -> None:
     assert result.best_score == 0
     assert result.best_streak == 0
     assert result.mode_distribution == ()
+
+
+def test_stats_service_preserves_negative_best_score(tmp_path) -> None:
+    engine = _make_engine(tmp_path)
+    with Session(engine) as session:
+        session.add_all(
+            [
+                RunRecord(
+                    mode=GameMode.ENDLESS,
+                    source_date=date(2025, 1, 14),
+                    final_score=-120,
+                    correct_answers=1,
+                    wrong_answers=2,
+                    best_streak=1,
+                    end_reason="wrong_answer",
+                    created_at=datetime(2025, 1, 4, 9, 0, tzinfo=timezone.utc),
+                ),
+                RunRecord(
+                    mode=GameMode.ARCADE,
+                    source_date=date(2025, 1, 15),
+                    final_score=-45,
+                    correct_answers=2,
+                    wrong_answers=1,
+                    best_streak=2,
+                    end_reason="user_exit",
+                    created_at=datetime(2025, 1, 4, 10, 0, tzinfo=timezone.utc),
+                ),
+            ]
+        )
+        session.commit()
+
+    result = StatsService(engine=engine).get_stats()
+
+    assert result.total_runs == 2
+    assert result.best_score == -45

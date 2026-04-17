@@ -40,7 +40,8 @@ class StatsService:
             total_runs = repository.count_runs()
             total_answered_questions = repository.count_questions()
             total_correct_answers = repository.count_correct_questions()
-            best_score = repository.best_score() or 0
+            repository_best_score = repository.best_score()
+            best_score = 0 if repository_best_score is None else repository_best_score
             best_streak = repository.best_streak() or 0
             mode_distribution = tuple(
                 ModeStatsRow(mode=GameMode(mode), count=count)
