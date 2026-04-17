@@ -32,7 +32,15 @@ def test_home_screen_supports_arrow_navigation() -> None:
 
             await pilot.press("down")
             await pilot.pause()
+            assert getattr(app.screen.focused, "id", None) == "open-leaderboard"
+
+            await pilot.press("down")
+            await pilot.pause()
             assert getattr(app.screen.focused, "id", None) == "quit-game"
+
+            await pilot.press("up")
+            await pilot.pause()
+            assert getattr(app.screen.focused, "id", None) == "open-leaderboard"
 
             await pilot.press("up")
             await pilot.pause()
@@ -61,6 +69,48 @@ def test_mode_select_supports_arrow_navigation() -> None:
             await pilot.press("up")
             await pilot.pause()
             assert getattr(app.screen.focused, "id", None) == "mode-arcade"
+
+    asyncio.run(scenario())
+
+
+def test_home_screen_can_open_leaderboard_and_return_home() -> None:
+    async def scenario() -> None:
+        app = HoopHigherApp(database_url="sqlite://")
+
+        async with app.run_test() as pilot:
+            assert type(app.screen).__name__ == "HomeScreen"
+
+            await pilot.press("down")
+            await pilot.pause()
+            assert getattr(app.screen.focused, "id", None) == "open-leaderboard"
+
+            await pilot.press("enter")
+            await pilot.pause()
+            assert type(app.screen).__name__ == "LeaderboardScreen"
+
+            await pilot.press("escape")
+            await pilot.pause()
+            assert type(app.screen).__name__ == "HomeScreen"
+
+    asyncio.run(scenario())
+
+
+def test_home_screen_q_exits_app() -> None:
+    async def scenario() -> None:
+        app = HoopHigherApp(database_url="sqlite://")
+        exit_called = False
+
+        def fake_exit(*args, **kwargs) -> None:
+            nonlocal exit_called
+            exit_called = True
+
+        app.exit = fake_exit  # type: ignore[method-assign]
+
+        async with app.run_test() as pilot:
+            await pilot.press("q")
+            await pilot.pause()
+
+            assert exit_called is True
 
     asyncio.run(scenario())
 

@@ -8,8 +8,8 @@ from hoophigher.config import settings
 from hoophigher.data import create_sqlite_engine, init_db
 from hoophigher.data.api import MockProvider
 from hoophigher.domain.enums import GameMode
-from hoophigher.services import GameplayService
-from hoophigher.tui.screens import GameScreen, HomeScreen, ModeSelectScreen
+from hoophigher.services import GameplayService, LeaderboardService
+from hoophigher.tui.screens import GameScreen, HomeScreen, LeaderboardScreen, ModeSelectScreen
 
 MOCK_CANDIDATE_DATES = (
     date(2025, 1, 12),
@@ -50,7 +50,9 @@ class HoopHigherApp(App[None]):
             engine=engine,
             provider=MockProvider(),
         )
+        self.leaderboard_service = LeaderboardService(engine=engine)
         self.install_screen(HomeScreen(), name="home")
+        self.install_screen(LeaderboardScreen(), name="leaderboard")
         self.install_screen(ModeSelectScreen(), name="mode-select")
         self.push_screen("home")
 
