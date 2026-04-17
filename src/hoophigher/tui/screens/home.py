@@ -78,6 +78,9 @@ class HomeScreen(Screen[None]):
     def action_open_leaderboard(self) -> None:
         self.app.push_screen("leaderboard")
 
+    def action_quit(self) -> None:
+        self.app.exit()
+
     def action_focus_previous_button(self) -> None:
         self.focus_previous(Button)
 

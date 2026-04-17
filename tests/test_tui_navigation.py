@@ -95,6 +95,26 @@ def test_home_screen_can_open_leaderboard_and_return_home() -> None:
     asyncio.run(scenario())
 
 
+def test_home_screen_q_exits_app() -> None:
+    async def scenario() -> None:
+        app = HoopHigherApp(database_url="sqlite://")
+        exit_called = False
+
+        def fake_exit(*args, **kwargs) -> None:
+            nonlocal exit_called
+            exit_called = True
+
+        app.exit = fake_exit  # type: ignore[method-assign]
+
+        async with app.run_test() as pilot:
+            await pilot.press("q")
+            await pilot.pause()
+
+            assert exit_called is True
+
+    asyncio.run(scenario())
+
+
 def test_game_screen_surfaces_active_game_context() -> None:
     async def scenario() -> None:
         app = HoopHigherApp(database_url="sqlite://")
