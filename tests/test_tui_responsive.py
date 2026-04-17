@@ -128,3 +128,20 @@ def test_game_over_modal_return_action_renders_on_small_terminal() -> None:
             _widget_fits_terminal(button, Size(60, 20))
 
     asyncio.run(scenario())
+
+
+def test_stats_screen_renders_within_tiny_terminal_target() -> None:
+    async def scenario() -> None:
+        app = HoopHigherApp(database_url="sqlite://")
+
+        async with app.run_test(size=(60, 20)) as pilot:
+            await pilot.press("s")
+            await pilot.pause()
+
+            stats_panel = app.screen.query_one("#stats-panel", Widget)
+            stats_back = app.screen.query_one("#stats-back", Button)
+
+            _widget_fits_terminal(stats_panel, Size(60, 20))
+            _widget_fits_terminal(stats_back, Size(60, 20))
+
+    asyncio.run(scenario())

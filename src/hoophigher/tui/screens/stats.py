@@ -14,7 +14,10 @@ class StatsScreen(Screen[None]):
     }
 
     StatsScreen #stats-panel {
-        width: 62;
+        width: 100%;
+        max-width: 62;
+        max-height: 1fr;
+        overflow-y: auto;
         border: heavy #f0883e;
     }
 
