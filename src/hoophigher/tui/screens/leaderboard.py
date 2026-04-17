@@ -14,7 +14,10 @@ class LeaderboardScreen(Screen[None]):
     }
 
     LeaderboardScreen #leaderboard-panel {
-        width: 74;
+        width: 100%;
+        max-width: 74;
+        max-height: 1fr;
+        overflow-y: auto;
         border: heavy #f0883e;
     }
 

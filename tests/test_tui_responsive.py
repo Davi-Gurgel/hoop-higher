@@ -145,3 +145,20 @@ def test_stats_screen_renders_within_tiny_terminal_target() -> None:
             _widget_fits_terminal(stats_back, Size(60, 20))
 
     asyncio.run(scenario())
+
+
+def test_leaderboard_screen_renders_within_tiny_terminal_target() -> None:
+    async def scenario() -> None:
+        app = HoopHigherApp(database_url="sqlite://")
+
+        async with app.run_test(size=(60, 20)) as pilot:
+            await pilot.press("l")
+            await pilot.pause()
+
+            leaderboard_panel = app.screen.query_one("#leaderboard-panel", Widget)
+            leaderboard_back = app.screen.query_one("#leaderboard-back", Button)
+
+            _widget_fits_terminal(leaderboard_panel, Size(60, 20))
+            _widget_fits_terminal(leaderboard_back, Size(60, 20))
+
+    asyncio.run(scenario())
