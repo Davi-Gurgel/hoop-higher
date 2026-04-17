@@ -67,3 +67,6 @@ class StatsScreen(Screen[None]):
 
     def action_back(self) -> None:
         self.app.pop_screen()
+
+    def action_quit(self) -> None:
+        self.app.exit()

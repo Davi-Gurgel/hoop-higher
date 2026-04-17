@@ -238,6 +238,52 @@ def test_home_screen_opens_stats_screen() -> None:
     asyncio.run(scenario())
 
 
+def test_leaderboard_screen_q_exits_app() -> None:
+    async def scenario() -> None:
+        app = HoopHigherApp(database_url="sqlite://")
+        exit_called = False
+
+        def fake_exit(*args, **kwargs) -> None:
+            nonlocal exit_called
+            exit_called = True
+
+        app.exit = fake_exit  # type: ignore[method-assign]
+
+        async with app.run_test() as pilot:
+            await pilot.press("l")
+            await pilot.pause()
+
+            await pilot.press("q")
+            await pilot.pause()
+
+            assert exit_called is True
+
+    asyncio.run(scenario())
+
+
+def test_stats_screen_q_exits_app() -> None:
+    async def scenario() -> None:
+        app = HoopHigherApp(database_url="sqlite://")
+        exit_called = False
+
+        def fake_exit(*args, **kwargs) -> None:
+            nonlocal exit_called
+            exit_called = True
+
+        app.exit = fake_exit  # type: ignore[method-assign]
+
+        async with app.run_test() as pilot:
+            await pilot.press("s")
+            await pilot.pause()
+
+            await pilot.press("q")
+            await pilot.pause()
+
+            assert exit_called is True
+
+    asyncio.run(scenario())
+
+
 def test_game_screen_escape_returns_home_and_persists_user_exit(tmp_path, monkeypatch) -> None:
     database_url = f"sqlite:///{tmp_path / 'hoophigher.db'}"
     run_id: int | None = None
