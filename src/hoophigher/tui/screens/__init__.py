@@ -3,6 +3,7 @@ from hoophigher.tui.screens.home import HomeScreen
 from hoophigher.tui.screens.leaderboard import LeaderboardScreen
 from hoophigher.tui.screens.mode_select import ModeSelectScreen
 from hoophigher.tui.screens.round_summary import RoundSummaryScreen
+from hoophigher.tui.screens.stats import StatsScreen
 
 __all__ = [
     "GameOverScreen",
@@ -11,4 +12,5 @@ __all__ = [
     "LeaderboardScreen",
     "ModeSelectScreen",
     "RoundSummaryScreen",
+    "StatsScreen",
 ]

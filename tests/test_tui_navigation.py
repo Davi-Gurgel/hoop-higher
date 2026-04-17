@@ -36,7 +36,15 @@ def test_home_screen_supports_arrow_navigation() -> None:
 
             await pilot.press("down")
             await pilot.pause()
+            assert getattr(app.screen.focused, "id", None) == "open-stats"
+
+            await pilot.press("down")
+            await pilot.pause()
             assert getattr(app.screen.focused, "id", None) == "quit-game"
+
+            await pilot.press("up")
+            await pilot.pause()
+            assert getattr(app.screen.focused, "id", None) == "open-stats"
 
             await pilot.press("up")
             await pilot.pause()
@@ -73,20 +81,16 @@ def test_mode_select_supports_arrow_navigation() -> None:
     asyncio.run(scenario())
 
 
-def test_home_screen_can_open_leaderboard_and_return_home() -> None:
+def test_home_screen_can_open_stats_and_return_home() -> None:
     async def scenario() -> None:
         app = HoopHigherApp(database_url="sqlite://")
 
         async with app.run_test() as pilot:
             assert type(app.screen).__name__ == "HomeScreen"
 
-            await pilot.press("down")
+            await pilot.press("s")
             await pilot.pause()
-            assert getattr(app.screen.focused, "id", None) == "open-leaderboard"
-
-            await pilot.press("enter")
-            await pilot.pause()
-            assert type(app.screen).__name__ == "LeaderboardScreen"
+            assert type(app.screen).__name__ == "StatsScreen"
 
             await pilot.press("escape")
             await pilot.pause()
