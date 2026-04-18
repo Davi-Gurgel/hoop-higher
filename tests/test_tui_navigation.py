@@ -23,6 +23,10 @@ def _wrong_guess_key(app: HoopHigherApp) -> str:
     return "l" if question.answer.value == "higher" else "h"
 
 
+def _label_texts(app: HoopHigherApp) -> list[str]:
+    return [label.visual.plain for label in app.screen.query(Label)]
+
+
 def test_home_screen_supports_arrow_navigation() -> None:
     async def scenario() -> None:
         app = HoopHigherApp(database_url="sqlite://")
@@ -36,7 +40,15 @@ def test_home_screen_supports_arrow_navigation() -> None:
 
             await pilot.press("down")
             await pilot.pause()
+            assert getattr(app.screen.focused, "id", None) == "open-stats"
+
+            await pilot.press("down")
+            await pilot.pause()
             assert getattr(app.screen.focused, "id", None) == "quit-game"
+
+            await pilot.press("up")
+            await pilot.pause()
+            assert getattr(app.screen.focused, "id", None) == "open-stats"
 
             await pilot.press("up")
             await pilot.pause()
@@ -73,24 +85,87 @@ def test_mode_select_supports_arrow_navigation() -> None:
     asyncio.run(scenario())
 
 
-def test_home_screen_can_open_leaderboard_and_return_home() -> None:
+def test_home_screen_can_open_stats_and_return_home() -> None:
     async def scenario() -> None:
         app = HoopHigherApp(database_url="sqlite://")
 
         async with app.run_test() as pilot:
             assert type(app.screen).__name__ == "HomeScreen"
 
-            await pilot.press("down")
+            await pilot.press("s")
             await pilot.pause()
-            assert getattr(app.screen.focused, "id", None) == "open-leaderboard"
-
-            await pilot.press("enter")
-            await pilot.pause()
-            assert type(app.screen).__name__ == "LeaderboardScreen"
+            assert type(app.screen).__name__ == "StatsScreen"
 
             await pilot.press("escape")
             await pilot.pause()
             assert type(app.screen).__name__ == "HomeScreen"
+
+    asyncio.run(scenario())
+
+
+def test_home_screen_can_open_stats_from_focused_button() -> None:
+    async def scenario() -> None:
+        app = HoopHigherApp(database_url="sqlite://")
+
+        async with app.run_test() as pilot:
+            await pilot.press("down")
+            await pilot.pause()
+            await pilot.press("down")
+            await pilot.pause()
+            assert getattr(app.screen.focused, "id", None) == "open-stats"
+
+            await pilot.press("enter")
+            await pilot.pause()
+            assert type(app.screen).__name__ == "StatsScreen"
+
+    asyncio.run(scenario())
+
+
+def test_stats_screen_refreshes_after_a_run_is_played(tmp_path, monkeypatch) -> None:
+    database_url = f"sqlite:///{tmp_path / 'hoophigher.db'}"
+    monkeypatch.setattr(game_screen_module, "_FEEDBACK_DURATION_SECONDS", 0.01)
+
+    async def scenario() -> None:
+        app = HoopHigherApp(database_url=database_url)
+
+        async with app.run_test() as pilot:
+            await pilot.press("down")
+            await pilot.pause()
+            await pilot.press("down")
+            await pilot.pause()
+            assert getattr(app.screen.focused, "id", None) == "open-stats"
+
+            await pilot.press("enter")
+            await pilot.pause()
+            assert type(app.screen).__name__ == "StatsScreen"
+            assert "Runs played: 0" in _label_texts(app)
+            assert "Questions answered: 0" in _label_texts(app)
+
+            await pilot.press("escape")
+            await pilot.pause()
+            assert type(app.screen).__name__ == "HomeScreen"
+
+            await pilot.press("up")
+            await pilot.pause()
+            await pilot.press("up")
+            await pilot.pause()
+            assert getattr(app.screen.focused, "id", None) == "start-game"
+
+            await pilot.press("enter")
+            await pilot.press("1")
+            await pilot.pause()
+
+            await pilot.press(_correct_guess_key(app))
+            await pilot.pause(0.05)
+            await pilot.press("escape")
+            await pilot.pause()
+            assert type(app.screen).__name__ == "HomeScreen"
+
+            await pilot.press("s")
+            await pilot.pause()
+            assert type(app.screen).__name__ == "StatsScreen"
+            assert "Runs played: 1" in _label_texts(app)
+            assert "Questions answered: 1" in _label_texts(app)
 
     asyncio.run(scenario())
 
