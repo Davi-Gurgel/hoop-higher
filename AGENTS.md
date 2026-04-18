@@ -351,15 +351,18 @@ A PR is only ready when it:
 
 ---
 
-## `.agents` Skills Policy
+## Skills and Plugins Policy
 
-The `.agents/` directory is treated as an optional local reference, not a default workflow.
+Skills and plugins are opt-in for this repository.
 
 Rules:
-- Only use skills from `.agents/` when they are explicitly mentioned in the prompt.
-- Do not assume `.agents/` skills apply implicitly.
-- Do not expand scope based on `.agents/` content alone.
-- If a prompt does not mention those skills, ignore `.agents/` and follow the repository docs instead.
+- Do not use any skill or plugin workflow unless the user explicitly asks for it by name.
+- Ignore `.agents/` skills unless explicitly requested.
+- Ignore plugin-provided skills, including Superpowers skills, unless explicitly requested.
+- Do not assume any skill applies implicitly from the task alone.
+- Do not expand scope based on skill or plugin content alone.
+- Repository instructions override generic skill-discovery or skill-enforcement workflows.
+- If a prompt does not explicitly mention a skill or plugin, ignore them and follow the repository docs instead.
 
 ---
 
