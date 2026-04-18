@@ -1,234 +1,234 @@
 # SPEC.md
 
-## 1. Visão do produto
+## 1. Product Vision
 
-**Hoop Higher** é um jogo em terminal estilo arcade baseado em **Higher or Lower** usando dados reais de jogadores da NBA.
+**Hoop Higher** is a terminal arcade game inspired by **Higher or Lower**, using real NBA player point totals.
 
-A proposta central é simples:
-- cada **round** corresponde a **um jogo** da NBA
-- dentro desse round, o jogador responde entre **5 e 10 perguntas**
-- cada pergunta compara a pontuação de dois jogadores que atuaram naquela partida
-- o fluxo é contínuo: o jogador B vira o próximo jogador A
+The core loop is simple:
+- each **round** corresponds to **one NBA game**
+- inside that round, the player answers **5 to 10 questions**
+- each question compares the point totals of two players from that game
+- the flow is continuous: player B becomes the next player A
 
-O MVP deve priorizar velocidade de construção, qualidade de UX e desacoplamento entre interface, lógica do jogo e fonte de dados.
-
----
-
-## 2. Objetivo do MVP
-
-Entregar uma versão jogável em TUI com:
-- interface refinada em terminal
-- dados mockados no início
-- suporte a modo endless e arcade
-- leaderboard local
-- estatísticas básicas locais
-- persistência em SQLite
-- arquitetura pronta para integrar uma API real depois
+The MVP should prioritize fast delivery, strong UX, and clear separation between UI, game logic, and data source.
 
 ---
 
-## 3. Escopo funcional do MVP
+## 2. MVP Goal
 
-### Incluído no MVP
-- modo **Endless**
-- modo **Arcade**
-- modo **Historical** com mock inicial
-- métrica única: **points**
-- geração de rounds por jogo
-- 5 a 10 perguntas por round
-- leaderboard local
-- estatísticas básicas locais
-- cache local preparado para integração futura com API real
-- suporte a teclado e mouse
-- interface com boxes, painéis e animações leves
-
-### Fora de escopo do MVP
-- multiplayer online
-- contas de usuário
-- autenticação
-- sincronização com servidor
-- métricas além de points
-- temporadas customizáveis avançadas
-- modos sociais ou coop
-- integração com áudio
+Deliver a playable TUI version with:
+- a polished terminal interface
+- mocked data first
+- endless and arcade mode support
+- a local leaderboard
+- basic local stats
+- SQLite persistence
+- architecture ready for a real API later
 
 ---
 
-## 4. Regras do jogo
+## 3. MVP Functional Scope
 
-### Métrica principal
-No MVP, todas as perguntas são baseadas em **pontos marcados**.
+### Included in the MVP
+- **Endless** mode
+- **Arcade** mode
+- **Historical** mode with an initial mock implementation
+- a single metric: **points**
+- round generation per game
+- 5 to 10 questions per round
+- local leaderboard
+- basic local stats
+- local cache prepared for future real API integration
+- keyboard and mouse support
+- UI with boxes, panels, and light animations
 
-### Elegibilidade de jogadores
-Participam apenas jogadores com:
+### Out of scope for the MVP
+- online multiplayer
+- user accounts
+- authentication
+- server sync
+- metrics beyond points
+- advanced custom season selection
+- social or co-op modes
+- audio integration
+
+---
+
+## 4. Game Rules
+
+### Main metric
+In the MVP, every question is based on **points scored**.
+
+### Player eligibility
+Only players with:
 - `minutes > 0`
 
-### Estrutura de round
-- um round representa um jogo da NBA
-- cada round contém entre **5 e 10 perguntas**
-- todos os jogadores elegíveis podem ser usados
+### Round structure
+- one round represents one NBA game
+- each round contains **5 to 10 questions**
+- all eligible players may be used
 
-### Estrutura da pergunta
-Exemplo:
-- Jogador A: Stephen Curry — 31 pontos
-- Jogador B: LeBron James — ?
-- Pergunta: Higher or Lower?
+### Question structure
+Example:
+- Player A: Stephen Curry - 31 points
+- Player B: LeBron James - ?
+- Prompt: Higher or Lower?
 
-### Fluxo clássico
-Após a resposta:
-- os pontos do jogador B são revelados
-- o jogador B passa a ser o novo jogador A da pergunta seguinte
+### Classic flow
+After the answer:
+- player B's points are revealed
+- player B becomes the new player A for the next question
 
 ---
 
-## 5. Modos de jogo
+## 5. Game Modes
 
 ### Endless
-- a run continua indefinidamente até o usuário sair
-- erro **não encerra** a run
-- erro faz o jogador **perder pontos**
+- the run continues until the user exits
+- a wrong answer does **not** end the run
+- a wrong answer makes the player **lose points**
 
 ### Arcade
-- a run continua até o primeiro erro
-- erro encerra imediatamente a partida
+- the run continues until the first mistake
+- a wrong answer ends the match immediately
 
 ### Historical
-- usa uma data aleatória do passado
-- a data escolhida precisa ter **pelo menos 5 jogos**
-- usa score explícito de modo histórico no MVP: acerto `+100`, erro `-60`
-- erro **não encerra** a run
-- a run percorre os jogos da data escolhida **uma vez cada**
-- ao consumir todos os jogos da data, a run encerra com `no_more_games`
-- no início pode ser mockado; depois será integrado a dados reais
+- uses a random past date
+- the chosen date must have **at least 5 games**
+- MVP historical scoring is explicit: correct `+100`, wrong `-60`
+- a wrong answer does **not** end the run
+- the run goes through the games on that date **once each**
+- after all games on that date are consumed, the run ends with `no_more_games`
+- it may start mocked and later move to real data
 
 ### Yesterday
-Pode existir no desenho da arquitetura desde o início, mas não precisa estar completamente integrado à API real no primeiro incremento funcional.
+It may exist in the architecture from the start, but does not need to be fully wired to the real API in the first functional increment.
 
 ---
 
-## 6. Regras de pontuação
+## 6. Scoring Rules
 
 ### Endless
-Sugestão padrão do MVP:
-- acerto: `+100`
-- erro: `-60`
-- bônus por streak podem ser adicionados de forma incremental
+Suggested MVP default:
+- correct: `+100`
+- wrong: `-60`
+- streak bonuses may be added incrementally later
 
 ### Arcade
-Sugestão padrão do MVP:
-- acerto: `+150`
-- erro: game over
+Suggested MVP default:
+- correct: `+150`
+- wrong: game over
 
 ### Historical
-Sugestão padrão do MVP:
-- acerto: `+100`
-- erro: `-60`
-- erro não encerra a run
-- a run termina quando não houver mais jogos disponíveis na data histórica selecionada
+Suggested MVP default:
+- correct: `+100`
+- wrong: `-60`
+- a wrong answer does not end the run
+- the run ends when there are no more games for the selected historical date
 
-### Observação
-Os valores de score devem ficar centralizados em constantes ou configuração de domínio, nunca hardcoded em callbacks de UI.
-
----
-
-## 7. Dificuldade
-
-A dificuldade deve ser inferida pela diferença de pontos entre o jogador A e o jogador B.
-
-### Faixas
-- **easy**: diferença `>= 10`
-- **medium**: diferença entre `5` e `9`
-- **hard**: diferença entre `1` e `4`
-
-### Progressão sugerida
-Dentro do round:
-- primeiras perguntas tendem a easy/medium
-- últimas perguntas tendem a medium/hard
-
-### Regra de fallback
-Se não houver pares suficientes em uma faixa, o gerador pode usar outra faixa disponível para manter o round jogável.
+### Note
+Score values must live in centralized domain constants or configuration, never hardcoded inside UI callbacks.
 
 ---
 
-## 8. Persistência local
+## 7. Difficulty
 
-O projeto deve usar SQLite para salvar:
+Difficulty should be inferred from the point difference between player A and player B.
+
+### Bands
+- **easy**: difference `>= 10`
+- **medium**: difference between `5` and `9`
+- **hard**: difference between `1` and `4`
+
+### Suggested progression
+Inside a round:
+- early questions tend to be easy or medium
+- later questions tend to be medium or hard
+
+### Fallback rule
+If there are not enough pairs in a given band, the generator may use another available band to keep the round playable.
+
+---
+
+## 8. Local Persistence
+
+The project should use SQLite to store:
 - runs
 - rounds
 - questions
-- leaderboard derivado
-- estatísticas básicas
-- cache de jogos e box scores
+- derived leaderboard data
+- basic stats
+- cached games and box scores
 
-### Estatísticas mínimas
-- total de runs
-- total de perguntas respondidas
-- total de acertos
-- percentual de acerto
-- melhor score
-- melhor streak
-- distribuição por modo
+### Minimum stats
+- total runs
+- total answered questions
+- total correct answers
+- accuracy rate
+- best score
+- best streak
+- distribution by mode
 
 ---
 
-## 9. Fonte de dados
+## 9. Data Source
 
-### Fase 1
-Dados **mockados** para validar:
-- loop de jogo
+### Phase 1
+Use **mocked** data to validate:
+- game loop
 - UX
-- persistência
-- ranking
-- tela de stats
+- persistence
+- leaderboard
+- stats screen
 
-### Fase 2+
-Integração com provider real, preferencialmente atrás de uma interface como `StatsProvider`.
+### Phase 2+
+Integrate a real provider, preferably behind an interface such as `StatsProvider`.
 
-### API sugerida
-- `BallDontLieProvider` como primeira implementação real
+### Suggested API
+- `BallDontLieProvider` as the first real implementation
 
-### Regra arquitetural
-A UI não pode depender diretamente do provider externo.
+### Architectural rule
+The UI must not depend directly on the external provider.
 
 ---
 
 ## 10. Cache
 
-O sistema deve ser preparado para cachear:
-- jogos por data
-- box score por game_id
+The system should be prepared to cache:
+- games by date
+- box score by `game_id`
 
-### Regras gerais
-- checar cache antes de bater na API
-- persistir resposta bruta ou normalizada de forma consistente
-- diferenciar cache histórico de cache recente
+### General rules
+- check cache before calling the API
+- persist raw or normalized responses consistently
+- differentiate historical cache from recent cache
 
 ---
 
-## 11. UX e interface
+## 11. UX and Interface
 
-A identidade visual desejada é:
+Desired visual identity:
 - arcade terminal
-- interface refinada
-- uso de boxes e painéis
-- animações leves
-- atalhos de teclado visíveis
-- suporte a mouse
+- polished interface
+- use of boxes and panels
+- light animations
+- visible keyboard shortcuts
+- mouse support
 
-### Requisitos da tela principal
-- header com score, streak, modo e data
-- painel principal com matchup atual
-- botões de ação clicáveis
-- histórico lateral das últimas respostas
-- footer com hotkeys
+### Main screen requirements
+- header with score, streak, mode, and date
+- main panel with the current matchup
+- clickable action buttons
+- side history of recent answers
+- footer with hotkeys
 
-### Navegação
-- teclado continua sendo a navegação primária
-- mouse é suporte adicional
+### Navigation
+- keyboard remains the primary navigation method
+- mouse is additional support
 
 ---
 
-## 12. Estrutura mínima de telas
+## 12. Minimum Screen Set
 
 - Home
 - Mode Select
@@ -236,25 +236,25 @@ A identidade visual desejada é:
 - Round Summary
 - Leaderboard
 - Stats
-- Settings (opcional no MVP inicial)
+- Settings (optional in the initial MVP)
 - Quit Confirm
 
 ---
 
-## 13. Usuário e escopo local
+## 13. User and Local Scope
 
-No MVP:
-- existe apenas **1 usuário local**
-- não há login
-- não há sincronização online
+In the MVP:
+- there is only **1 local user**
+- there is no login
+- there is no online sync
 
-No futuro, o projeto pode evoluir para servidor e comparação com amigos, mas isso está fora do escopo atual.
+In the future, the project may evolve toward server-backed play and friend comparison, but that is out of scope for now.
 
 ---
 
-## 14. Requisitos técnicos
+## 14. Technical Requirements
 
-### Linguagem e libs
+### Language and libraries
 - Python 3.13+
 - Textual
 - SQLite
@@ -263,8 +263,8 @@ No futuro, o projeto pode evoluir para servidor e comparação com amigos, mas i
 - pytest
 - pydantic-settings
 
-### Estrutura
-O projeto deve seguir layout com `src/` e ser organizado por camadas:
+### Structure
+The project should follow a `src/` layout and be organized in layers:
 - `tui`
 - `domain`
 - `services`
@@ -272,53 +272,53 @@ O projeto deve seguir layout com `src/` e ser organizado por camadas:
 
 ---
 
-## 15. Requisitos de qualidade
+## 15. Quality Requirements
 
-O MVP deve preservar:
-- código tipado
-- testes para regras de domínio
-- baixo acoplamento
-- providers trocáveis
-- persistência simples de inspecionar
-- interface responsiva com estados de loading e erro claros
+The MVP should preserve:
+- typed code
+- tests for domain rules
+- low coupling
+- swappable providers
+- simple, inspectable persistence
+- responsive UI with clear loading and error states
 
 ---
 
-## 16. Roadmap sugerido
+## 16. Suggested Roadmap
 
 ### MVP 0
-- scaffold do projeto
-- provider mock
-- game loop básico
-- score funcional
-- leaderboard simples
+- project scaffold
+- mock provider
+- basic game loop
+- functional scoring
+- simple leaderboard
 
 ### MVP 1
-- endless completo
-- arcade completo
-- persistence completa
-- historical mock
+- complete endless mode
+- complete arcade mode
+- complete persistence
+- mock historical mode
 - stats screen
-- polimento inicial da TUI
+- initial TUI polish
 
 ### MVP 2
-- integração API real
-- cache real
-- yesterday mode real
-- histórico real
+- real API integration
+- real cache
+- real yesterday mode
+- real historical mode
 
 ### MVP 3
-- polimento visual avançado
-- calibração de dificuldade
-- seeds reproduzíveis
+- advanced visual polish
+- difficulty calibration
+- reproducible seeds
 - daily challenge
 
 ---
 
-## 17. Critério de sucesso do MVP
+## 17. MVP Success Criteria
 
-O MVP é considerado bem-sucedido quando:
-- a TUI é agradável de usar
-- o loop de jogo é divertido com dados mockados
-- a persistência funciona sem fricção
-- o código está pronto para trocar mock por provider real sem retrabalho estrutural grande
+The MVP is successful when:
+- the TUI is pleasant to use
+- the gameplay loop is fun with mocked data
+- persistence works without friction
+- the codebase is ready to swap the mock provider for a real provider without major structural rework

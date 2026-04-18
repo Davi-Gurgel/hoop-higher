@@ -218,6 +218,11 @@ marimo/_static/
 marimo/_lsp/
 __marimo__/
 
+# Local superpowers artifacts
+/.agents/
+/docs/superpowers/
+/skills-lock.json
+
 # Streamlit
 .streamlit/secrets.toml
 

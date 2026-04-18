@@ -1,54 +1,54 @@
 # ARCHITECTURE.md
 
-## 1. Objetivo
+## 1. Purpose
 
-Este documento descreve a arquitetura técnica do projeto **Hoop Higher**.
+This document describes the technical architecture of **Hoop Higher**.
 
-A prioridade é:
-- desacoplamento entre UI, domínio, persistência e integrações externas
-- facilidade de iteração por agentes de código
-- suporte a dados mockados e provider real sem reescrever a aplicação
-- base sólida para evoluir o jogo sem gerar dívida técnica cedo demais
-
----
-
-## 2. Princípios arquiteturais
-
-1. **UI não contém regra de negócio.**
-2. **Domínio não conhece Textual, SQLite nem APIs externas.**
-3. **Integrações externas entram por interfaces claras.**
-4. **Persistência deve ser simples, explícita e local.**
-5. **Cada camada deve poder ser testada isoladamente.**
+The priorities are:
+- decoupling between UI, domain, persistence, and external integrations
+- easy iteration by code agents
+- support for mocked data and a real provider without rewriting the application
+- a solid base for evolving the game without taking on unnecessary early technical debt
 
 ---
 
-## 3. Visão de camadas
+## 2. Architectural Principles
+
+1. **UI does not contain business rules.**
+2. **Domain does not know Textual, SQLite, or external APIs.**
+3. **External integrations enter through clear interfaces.**
+4. **Persistence should be simple, explicit, and local.**
+5. **Each layer should be testable in isolation.**
+
+---
+
+## 3. Layered View
 
 ```text
 TUI (Textual screens/widgets)
         ↓
-Services (casos de uso/orquestração)
+Services (use cases/orchestration)
         ↓
-Domain (regras do jogo)
+Domain (game rules)
         ↓
 Data (repositories, providers, cache)
 ```
 
-### Dependências permitidas
+### Allowed dependencies
 - `tui -> services`
 - `services -> domain`
 - `services -> data`
-- `data -> domain` apenas para mapear payloads em modelos internos
+- `data -> domain` only for mapping payloads into internal models
 
-### Dependências proibidas
+### Forbidden dependencies
 - `domain -> tui`
 - `domain -> data`
-- `tui -> sqlite direto`
-- `tui -> api provider direto`
+- `tui -> direct sqlite`
+- `tui -> direct api provider`
 
 ---
 
-## 4. Estrutura de diretórios proposta
+## 4. Proposed Directory Structure
 
 ```text
 src/
@@ -86,14 +86,14 @@ src/
 
 ---
 
-## 5. Camada de domínio
+## 5. Domain Layer
 
-## Responsabilidades
-- representar os conceitos do jogo
-- conter as regras centrais
-- encapsular score, dificuldade e geração de perguntas
+## Responsibilities
+- represent the game concepts
+- contain the core rules
+- encapsulate scoring, difficulty, and question generation
 
-## Componentes esperados
+## Expected components
 
 ### `enums.py`
 - `GameMode`
@@ -102,7 +102,7 @@ src/
 - `RunEndReason`
 
 ### `models.py`
-Modelos puros do domínio, por exemplo:
+Pure domain models, for example:
 - `PlayerLine`
 - `GameBoxScore`
 - `Question`
@@ -110,86 +110,86 @@ Modelos puros do domínio, por exemplo:
 - `RunState`
 
 ### `scoring.py`
-Funções como:
+Functions such as:
 - `calculate_endless_score_delta(...)`
 - `calculate_arcade_score_delta(...)`
 
 ### `difficulty.py`
-Funções como:
+Functions such as:
 - `classify_question_difficulty(points_a, points_b)`
 - `pick_target_difficulty(question_index, total_questions)`
 
 ### `round_generator.py`
-Responsável por:
-- filtrar jogadores elegíveis
-- gerar 5 a 10 perguntas
-- aplicar fallback de dificuldade
-- evitar pares inválidos ou repetição excessiva
+Responsible for:
+- filtering eligible players
+- generating 5 to 10 questions
+- applying difficulty fallback rules
+- avoiding invalid pairs or excessive repetition
 
-## Restrições
-O domínio não deve:
-- abrir conexão com banco
-- fazer request HTTP
-- renderizar widgets
-- ler variáveis de ambiente
+## Restrictions
+The domain must not:
+- open database connections
+- make HTTP requests
+- render widgets
+- read environment variables
 
 ---
 
-## 6. Camada de serviços
+## 6. Services Layer
 
-## Responsabilidades
-- orquestrar casos de uso
-- coordenar providers, repositories e regras de domínio
-- preparar dados para consumo da UI
+## Responsibilities
+- orchestrate use cases
+- coordinate providers, repositories, and domain rules
+- prepare data for UI consumption
 
-## Serviços sugeridos
+## Suggested services
 
 ### `play_endless.py`
-- iniciar run endless
-- carregar próximo round
-- aplicar resposta
-- persistir progresso
+- start an endless run
+- load the next round
+- apply an answer
+- persist progress
 
 ### `play_arcade.py`
-- iniciar run arcade
-- encerrar no primeiro erro
+- start an arcade run
+- end on the first mistake
 
 ### `play_historical.py`
-- selecionar data elegível
-- carregar jogos da data
-- escolher jogo para round
+- select an eligible date
+- load games from that date
+- choose a game for the round
 
 ### `stats_service.py`
-- calcular estatísticas agregadas
-- fornecer leaderboard
+- calculate aggregated stats
+- provide leaderboard data
 
-## Regra
-A camada de serviço pode depender de:
-- domínio
-- repositórios
+## Rule
+The service layer may depend on:
+- domain
+- repositories
 - providers
 
-Mas não deve conhecer detalhes de widget ou layout Textual.
+But it must not know widget or Textual layout details.
 
 ---
 
-## 7. Camada de dados
+## 7. Data Layer
 
-## Responsabilidades
-- acesso a SQLite
-- cache local
-- integração com APIs externas
-- mapeamento entre payload bruto e modelos internos
+## Responsibilities
+- SQLite access
+- local cache
+- external API integration
+- mapping between raw payloads and internal models
 
-## Subdivisão
+## Subdivision
 
 ### `db.py`
-- engine SQLite
-- sessão
-- bootstrap do banco
+- SQLite engine
+- session handling
+- database bootstrap
 
 ### `schema.py`
-Modelos SQLModel:
+SQLModel models:
 - `RunRecord`
 - `RoundRecord`
 - `QuestionRecord`
@@ -197,13 +197,13 @@ Modelos SQLModel:
 - `CachedGameStatsRecord`
 
 ### `repositories/`
-Repositórios para leitura e gravação:
+Repositories for reads and writes:
 - `RunRepository`
 - `StatsRepository`
 - `CacheRepository`
 
 ### `api/base.py`
-Interface do provider, por exemplo:
+Provider interface, for example:
 
 ```python
 class StatsProvider(Protocol):
@@ -215,26 +215,26 @@ class StatsProvider(Protocol):
 ```
 
 ### `api/mock_provider.py`
-- entrega dados fixos/mockados
-- deve ser a fonte inicial do projeto
+- returns fixed or mocked data
+- should be the project's initial data source
 
 ### `api/balldontlie_provider.py`
-- provider real futuro
-- usa `httpx`
-- respeita cache
-- converte payload externo em modelos internos
+- future real provider
+- uses `httpx`
+- respects cache
+- converts external payloads into internal models
 
 ---
 
-## 8. Camada de TUI
+## 8. TUI Layer
 
-## Responsabilidades
-- renderizar telas e widgets
-- capturar input do usuário
-- despachar ações para serviços
-- exibir estados de loading, error e success
+## Responsibilities
+- render screens and widgets
+- capture user input
+- dispatch actions to services
+- show loading, error, and success states
 
-## Estrutura sugerida
+## Suggested structure
 
 ### `screens/`
 - `home.py`
@@ -252,175 +252,175 @@ class StatsProvider(Protocol):
 - `animated_reveal.py`
 
 ### `styles.tcss`
-- tema visual
-- bordas, layout, spacing, estados visuais
+- visual theme
+- borders, layout, spacing, visual states
 
-## Regra importante
-A tela não calcula score nem gera perguntas sozinha. Ela apenas consome estado produzido por serviços/domínio.
-
----
-
-## 9. Fluxo de dados do jogo
-
-### Fluxo de inicialização
-1. app inicia
-2. banco é bootstrapado
-3. configuração é carregada
-4. TUI abre a Home Screen
-
-### Fluxo de uma run
-1. usuário escolhe modo
-2. screen aciona serviço de início de run
-3. serviço obtém jogo elegível via provider/repositório
-4. round generator monta perguntas
-5. estado é devolvido para a UI
-6. usuário responde
-7. UI chama serviço para aplicar resposta
-8. serviço usa scoring + persistência
-9. UI atualiza score, streak e histórico
-10. ao fim do round, carrega próximo round
+## Important rule
+The screen does not calculate score or generate questions by itself. It only consumes state produced by services and domain logic.
 
 ---
 
-## 10. Fluxo de dados com cache
+## 9. Game Data Flow
 
-### Jogos por data
-1. serviço pede jogos da data ao provider
-2. provider consulta `CacheRepository`
-3. se cache válido existir, retorna cache
-4. se não existir, consulta API
-5. salva resultado em cache
-6. retorna modelos de domínio
+### Startup flow
+1. app starts
+2. database is bootstrapped
+3. configuration is loaded
+4. the TUI opens the Home Screen
 
-### Box score por jogo
-1. serviço pede box score por `game_id`
-2. provider consulta cache local
-3. em caso de miss, chama API
-4. persiste payload
-5. retorna `GameBoxScore`
+### Run flow
+1. user chooses a mode
+2. screen triggers the run-start service
+3. service gets an eligible game through provider or repository
+4. round generator builds the questions
+5. state is returned to the UI
+6. user answers
+7. UI calls the service to apply the answer
+8. service uses scoring plus persistence
+9. UI updates score, streak, and history
+10. when the round ends, the next round is loaded
 
 ---
 
-## 11. Modelo de persistência
+## 10. Cache Data Flow
 
-## Tabelas principais
+### Games by date
+1. service asks the provider for games on a date
+2. provider queries `CacheRepository`
+3. if valid cache exists, return cached data
+4. otherwise, call the API
+5. save the result in cache
+6. return domain models
+
+### Box score by game
+1. service asks for box score by `game_id`
+2. provider checks local cache
+3. on cache miss, call the API
+4. persist the payload
+5. return `GameBoxScore`
+
+---
+
+## 11. Persistence Model
+
+## Main tables
 
 ### `runs`
-Armazena a run como unidade agregada:
-- modo
-- data fonte
-- score final
-- acertos
-- erros
-- streak máxima
-- motivo de encerramento
+Stores the run as the aggregate unit:
+- mode
+- source date
+- final score
+- correct answers
+- wrong answers
+- best streak
+- end reason
 
 ### `rounds`
-Armazena cada jogo usado dentro da run:
+Stores each game used inside the run:
 - `run_id`
 - `game_id`
-- times
-- total de perguntas
-- acertos e erros no round
-- score do round
+- teams
+- total questions
+- correct and wrong answers in the round
+- round score
 
 ### `questions`
-Armazena cada comparação individual:
-- jogador A
-- jogador B
-- pontos de ambos
-- palpite
-- acerto
-- dificuldade
-- tempo de resposta
+Stores each individual comparison:
+- player A
+- player B
+- both point totals
+- guess
+- correctness
+- difficulty
+- response time
 
 ### `cache_games`
-Armazena jogos por data ou metadados relevantes.
+Stores games by date or other relevant metadata.
 
 ### `cache_game_stats`
-Armazena box score detalhado por jogo.
+Stores detailed box score data per game.
 
 ---
 
-## 12. Testabilidade
+## 12. Testability
 
-## O que deve ser testado no domínio
-- score
-- classificação de dificuldade
-- geração de perguntas
-- regras de fallback
-- encerramento de run arcade
+## What should be tested in domain
+- scoring
+- difficulty classification
+- question generation
+- fallback rules
+- arcade run termination
 
-## O que deve ser testado em dados
+## What should be tested in data
 - repositories
-- bootstrap do banco
-- mapping de payload externo
-- comportamento de cache hit/miss
+- database bootstrap
+- external payload mapping
+- cache hit and miss behavior
 
-## O que deve ser testado na UI
-- smoke tests de telas principais
-- navegação básica
-- renderização de estados críticos
+## What should be tested in UI
+- smoke tests for main screens
+- basic navigation
+- rendering of critical states
 
 ---
 
-## 13. Estratégia de evolução
+## 13. Evolution Strategy
 
-### Fase 1
-- MockProvider
-- UI funcional
-- SQLite funcional
-- loop jogável
+### Phase 1
+- `MockProvider`
+- functional UI
+- functional SQLite
+- playable loop
 
-### Fase 2
-- provider real
-- cache real
-- historical real
-- yesterday real
+### Phase 2
+- real provider
+- real cache
+- real historical mode
+- real yesterday mode
 
-### Fase 3
-- calibração de UX
-- melhorias visuais
+### Phase 3
+- UX calibration
+- visual improvements
 - daily challenge
-- seeds reproduzíveis
+- reproducible seeds
 
 ---
 
-## 14. Decisões técnicas intencionais
+## 14. Intentional Technical Decisions
 
-### Por que Python + Textual
-- alta velocidade de iteração
-- boa experiência para agentes de código
-- TUI sofisticada sem custo excessivo de infraestrutura
+### Why Python + Textual
+- high iteration speed
+- good experience for code agents
+- sophisticated TUI without excessive infrastructure cost
 
-### Por que SQLite
-- excelente para single-user local
-- simples de inspecionar e manter
-- suficiente para leaderboard e cache no MVP
+### Why SQLite
+- excellent for single-user local usage
+- simple to inspect and maintain
+- enough for leaderboard and cache in the MVP
 
-### Por que provider isolado
-- mock e API real podem coexistir
-- reduz retrabalho
-- facilita testes
-
----
-
-## 15. Anti-padrões proibidos
-
-- lógica de score dentro de event handler da TUI
-- SQL inline em screen/widget
-- chamada HTTP dentro de widget
-- dependência circular entre camadas
-- regras do jogo espalhadas em vários arquivos sem centralização
-- valores mágicos repetidos no código
+### Why an isolated provider
+- mock and real API can coexist
+- reduces rework
+- simplifies testing
 
 ---
 
-## 16. Critério de arquitetura saudável
+## 15. Forbidden Anti-Patterns
 
-A arquitetura está saudável quando:
-- trocar mock por provider real não exige reescrever a UI
-- ajustes de score não exigem mexer em widgets
-- leaderboard e stats podem ser recalculados pelo banco
-- testes de domínio rodam sem subir a TUI
-- o projeto cresce por camadas, não por acoplamento lateral
+- scoring logic inside TUI event handlers
+- inline SQL inside screens or widgets
+- HTTP calls inside widgets
+- circular dependencies between layers
+- game rules spread across multiple files without centralization
+- repeated magic values in code
+
+---
+
+## 16. Healthy Architecture Criteria
+
+The architecture is healthy when:
+- swapping the mock for a real provider does not require rewriting the UI
+- score adjustments do not require changing widgets
+- leaderboard and stats can be recalculated from the database
+- domain tests run without starting the TUI
+- the project grows through layers, not lateral coupling

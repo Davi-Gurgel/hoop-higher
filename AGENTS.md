@@ -1,303 +1,303 @@
 # AGENTS.md
 
-## Objetivo
+## Purpose
 
-Este documento define as regras operacionais e de boas práticas para agentes de código trabalhando no projeto **Hoop Higher**.
+This document defines the operating rules and engineering practices for code agents working on **Hoop Higher**.
 
-O objetivo é manter o repositório consistente, previsível e fácil de evoluir, com foco em:
+The goal is to keep the repository consistent, predictable, and easy to evolve, with focus on:
 
-- qualidade de código
-- separação clara de responsabilidades
-- fluxo disciplinado com issues, branches e pull requests
-- baixo acoplamento
-- facilidade de manutenção
-- boa experiência de desenvolvimento com a stack escolhida
+- code quality
+- clear separation of responsibilities
+- disciplined issue, branch, and pull request flow
+- low coupling
+- maintainability
+- a good developer experience with the chosen stack
 
 ---
 
-## Stack oficial
+## Official Stack
 
-O agente deve respeitar esta stack como padrão do projeto.
+Agents should treat this stack as the project default.
 
-### Linguagem
+### Language
 - **Python 3.13+**
 
 ### Interface
-- **Textual** para a TUI
+- **Textual** for the TUI
 
-### Banco de dados
+### Database
 - **SQLite**
-- **SQLModel** para modelagem e persistência
+- **SQLModel** for modeling and persistence
 
 ### HTTP
 - **httpx**
 
-### Testes
+### Tests
 - **pytest**
 
-### Configuração
+### Configuration
 - **pydantic-settings**
 
-### Estrutura do projeto
-- layout com **src/**
-- organização por camadas: `tui`, `domain`, `services`, `data`
+### Project structure
+- `src/` layout
+- layered organization: `tui`, `domain`, `services`, `data`
 
-O agente não deve introduzir frameworks alternativos sem justificativa explícita e sem registrar a mudança em issue e PR.
-
----
-
-## Princípios gerais
-
-1. **Preferir clareza a esperteza.**
-2. **Evitar acoplamento entre UI, regras de negócio, persistência e integração externa.**
-3. **Implementar em passos pequenos e revisáveis.**
-4. **Nunca alterar arquitetura central sem issue e PR próprios.**
-5. **Toda feature deve ser testável.**
-6. **Toda decisão que afete produto ou regra de jogo deve respeitar a especificação vigente.**
-7. **Não improvisar comportamento não definido sem documentar a decisão.**
+Agents must not introduce alternative frameworks without explicit justification and a documented issue and PR.
 
 ---
 
-## Regras de arquitetura
+## General Principles
 
-### Separação obrigatória de camadas
+1. **Prefer clarity over cleverness.**
+2. **Avoid coupling UI, business rules, persistence, and external integrations.**
+3. **Implement in small, reviewable steps.**
+4. **Never change core architecture without a dedicated issue and PR.**
+5. **Every feature must be testable.**
+6. **Any decision affecting product behavior or game rules must respect the current specification.**
+7. **Do not invent undefined behavior without documenting the decision.**
+
+---
+
+## Architecture Rules
+
+### Required layer separation
 
 #### `domain/`
-Contém apenas regras de negócio e modelos do domínio.
+Contains only business rules and domain models.
 
-Exemplos:
-- enums de modo de jogo
-- modelos de run, round, question
-- regras de score
-- heurísticas de dificuldade
-- gerador de perguntas
+Examples:
+- game mode enums
+- run, round, and question models
+- scoring rules
+- difficulty heuristics
+- question generation
 
-**Não pode conter:**
-- código de Textual
-- SQLModel de persistência
-- chamadas HTTP
-- leitura de `.env`
+Must not contain:
+- Textual code
+- SQLModel persistence models
+- HTTP calls
+- `.env` loading
 
 #### `services/`
-Orquestra casos de uso.
+Orchestrates use cases.
 
-Exemplos:
-- iniciar run
-- jogar round
-- carregar jogo histórico
-- calcular estatísticas agregadas
+Examples:
+- start a run
+- play a round
+- load a historical game
+- calculate aggregated stats
 
-**Pode usar:** domínio + repositórios + providers
+May use: domain + repositories + providers
 
-**Não deve conter:** widgets, estilos visuais ou detalhes específicos de renderização.
+Must not contain: widgets, visual styles, or rendering-specific details.
 
 #### `data/`
-Acesso a banco, cache e APIs externas.
+Database, cache, and external API access.
 
-Exemplos:
+Examples:
 - `BallDontLieProvider`
 - `MockProvider`
-- repositórios SQLite
-- mapeamento de payload externo para modelos internos
+- SQLite repositories
+- external payload mapping into internal models
 
-**Não deve conter:** regra de jogo de alto nível.
+Must not contain: high-level game rules.
 
 #### `tui/`
-Tudo relacionado à interface em Textual.
+Everything related to the Textual interface.
 
-Exemplos:
+Examples:
 - screens
 - widgets
-- estilos `.tcss`
-- navegação
-- atalhos de teclado
-- manipulação de mouse
+- `.tcss` styles
+- navigation
+- keyboard shortcuts
+- mouse handling
 
-**Não deve conter:**
-- regras de score implementadas inline
-- SQL direto
-- parsing de API
-
----
-
-## Regras de implementação
-
-### 1. Tipagem
-O agente deve usar type hints em todo código novo relevante.
-
-### 2. Funções pequenas
-Preferir funções curtas, com responsabilidade única.
-
-### 3. Nomes claros
-Usar nomes descritivos e previsíveis.
-
-### 4. Sem constantes mágicas espalhadas
-Valores de score, thresholds de dificuldade, limites de perguntas e TTL de cache devem ficar centralizados.
-
-### 5. Sem lógica duplicada
-Se o comportamento for reutilizável, extrair para serviço, helper ou regra de domínio.
-
-### 6. Comentários só quando necessários
-Não comentar o óbvio. Usar comentários para:
-- explicar decisão não trivial
-- registrar trade-off
-- justificar workaround técnico
-
-### 7. Erros explícitos
-Falhas devem ser tratadas com mensagens claras. Não engolir exceções silenciosamente.
-
-### 8. Evolução incremental
-O agente deve preferir PRs pequenos e funcionais em vez de mudanças massivas.
+Must not contain:
+- inline scoring rules
+- direct SQL
+- API parsing
 
 ---
 
-## Regras específicas da stack
+## Implementation Rules
+
+### 1. Typing
+Agents must use type hints in all relevant new code.
+
+### 2. Small functions
+Prefer short functions with a single responsibility.
+
+### 3. Clear names
+Use descriptive and predictable names.
+
+### 4. No scattered magic constants
+Scoring values, difficulty thresholds, question limits, and cache TTL values must be centralized.
+
+### 5. No duplicated logic
+If behavior is reusable, extract it into a service, helper, or domain rule.
+
+### 6. Comments only when needed
+Do not comment the obvious. Use comments to:
+- explain a non-trivial decision
+- record a trade-off
+- justify a technical workaround
+
+### 7. Explicit errors
+Failures should be handled with clear messages. Do not silently swallow exceptions.
+
+### 8. Incremental evolution
+Agents should prefer small, functional PRs instead of large, sweeping changes.
+
+---
+
+## Stack-Specific Rules
 
 ### Python
-- seguir PEP 8
-- usar `pathlib` quando fizer sentido
-- preferir modelos explícitos e funções puras
-- evitar classes desnecessárias
+- follow PEP 8
+- use `pathlib` where it makes sense
+- prefer explicit models and pure functions
+- avoid unnecessary classes
 
 ### Textual
-- separar screens e widgets reutilizáveis
-- evitar colocar lógica de domínio dentro de callbacks de UI
-- manter atalhos de teclado centralizados e visíveis na interface
-- mouse é complemento, não dependência
-- feedback visual deve ser previsível: loading, success, error, reveal
+- separate reusable screens and widgets
+- avoid putting domain logic inside UI callbacks
+- keep keyboard shortcuts centralized and visible
+- treat mouse support as complementary, not required
+- visual feedback should be predictable: loading, success, error, reveal
 
 ### SQLite / SQLModel
-- manter schema simples
-- evitar otimizações prematuras
-- usar bootstrap limpo do banco no início
-- persistir dados em formato previsível e fácil de inspecionar
-- garantir integridade mínima entre tabelas ligadas por IDs
+- keep the schema simple
+- avoid premature optimization
+- use clean DB bootstrap on startup
+- persist data in a predictable, easy-to-inspect format
+- maintain minimum integrity between tables linked by IDs
 
 ### httpx
-- encapsular chamadas em providers dedicados
-- usar timeout explícito
-- tratar erros de rede e resposta inválida
-- nunca espalhar chamadas HTTP diretamente pela UI
+- wrap HTTP calls in dedicated providers
+- use explicit timeouts
+- handle network failures and invalid responses
+- never spread HTTP calls directly across the UI
 
 ### pytest
-- todo módulo de domínio novo deve vir com testes
-- testar regra, não implementação acidental
-- evitar testes frágeis de UI quando uma camada inferior cobre a regra principal
+- every new domain module should ship with tests
+- test the rule, not accidental implementation details
+- avoid fragile UI tests when a lower layer already covers the core rule
 
 ---
 
-## Regras para dados de jogo
+## Game Data Rules
 
-### Fonte mock primeiro
-O agente deve começar por **MockProvider** para validar UX, fluxo de jogo e persistência.
+### Mock source first
+Agents should start with **MockProvider** to validate UX, gameplay flow, and persistence.
 
-### API real depois
-A integração real deve ser implementada atrás de uma interface estável, por exemplo `StatsProvider`.
+### Real API later
+The real integration should be implemented behind a stable interface such as `StatsProvider`.
 
-### Cache obrigatório
-Sempre que houver integração com API real:
-- checar cache antes de requisitar
-- persistir payload bruto ou normalizado conforme definido
-- diferenciar cache por data e por jogo
-
----
-
-## Regras para o jogo
-
-O agente não deve alterar estas regras sem issue específica:
-
-- métrica principal do MVP: **points**
-- cada round corresponde a **um jogo**
-- cada round contém **5 a 10 perguntas**
-- usar jogadores com **minutes > 0**
-- fluxo clássico: jogador B vira o próximo A
-- modo endless: erro continua a run e remove pontos
-- modo arcade: erro encerra a run
-- modo histórico: data aleatória com pelo menos **5 jogos**
-- leaderboard local
-- 1 usuário local
-- persistência em SQLite
-
-Se houver necessidade de mudar regra, isso deve aparecer em:
-1. issue
-2. branch dedicada
-3. PR com justificativa
+### Required cache
+Whenever a real API integration exists:
+- check cache before making the request
+- persist raw or normalized payloads as defined
+- differentiate cache by date and by game
 
 ---
 
-## Fluxo obrigatório com Issues, Branches e PRs usando gh cli
+## Game Rules
 
-### 1. Criar issue antes de implementar
-Toda mudança relevante deve nascer de uma issue.
+Agents must not change these rules without a dedicated issue:
 
-A issue deve conter:
-- título claro
-- contexto
-- objetivo
-- escopo
-- critérios de aceite
-- fora de escopo, se necessário
+- MVP main metric: **points**
+- each round corresponds to **one game**
+- each round contains **5 to 10 questions**
+- use players with **minutes > 0**
+- classic flow: player B becomes the next player A
+- endless mode: a wrong answer continues the run and removes points
+- arcade mode: a wrong answer ends the run
+- historical mode: random date with at least **5 games**
+- local leaderboard
+- 1 local user
+- SQLite persistence
 
-### 2. Criar branch a partir da issue
-Padrão de branch:
+If a rule needs to change, it must appear in:
+1. an issue
+2. a dedicated branch
+3. a PR with justification
+
+---
+
+## Required Issue, Branch, and PR Flow Using `gh`
+
+### 1. Create an issue before implementing
+Every relevant change should start from an issue.
+
+The issue should contain:
+- a clear title
+- context
+- objective
+- scope
+- acceptance criteria
+- out-of-scope notes when needed
+
+### 2. Create a branch from the issue
+Branch naming convention:
 
 ```text
-feat/<issue-id>-descricao-curta
-fix/<issue-id>-descricao-curta
-refactor/<issue-id>-descricao-curta
-chore/<issue-id>-descricao-curta
+feat/<issue-id>-short-description
+fix/<issue-id>-short-description
+refactor/<issue-id>-short-description
+chore/<issue-id>-short-description
 ```
 
-Exemplos:
+Examples:
 - `feat/12-home-screen`
 - `feat/18-mock-provider`
 - `fix/27-score-bug-endless`
 - `refactor/31-split-round-generator`
 
-### 3. Implementar escopo pequeno
-Uma branch deve resolver **uma unidade lógica de trabalho**.
+### 3. Keep scope small
+One branch should solve **one logical unit of work**.
 
-### 4. Abrir PR obrigatoriamente
-Toda branch deve virar PR antes de merge.
+### 4. Open a PR
+Every branch should become a PR before merge.
 
-A PR deve conter:
-- o que foi feito
-- por que foi feito
-- como validar
-- riscos ou trade-offs
-- referência à issue
+The PR should contain:
+- what was done
+- why it was done
+- how to validate it
+- risks or trade-offs
+- a reference to the issue
 
-### 5. Só fazer merge quando estiver revisável
-Condições mínimas para merge:
-- testes passando
-- escopo compatível com a issue
-- sem código morto óbvio
-- sem TODO crítico escondido
+### 5. Merge only when reviewable
+Minimum conditions for merge:
+- tests passing
+- scope aligned with the issue
+- no obvious dead code
+- no hidden critical TODOs
 
 ---
 
-## Estratégia de backlog recomendada
+## Recommended Backlog Strategy
 
-1. scaffold do projeto
-2. modelos de domínio e enums
-3. motor de score
-4. gerador de perguntas
+1. project scaffold
+2. domain models and enums
+3. scoring engine
+4. question generator
 5. mock provider
-6. persistência SQLite
-7. tela home
-8. tela de jogo
+6. SQLite persistence
+7. home screen
+8. game screen
 9. leaderboard
 10. stats screen
-11. histórico mock
-12. integração API real
-13. cache real
-14. polimento visual
+11. mock historical mode
+12. real API integration
+13. real cache
+14. visual polish
 
 ---
 
-## Convenções de commit
+## Commit Conventions
 
-Preferir commits pequenos e com mensagem clara.
+Prefer small commits with clear messages.
 
 ```text
 feat: add mock provider for local game data
@@ -307,7 +307,7 @@ test: add coverage for difficulty selection
 chore: configure project dependencies
 ```
 
-Evitar commits como:
+Avoid commits such as:
 - `update`
 - `fix stuff`
 - `wip`
@@ -315,57 +315,69 @@ Evitar commits como:
 
 ---
 
-## O que o agente pode decidir sozinho
+## What the Agent May Decide Alone
 
-- nomes internos de classes e funções
-- organização fina entre arquivos
-- helpers utilitários
-- estrutura de testes
-- detalhes visuais pequenos da TUI
-- mensagens de erro e loading
-- pequenas abstrações técnicas
+- internal class and function names
+- fine-grained file organization
+- utility helpers
+- test structure
+- small TUI visual details
+- loading and error messages
+- small technical abstractions
 
-## O que o agente não deve decidir sozinho
+## What the Agent Must Not Decide Alone
 
-Sem issue específica ou autorização explícita, o agente não deve:
-- trocar a stack principal
-- trocar Textual por outro framework
-- mudar a regra central do jogo
-- adicionar multiplayer online
-- alterar persistência local para outro banco
-- adicionar autenticação
-- misturar provider real e UI de forma acoplada
-- expandir escopo para métricas além de pontos no MVP
-
----
-
-## Definition of Done por PR
-
-Uma PR só está pronta quando:
-- resolve uma issue claramente definida
-- mantém a arquitetura em camadas
-- inclui testes apropriados
-- não adiciona dívida técnica desnecessária
-- deixa o projeto em estado executável
-- atualiza documentação se necessário
+Without a dedicated issue or explicit authorization, the agent must not:
+- replace the main stack
+- replace Textual with another framework
+- change a core game rule
+- add online multiplayer
+- switch local persistence to another database
+- add authentication
+- couple the real provider directly to the UI
+- expand the MVP beyond points as the main metric
 
 ---
 
-## Regra de ouro
+## Definition of Done per PR
 
-**O agente deve otimizar por organização, previsibilidade e entregas pequenas.**
-
-É melhor abrir várias issues e PRs curtas e limpas do que uma implementação grande, acoplada e difícil de revisar.
+A PR is only ready when it:
+- resolves a clearly defined issue
+- preserves the layered architecture
+- includes appropriate tests
+- does not add unnecessary technical debt
+- leaves the project runnable
+- updates documentation when needed
 
 ---
 
-## Documentos relacionados
+## `.agents` Skills Policy
 
-Além deste arquivo, o repositório deve manter:
+The `.agents/` directory is treated as an optional local reference, not a default workflow.
+
+Rules:
+- Only use skills from `.agents/` when they are explicitly mentioned in the prompt.
+- Do not assume `.agents/` skills apply implicitly.
+- Do not expand scope based on `.agents/` content alone.
+- If a prompt does not mention those skills, ignore `.agents/` and follow the repository docs instead.
+
+---
+
+## Golden Rule
+
+**Agents should optimize for organization, predictability, and small deliverables.**
+
+Several short, clean issues and PRs are better than one large, coupled, hard-to-review implementation.
+
+---
+
+## Related Documents
+
+In addition to this file, the repository should keep:
 - `SPEC.md`
 - `ARCHITECTURE.md`
 - `.github/pull_request_template.md`
 - `.github/ISSUE_TEMPLATE/feature.md`
 - `.github/ISSUE_TEMPLATE/bug.md`
 
-Se houver conflito entre este documento e a especificação do produto, a especificação do produto prevalece.
+If this document conflicts with the product specification, the specification wins.
