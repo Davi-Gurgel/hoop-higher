@@ -27,6 +27,11 @@ def _label_texts(app: HoopHigherApp) -> list[str]:
     return [label.visual.plain for label in app.screen.query(Label)]
 
 
+def _enter_binding_description(app: HoopHigherApp) -> str | None:
+    binding = app.active_bindings.get("enter")
+    return None if binding is None else binding.binding.description
+
+
 def test_home_screen_supports_arrow_navigation() -> None:
     async def scenario() -> None:
         app = HoopHigherApp(database_url="sqlite://")
@@ -256,6 +261,29 @@ def test_game_screen_enter_confirms_focused_guess() -> None:
             await pilot.pause(1.4)
 
             assert app.gameplay_service.snapshot().question_index == starting_index + 1
+
+    asyncio.run(scenario())
+
+
+def test_game_screen_footer_keeps_confirm_binding_visible(monkeypatch) -> None:
+    monkeypatch.setattr(game_screen_module, "_FEEDBACK_DURATION_SECONDS", 0.01)
+
+    async def scenario() -> None:
+        app = HoopHigherApp(database_url="sqlite://")
+
+        async with app.run_test() as pilot:
+            await pilot.press("enter")
+            await pilot.press("1")
+            await pilot.pause()
+
+            assert getattr(app.screen.focused, "id", None) == "guess-higher"
+            assert _enter_binding_description(app) == "Confirm"
+
+            await pilot.press(_correct_guess_key(app))
+            await pilot.pause(0.05)
+
+            assert getattr(app.screen.focused, "id", None) == "guess-higher"
+            assert _enter_binding_description(app) == "Confirm"
 
     asyncio.run(scenario())
 

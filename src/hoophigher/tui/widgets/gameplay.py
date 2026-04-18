@@ -368,6 +368,12 @@ class MatchupPanel(Vertical):
         )
 
 
+class GuessButton(Button, inherit_bindings=False):
+    """Gameplay buttons keep focus, but let the screen own the Enter binding."""
+
+    BINDINGS = []
+
+
 class GuessBar(Vertical):
     DEFAULT_CSS = """
     GuessBar {
@@ -425,8 +431,8 @@ class GuessBar(Vertical):
         yield Label("", id="pb-compare")
         yield Label("Use H/L or ←/→ + Enter", id="controls-hint")
         with Horizontal(id="guess-actions"):
-            yield Button("▲  HIGHER  [H]", id="guess-higher", variant="success", classes="guess-btn")
-            yield Button("▼  LOWER  [L]", id="guess-lower", variant="error", classes="guess-btn")
+            yield GuessButton("▲  HIGHER  [H]", id="guess-higher", variant="success", classes="guess-btn")
+            yield GuessButton("▼  LOWER  [L]", id="guess-lower", variant="error", classes="guess-btn")
 
     def set_prompt(self, text: str) -> None:
         self.query_one("#pb-compare", Label).update(text)
