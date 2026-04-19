@@ -57,7 +57,10 @@ class HistoricalDateService:
         unique_games_by_date: dict[date, set[str]] = defaultdict(set)
         for season in self._iter_seasons_for_window(start_year=start_year, end_year=end_year):
             for season_type in SEASON_TYPES:
-                rows = await self._fetcher(season, season_type, self._timeout_seconds)
+                try:
+                    rows = await self._fetcher(season, season_type, self._timeout_seconds)
+                except Exception:
+                    continue
                 self._accumulate_rows(unique_games_by_date=unique_games_by_date, rows=rows)
 
         eligible_rows: list[tuple[date, int]] = []

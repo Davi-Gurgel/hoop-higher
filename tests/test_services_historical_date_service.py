@@ -87,6 +87,30 @@ def test_reuses_existing_index_without_rebuild(tmp_path) -> None:
     assert result == (date(2022, 2, 3),)
 
 
+def test_skips_failed_season_type_fetches_when_other_rows_are_eligible(tmp_path) -> None:
+    session = _make_session(tmp_path)
+    repository = HistoricalIndexRepository(session)
+
+    async def flaky_fetcher(season: str, season_type: str, _timeout_seconds: int):
+        if season_type == "Pre Season":
+            raise ConnectionError("upstream returned non-json")
+        if season == "2021-22" and season_type == "Regular Season":
+            return (
+                {"GAME_ID": "0101", "GAME_DATE": "2021-12-25"},
+                {"GAME_ID": "0102", "GAME_DATE": "2021-12-25"},
+                {"GAME_ID": "0103", "GAME_DATE": "2021-12-25"},
+            )
+        return ()
+
+    service = HistoricalDateService(index_repository=repository, fetcher=flaky_fetcher)
+
+    result = asyncio.run(
+        service.get_or_build_eligible_dates(start_year=2021, end_year=2021, min_games=3)
+    )
+
+    assert result == (date(2021, 12, 25),)
+
+
 def test_raises_lookup_error_when_no_eligible_dates(tmp_path) -> None:
     session = _make_session(tmp_path)
     repository = HistoricalIndexRepository(session)
