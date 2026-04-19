@@ -218,10 +218,10 @@ class StatsProvider(Protocol):
 - returns fixed or mocked data
 - should be the project's initial data source
 
-### `api/balldontlie_provider.py`
-- future real provider
-- uses `httpx`
-- respects cache
+### `api/nba_api_provider.py`
+- real provider using `nba_api`
+- uses cache-first reads for games by date and boxscores by game id
+- applies explicit timeout and bounded retry policy for transient upstream failures
 - converts external payloads into internal models
 
 ---
@@ -291,6 +291,12 @@ The screen does not calculate score or generate questions by itself. It only con
 4. otherwise, call the API
 5. save the result in cache
 6. return domain models
+
+### Historical eligible date index
+1. historical service queries `HistoricalIndexRepository` for eligible dates in the configured window
+2. if index exists, reuse it immediately
+3. otherwise, fetch season-level data, compute dates with enough games, and persist the index
+4. gameplay service selects one random indexed date and samples configured rounds from that date
 
 ### Box score by game
 1. service asks for box score by `game_id`
