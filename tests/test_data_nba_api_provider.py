@@ -7,7 +7,7 @@ from datetime import date
 import pytest
 
 from hoophigher.data import CacheRepository, create_sqlite_engine, init_db, session_scope
-from hoophigher.data.api.nba_api_provider import NBAApiProvider, _default_scoreboard_fetch
+from hoophigher.data.api.nba_api_provider import NBAApiProvider, _default_boxscore_fetch, _default_scoreboard_fetch
 from hoophigher.domain.models import GameBoxScore, PlayerLine, TeamGameInfo
 
 
@@ -357,6 +357,85 @@ def test_get_games_by_date_parses_nested_v3_boxscore_shape(tmp_path) -> None:
     assert game.game_date == target_date
     assert game.home_team.score == 111
     assert game.away_team.score == 109
+    assert [(player.player_name, player.team_abbreviation, player.minutes, player.points) for player in game.player_lines] == [
+        ("Player One", "ATL", 12, 17),
+        ("Player Two", "BOS", 9, 8),
+    ]
+
+
+def test_get_games_by_date_parses_v2_boxscore_without_game_summary(tmp_path) -> None:
+    target_date = date(2025, 2, 10)
+    engine = create_sqlite_engine(f"sqlite:///{tmp_path / 'hoophigher.db'}")
+    init_db(engine)
+
+    def scoreboard_fetch(game_date: date, _timeout_seconds: int):
+        return {
+            "scoreboard": {
+                "games": [
+                    {
+                        "gameId": "0022500105",
+                        "gameDate": game_date.isoformat(),
+                        "homeTeam": {
+                            "teamId": "1610612737",
+                            "teamName": "Hawks",
+                            "teamTricode": "ATL",
+                            "score": "111",
+                        },
+                        "awayTeam": {
+                            "teamId": "1610612738",
+                            "teamName": "Celtics",
+                            "teamTricode": "BOS",
+                            "score": "109",
+                        },
+                    }
+                ]
+            }
+        }
+
+    def boxscore_fetch(game_id: str, _timeout_seconds: int):
+        return {
+            "resultSets": [
+                {
+                    "name": "PlayerStats",
+                    "headers": [
+                        "GAME_ID",
+                        "TEAM_ID",
+                        "TEAM_ABBREVIATION",
+                        "PLAYER_ID",
+                        "PLAYER_NAME",
+                        "MIN",
+                        "PTS",
+                    ],
+                    "rowSet": [
+                        [game_id, "1610612737", "ATL", "11", "Player One", "12:34", 17],
+                        [game_id, "1610612738", "BOS", "12", "Player Two", "9:00", 8],
+                    ],
+                },
+                {
+                    "name": "TeamStats",
+                    "headers": ["GAME_ID", "TEAM_ID", "TEAM_NAME", "TEAM_ABBREVIATION", "PTS"],
+                    "rowSet": [
+                        [game_id, "1610612737", "Hawks", "ATL", 111],
+                        [game_id, "1610612738", "Celtics", "BOS", 109],
+                    ],
+                },
+            ]
+        }
+
+    provider = NBAApiProvider(
+        cache_repository_factory=_make_cache_factory(engine),
+        scoreboard_fetch=scoreboard_fetch,
+        boxscore_fetch=boxscore_fetch,
+        timeout_seconds=5,
+    )
+
+    games = asyncio.run(provider.get_games_by_date(target_date))
+
+    assert len(games) == 1
+    game = games[0]
+    assert game.game_date == target_date
+    assert game.home_team.abbreviation == "ATL"
+    assert game.away_team.abbreviation == "BOS"
     assert [(player.player_name, player.team_abbreviation, player.minutes, player.points) for player in game.player_lines] == [
         ("Player One", "ATL", 12, 17),
         ("Player Two", "BOS", 9, 8),
@@ -766,6 +845,45 @@ def test_default_scoreboard_fetch_falls_back_to_v2_for_unsupported_v3_shape(monk
     monkeypatch.setitem(sys.modules, "nba_api.stats.endpoints", fake_endpoints)
 
     payload = _default_scoreboard_fetch(date(2025, 2, 10), 7)
+
+    assert payload == {"resultSets": []}
+    assert calls == ["v3", "v2"]
+
+
+def test_default_boxscore_fetch_falls_back_to_v2_when_v3_returns_invalid_payload(monkeypatch) -> None:
+    calls: list[str] = []
+
+    class FakeBoxScoreTraditionalV3:
+        def __init__(self, *, game_id: str, timeout: int) -> None:
+            assert game_id == "0022500106"
+            assert timeout == 7
+            calls.append("v3")
+            raise ValueError("non-json response")
+
+    class FakeBoxScoreTraditionalV2:
+        def __init__(self, *, game_id: str, timeout: int) -> None:
+            assert game_id == "0022500106"
+            assert timeout == 7
+            calls.append("v2")
+
+        def get_dict(self) -> dict[str, object]:
+            return {"resultSets": []}
+
+    fake_endpoints = types.ModuleType("nba_api.stats.endpoints")
+    fake_endpoints.boxscoretraditionalv3 = types.SimpleNamespace(BoxScoreTraditionalV3=FakeBoxScoreTraditionalV3)
+    fake_endpoints.boxscoretraditionalv2 = types.SimpleNamespace(BoxScoreTraditionalV2=FakeBoxScoreTraditionalV2)
+
+    fake_stats = types.ModuleType("nba_api.stats")
+    fake_stats.endpoints = fake_endpoints
+
+    fake_nba_api = types.ModuleType("nba_api")
+    fake_nba_api.stats = fake_stats
+
+    monkeypatch.setitem(sys.modules, "nba_api", fake_nba_api)
+    monkeypatch.setitem(sys.modules, "nba_api.stats", fake_stats)
+    monkeypatch.setitem(sys.modules, "nba_api.stats.endpoints", fake_endpoints)
+
+    payload = _default_boxscore_fetch("0022500106", 7)
 
     assert payload == {"resultSets": []}
     assert calls == ["v3", "v2"]

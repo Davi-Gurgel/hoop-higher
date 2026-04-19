@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import warnings
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -177,13 +178,24 @@ def _default_scoreboard_fetch(game_date: date, timeout_seconds: int) -> Mapping[
 
 
 def _default_boxscore_fetch(game_id: str, timeout_seconds: int) -> Mapping[str, object]:
-    from nba_api.stats.endpoints import boxscoretraditionalv3
+    from nba_api.stats.endpoints import boxscoretraditionalv2, boxscoretraditionalv3
 
-    endpoint = boxscoretraditionalv3.BoxScoreTraditionalV3(
-        game_id=game_id,
-        timeout=timeout_seconds,
-    )
-    return endpoint.get_dict()
+    try:
+        endpoint = boxscoretraditionalv3.BoxScoreTraditionalV3(
+            game_id=game_id,
+            timeout=timeout_seconds,
+        )
+        return endpoint.get_dict()
+    except Exception:
+        pass
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        endpoint_v2 = boxscoretraditionalv2.BoxScoreTraditionalV2(
+            game_id=game_id,
+            timeout=timeout_seconds,
+        )
+    return endpoint_v2.get_dict()
 
 
 def _looks_like_scoreboard_v3_payload(payload: object) -> bool:
@@ -350,7 +362,11 @@ def _parse_boxscore_payload(
         )
 
     if "resultSets" in payload:
-        return _parse_boxscore_v2_payload(payload, expected_game_id=expected_game_id)
+        return _parse_boxscore_v2_payload(
+            payload,
+            expected_game_id=expected_game_id,
+            game_date_fallback=game_date_fallback,
+        )
 
     raise ValueError("Malformed boxscore payload: expected V3 or V2 structure.")
 
@@ -400,26 +416,27 @@ def _parse_boxscore_v3_payload(
     )
 
 
-def _parse_boxscore_v2_payload(payload: Mapping[str, object], *, expected_game_id: str) -> GameBoxScore:
+def _parse_boxscore_v2_payload(
+    payload: Mapping[str, object],
+    *,
+    expected_game_id: str,
+    game_date_fallback: date | None,
+) -> GameBoxScore:
     result_sets = _require_list(payload.get("resultSets"), field="payload['resultSets']")
-    game_headers = _parse_v2_result_set(result_sets, set_name="GameSummary")
+    game_headers = _parse_v2_result_set(result_sets, set_name="GameSummary", optional=True)
     team_rows = _parse_v2_result_set(result_sets, set_name="TeamStats")
     player_rows = _parse_v2_result_set(result_sets, set_name="PlayerStats")
 
-    target_header = None
-    for header in game_headers:
-        if _optional_str(header.get("GAME_ID")) == expected_game_id:
-            target_header = header
-            break
-    if target_header is None:
-        raise LookupError(f"Game id '{expected_game_id}' not found in boxscore payload.")
-
-    game_date = _parse_date_field(target_header.get("GAME_DATE_EST"), field="GameSummary.GAME_DATE_EST")
-    home_team_id = _require_str(target_header.get("HOME_TEAM_ID"), field="GameSummary.HOME_TEAM_ID")
-    away_team_id = _require_str(target_header.get("VISITOR_TEAM_ID"), field="GameSummary.VISITOR_TEAM_ID")
+    target_header = _find_v2_game_summary(game_headers, expected_game_id=expected_game_id)
+    game_date = _parse_v2_game_date(target_header, game_date_fallback=game_date_fallback)
+    home_team_id = _optional_str(target_header.get("HOME_TEAM_ID")) if target_header is not None else None
+    away_team_id = _optional_str(target_header.get("VISITOR_TEAM_ID")) if target_header is not None else None
 
     teams_by_id: dict[str, TeamGameInfo] = {}
     for row in team_rows:
+        row_game_id = _optional_str(row.get("GAME_ID"))
+        if row_game_id and row_game_id != expected_game_id:
+            continue
         team_id = _optional_str(row.get("TEAM_ID"))
         if not team_id:
             continue
@@ -433,12 +450,22 @@ def _parse_boxscore_v2_payload(payload: Mapping[str, object], *, expected_game_i
             score=_optional_int(row.get("PTS")),
         )
 
-    home_team = teams_by_id.get(home_team_id)
-    away_team = teams_by_id.get(away_team_id)
+    home_team, away_team = _resolve_v2_teams(
+        teams_by_id=teams_by_id,
+        home_team_id=home_team_id,
+        away_team_id=away_team_id,
+    )
     if home_team is None or away_team is None:
         raise ValueError("Malformed boxscore payload: missing TeamStats rows for home or away team.")
 
-    players = _parse_player_rows(player_rows, field="PlayerStats")
+    players = _parse_player_rows(
+        [
+            row
+            for row in player_rows
+            if (_optional_str(row.get("GAME_ID")) or expected_game_id) == expected_game_id
+        ],
+        field="PlayerStats",
+    )
     return GameBoxScore(
         game_id=expected_game_id,
         game_date=game_date,
@@ -446,6 +473,52 @@ def _parse_boxscore_v2_payload(payload: Mapping[str, object], *, expected_game_i
         away_team=away_team,
         player_lines=tuple(players),
     )
+
+
+def _find_v2_game_summary(
+    game_headers: Sequence[Mapping[str, object]],
+    *,
+    expected_game_id: str,
+) -> Mapping[str, object] | None:
+    for header in game_headers:
+        if _optional_str(header.get("GAME_ID")) == expected_game_id:
+            return header
+    if game_headers:
+        raise LookupError(f"Game id '{expected_game_id}' not found in boxscore payload.")
+    return None
+
+
+def _parse_v2_game_date(
+    target_header: Mapping[str, object] | None,
+    *,
+    game_date_fallback: date | None,
+) -> date:
+    if target_header is None:
+        if game_date_fallback is None:
+            raise ValueError("Malformed boxscore payload: missing GameSummary and date fallback.")
+        return game_date_fallback
+    return _parse_date_field(
+        target_header.get("GAME_DATE_EST"),
+        field="GameSummary.GAME_DATE_EST",
+        fallback=game_date_fallback,
+    )
+
+
+def _resolve_v2_teams(
+    *,
+    teams_by_id: Mapping[str, TeamGameInfo],
+    home_team_id: str | None,
+    away_team_id: str | None,
+) -> tuple[TeamGameInfo | None, TeamGameInfo | None]:
+    if home_team_id is not None or away_team_id is not None:
+        return (
+            teams_by_id.get(home_team_id or ""),
+            teams_by_id.get(away_team_id or ""),
+        )
+    teams = tuple(teams_by_id.values())
+    if len(teams) != 2:
+        return None, None
+    return teams[0], teams[1]
 
 
 def _parse_team(
