@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 from sqlalchemy.engine import Engine
 from textual.app import App
@@ -22,6 +22,7 @@ MOCK_CANDIDATE_DATES = (
     date(2025, 1, 12),
     date(2025, 1, 13),
 )
+RECENT_CANDIDATE_DAYS = 7
 
 
 def create_stats_provider(
@@ -37,6 +38,13 @@ def create_stats_provider(
     raise ValueError(
         f"Unknown stats provider '{provider_name}'. Expected one of: 'mock', 'nba_api'."
     )
+
+
+def recent_candidate_dates(*, today: date | None = None, days: int = RECENT_CANDIDATE_DAYS) -> tuple[date, ...]:
+    if days < 1:
+        raise ValueError("days must be at least 1.")
+    current_date = today or date.today()
+    return tuple(current_date - timedelta(days=offset) for offset in range(days))
 
 
 class HoopHigherApp(App[None]):
@@ -75,6 +83,7 @@ class HoopHigherApp(App[None]):
             engine=engine,
         )
         self._uses_mock_provider = isinstance(provider, MockProvider)
+        self._recent_candidate_dates = recent_candidate_dates()
         self.gameplay_service = GameplayService(
             engine=engine,
             provider=provider,
@@ -94,5 +103,7 @@ class HoopHigherApp(App[None]):
         start_run_kwargs: dict[str, object] = {"total_questions": 5}
         if self._uses_mock_provider:
             start_run_kwargs["candidate_dates"] = MOCK_CANDIDATE_DATES
+        elif mode is not GameMode.HISTORICAL:
+            start_run_kwargs["candidate_dates"] = self._recent_candidate_dates
         snapshot = await self.gameplay_service.start_run(mode, **start_run_kwargs)
         self.push_screen(GameScreen(snapshot))

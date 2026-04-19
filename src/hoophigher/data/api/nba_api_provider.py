@@ -71,7 +71,7 @@ class NBAApiProvider(StatsProvider):
 
         games: list[GameBoxScore] = []
         for seed in seeds:
-            game = await self.get_game_boxscore(seed.game_id)
+            game = await self._get_game_boxscore(seed.game_id, game_date_fallback=seed.game_date)
             games.append(_merge_game_seed(seed=seed, game=game))
 
         games.sort(key=lambda game: game.game_id)
@@ -80,6 +80,14 @@ class NBAApiProvider(StatsProvider):
         return games
 
     async def get_game_boxscore(self, game_id: str) -> GameBoxScore:
+        return await self._get_game_boxscore(game_id, game_date_fallback=None)
+
+    async def _get_game_boxscore(
+        self,
+        game_id: str,
+        *,
+        game_date_fallback: date | None,
+    ) -> GameBoxScore:
         with self._cache_repository_factory() as cache_repository:
             cached_game = cache_repository.get_game_boxscore(game_id)
         if cached_game is not None:
@@ -91,7 +99,11 @@ class NBAApiProvider(StatsProvider):
             operation_name="boxscore",
             operation_context=f"game_id={game_id}",
         )
-        game = _parse_boxscore_payload(payload, expected_game_id=game_id)
+        game = _parse_boxscore_payload(
+            payload,
+            expected_game_id=game_id,
+            game_date_fallback=game_date_fallback,
+        )
         with self._cache_repository_factory() as cache_repository:
             cache_repository.set_game_boxscore(game)
         return game
@@ -323,10 +335,19 @@ def _parse_v2_result_set(
     raise ValueError(f"Malformed payload: missing result set '{set_name}'.")
 
 
-def _parse_boxscore_payload(payload: Mapping[str, object], *, expected_game_id: str) -> GameBoxScore:
+def _parse_boxscore_payload(
+    payload: Mapping[str, object],
+    *,
+    expected_game_id: str,
+    game_date_fallback: date | None = None,
+) -> GameBoxScore:
     if "boxScoreTraditional" in payload:
         box = _require_mapping(payload.get("boxScoreTraditional"), field="payload['boxScoreTraditional']")
-        return _parse_boxscore_v3_payload(box, expected_game_id=expected_game_id)
+        return _parse_boxscore_v3_payload(
+            box,
+            expected_game_id=expected_game_id,
+            game_date_fallback=game_date_fallback,
+        )
 
     if "resultSets" in payload:
         return _parse_boxscore_v2_payload(payload, expected_game_id=expected_game_id)
@@ -334,7 +355,12 @@ def _parse_boxscore_payload(payload: Mapping[str, object], *, expected_game_id: 
     raise ValueError("Malformed boxscore payload: expected V3 or V2 structure.")
 
 
-def _parse_boxscore_v3_payload(box: Mapping[str, object], *, expected_game_id: str) -> GameBoxScore:
+def _parse_boxscore_v3_payload(
+    box: Mapping[str, object],
+    *,
+    expected_game_id: str,
+    game_date_fallback: date | None,
+) -> GameBoxScore:
     game_id = _optional_str(box.get("gameId"))
     if not game_id:
         game_meta = box.get("game")
@@ -346,36 +372,25 @@ def _parse_boxscore_v3_payload(box: Mapping[str, object], *, expected_game_id: s
     game_date = _parse_date_field(
         box.get("gameDate") or box.get("gameDateEst"),
         field="boxScoreTraditional.gameDate",
-        fallback=None,
+        fallback=game_date_fallback,
     )
     home_raw = _require_mapping(box.get("homeTeam"), field="boxScoreTraditional.homeTeam")
     away_raw = _require_mapping(box.get("awayTeam"), field="boxScoreTraditional.awayTeam")
-    players_raw = _require_list(
-        box.get("playersStats") or box.get("playerStats"),
-        field="boxScoreTraditional.playersStats",
-    )
 
-    home_team = _parse_team(
-        home_raw,
-        field="boxScoreTraditional.homeTeam",
-        team_id_keys=("teamId",),
-        abbreviation_keys=("teamTricode", "teamAbbreviation"),
-        name_keys=("teamName",),
-        score_keys=("score",),
-    )
-    away_team = _parse_team(
-        away_raw,
-        field="boxScoreTraditional.awayTeam",
-        team_id_keys=("teamId",),
-        abbreviation_keys=("teamTricode", "teamAbbreviation"),
-        name_keys=("teamName",),
-        score_keys=("score",),
-    )
+    home_team = _parse_boxscore_v3_team(home_raw, field="boxScoreTraditional.homeTeam")
+    away_team = _parse_boxscore_v3_team(away_raw, field="boxScoreTraditional.awayTeam")
 
-    players = _parse_player_rows(
-        players_raw,
-        field="boxScoreTraditional.playersStats",
-    )
+    flat_players_raw = box.get("playersStats") or box.get("playerStats")
+    if flat_players_raw is None:
+        players = (
+            _parse_v3_nested_player_rows(home_raw, team=home_team, field="boxScoreTraditional.homeTeam.players")
+            + _parse_v3_nested_player_rows(away_raw, team=away_team, field="boxScoreTraditional.awayTeam.players")
+        )
+    else:
+        players = _parse_player_rows(
+            _require_list(flat_players_raw, field="boxScoreTraditional.playersStats"),
+            field="boxScoreTraditional.playersStats",
+        )
     return GameBoxScore(
         game_id=game_id,
         game_date=game_date,
@@ -449,7 +464,42 @@ def _parse_team(
     return TeamGameInfo(team_id=team_id, name=name, abbreviation=abbreviation, score=score)
 
 
-def _parse_player_rows(rows: Sequence[object], *, field: str) -> list[PlayerLine]:
+def _parse_boxscore_v3_team(payload: Mapping[str, object], *, field: str) -> TeamGameInfo:
+    team_id = _require_str(payload.get("teamId"), field=f"{field}.teamId")
+    abbreviation = _require_str(
+        payload.get("teamTricode") or payload.get("teamAbbreviation"),
+        field=f"{field}.teamTricode",
+    )
+    name = _optional_str(payload.get("teamName")) or abbreviation
+    statistics = payload.get("statistics")
+    stats = statistics if isinstance(statistics, Mapping) else {}
+    score = _optional_int(payload.get("score") if payload.get("score") is not None else stats.get("points"))
+    return TeamGameInfo(team_id=team_id, name=name, abbreviation=abbreviation, score=score)
+
+
+def _parse_v3_nested_player_rows(
+    team_payload: Mapping[str, object],
+    *,
+    team: TeamGameInfo,
+    field: str,
+) -> list[PlayerLine]:
+    players_raw = _require_list(team_payload.get("players"), field=field)
+    flattened_players: list[Mapping[str, object]] = []
+    for player in players_raw:
+        if not isinstance(player, Mapping):
+            raise ValueError(f"Malformed payload: expected mapping rows for {field}.")
+        statistics = player.get("statistics")
+        stats = statistics if isinstance(statistics, Mapping) else {}
+        flattened_players.append({**player, **stats})
+    return _parse_player_rows(flattened_players, field=field, team=team)
+
+
+def _parse_player_rows(
+    rows: Sequence[object],
+    *,
+    field: str,
+    team: TeamGameInfo | None = None,
+) -> list[PlayerLine]:
     players: list[PlayerLine] = []
     for row in rows:
         if not isinstance(row, Mapping):
@@ -458,18 +508,14 @@ def _parse_player_rows(rows: Sequence[object], *, field: str) -> list[PlayerLine
         if not player_id:
             continue
 
-        player_name = _optional_str(row.get("name") or row.get("playerName") or row.get("PLAYER_NAME"))
+        player_name = _parse_player_name(row)
         if not player_name:
             raise ValueError(f"Malformed payload: missing player name in {field}.")
 
-        team_id = _require_str(
-            row.get("teamId") or row.get("TEAM_ID"),
-            field=f"{field}.teamId",
-        )
-        team_abbreviation = _require_str(
-            row.get("teamTricode") or row.get("teamAbbreviation") or row.get("TEAM_ABBREVIATION"),
-            field=f"{field}.teamAbbreviation",
-        )
+        team_id = _optional_str(row.get("teamId") or row.get("TEAM_ID")) or (team.team_id if team else None)
+        team_abbreviation = _optional_str(
+            row.get("teamTricode") or row.get("teamAbbreviation") or row.get("TEAM_ABBREVIATION")
+        ) or (team.abbreviation if team else None)
         points = _int_or_zero(row.get("points") if "points" in row else row.get("PTS"))
         minutes = _parse_minutes(row.get("minutes") if "minutes" in row else row.get("MIN"))
 
@@ -477,13 +523,24 @@ def _parse_player_rows(rows: Sequence[object], *, field: str) -> list[PlayerLine
             PlayerLine(
                 player_id=player_id,
                 player_name=player_name,
-                team_id=team_id,
-                team_abbreviation=team_abbreviation,
+                team_id=_require_str(team_id, field=f"{field}.teamId"),
+                team_abbreviation=_require_str(team_abbreviation, field=f"{field}.teamAbbreviation"),
                 points=points,
                 minutes=minutes,
             )
         )
     return players
+
+
+def _parse_player_name(row: Mapping[str, object]) -> str | None:
+    explicit_name = _optional_str(row.get("name") or row.get("playerName") or row.get("PLAYER_NAME"))
+    if explicit_name:
+        return explicit_name
+    first_name = _optional_str(row.get("firstName"))
+    family_name = _optional_str(row.get("familyName"))
+    if first_name and family_name:
+        return f"{first_name} {family_name}"
+    return first_name or family_name or _optional_str(row.get("nameI"))
 
 
 def _merge_game_seed(*, seed: _ScoreboardSeed, game: GameBoxScore) -> GameBoxScore:
@@ -503,7 +560,7 @@ def _merge_game_seed(*, seed: _ScoreboardSeed, game: GameBoxScore) -> GameBoxSco
     )
     return GameBoxScore(
         game_id=game.game_id,
-        game_date=game.game_date,
+        game_date=seed.game_date,
         home_team=home_team,
         away_team=away_team,
         player_lines=game.player_lines,

@@ -273,6 +273,96 @@ def test_mapping_parses_minutes_and_skips_blank_player_ids(tmp_path) -> None:
     assert [player.points for player in game.player_lines] == [17, 0]
 
 
+def test_get_games_by_date_parses_nested_v3_boxscore_shape(tmp_path) -> None:
+    target_date = date(2025, 2, 10)
+    engine = create_sqlite_engine(f"sqlite:///{tmp_path / 'hoophigher.db'}")
+    init_db(engine)
+
+    def scoreboard_fetch(game_date: date, _timeout_seconds: int):
+        return {
+            "scoreboard": {
+                "games": [
+                    {
+                        "gameId": "0022500104",
+                        "gameDate": game_date.isoformat(),
+                        "homeTeam": {
+                            "teamId": "1610612737",
+                            "teamName": "Hawks",
+                            "teamTricode": "ATL",
+                            "score": "111",
+                        },
+                        "awayTeam": {
+                            "teamId": "1610612738",
+                            "teamName": "Celtics",
+                            "teamTricode": "BOS",
+                            "score": "109",
+                        },
+                    }
+                ]
+            }
+        }
+
+    def boxscore_fetch(game_id: str, _timeout_seconds: int):
+        return {
+            "boxScoreTraditional": {
+                "gameId": game_id,
+                "homeTeam": {
+                    "teamId": "1610612737",
+                    "teamName": "Hawks",
+                    "teamTricode": "ATL",
+                    "statistics": {"points": "111"},
+                    "players": [
+                        {
+                            "personId": "11",
+                            "firstName": "Player",
+                            "familyName": "One",
+                            "statistics": {
+                                "minutes": "PT12M34.00S",
+                                "points": "17",
+                            },
+                        }
+                    ],
+                },
+                "awayTeam": {
+                    "teamId": "1610612738",
+                    "teamName": "Celtics",
+                    "teamTricode": "BOS",
+                    "statistics": {"points": "109"},
+                    "players": [
+                        {
+                            "personId": "12",
+                            "firstName": "Player",
+                            "familyName": "Two",
+                            "statistics": {
+                                "minutes": "PT09M00.00S",
+                                "points": "8",
+                            },
+                        }
+                    ],
+                },
+            }
+        }
+
+    provider = NBAApiProvider(
+        cache_repository_factory=_make_cache_factory(engine),
+        scoreboard_fetch=scoreboard_fetch,
+        boxscore_fetch=boxscore_fetch,
+        timeout_seconds=5,
+    )
+
+    games = asyncio.run(provider.get_games_by_date(target_date))
+
+    assert len(games) == 1
+    game = games[0]
+    assert game.game_date == target_date
+    assert game.home_team.score == 111
+    assert game.away_team.score == 109
+    assert [(player.player_name, player.team_abbreviation, player.minutes, player.points) for player in game.player_lines] == [
+        ("Player One", "ATL", 12, 17),
+        ("Player Two", "BOS", 9, 8),
+    ]
+
+
 def test_malformed_payload_raises_explicit_error(tmp_path) -> None:
     engine = create_sqlite_engine(f"sqlite:///{tmp_path / 'hoophigher.db'}")
     init_db(engine)
