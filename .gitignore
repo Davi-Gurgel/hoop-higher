@@ -1,6 +1,8 @@
 # Project local runtime artifacts
 /hoophigher.db
 /hoophigher.db-journal
+/.worktrees/
+snapshot_report.html
 /.pytest_cache/
 /src/*.egg-info/
 
