@@ -80,3 +80,14 @@ class CachedGameStatsRecord(SQLModel, table=True):
     game_id: str = Field(primary_key=True, index=True)
     payload_json: str
     cached_at: datetime = Field(default_factory=_utcnow, index=True)
+
+
+class HistoricalEligibleDateRecord(SQLModel, table=True):
+    __tablename__ = "historical_eligible_dates"
+
+    start_year: int = Field(primary_key=True)
+    end_year: int = Field(primary_key=True)
+    min_games: int = Field(primary_key=True)
+    game_date: date = Field(primary_key=True)
+    game_count: int = Field(index=True)
+    updated_at: datetime = Field(default_factory=_utcnow, index=True)

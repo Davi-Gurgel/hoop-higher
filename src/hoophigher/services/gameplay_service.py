@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import date
 from random import Random
@@ -8,6 +9,7 @@ from typing import Sequence
 
 from sqlalchemy.engine import Engine
 
+from hoophigher.data import HistoricalIndexRepository
 from hoophigher.data.api import StatsProvider
 from hoophigher.data.db import session_scope
 from hoophigher.data.repositories import QuestionRepository, RoundRepository, RunRepository
@@ -16,9 +18,15 @@ from hoophigher.domain.enums import GameMode, GuessDirection, RunEndReason
 from hoophigher.domain.models import GameBoxScore, Question, QuestionResult, RoundProgress, RunState
 from hoophigher.domain.round_generator import generate_round
 from hoophigher.domain.scoring import calculate_score_delta, get_run_end_reason_for_answer, is_guess_correct
+from hoophigher.services.historical_date_service import HistoricalDateService
 
 MIN_HISTORICAL_GAMES = 5
 DEFAULT_HISTORICAL_FETCH_CONCURRENCY = 8
+DEFAULT_HISTORICAL_START_YEAR = 2010
+DEFAULT_HISTORICAL_END_YEAR = 2020
+DEFAULT_HISTORICAL_ROUNDS = 5
+
+HistoricalEligibleDatesFetcher = Callable[[int, int, int], Awaitable[Sequence[date]]]
 
 
 @dataclass(frozen=True, slots=True)
@@ -65,13 +73,25 @@ class GameplayService:
         provider: StatsProvider,
         rng: Random | None = None,
         historical_fetch_concurrency: int = DEFAULT_HISTORICAL_FETCH_CONCURRENCY,
+        historical_start_year: int = DEFAULT_HISTORICAL_START_YEAR,
+        historical_end_year: int = DEFAULT_HISTORICAL_END_YEAR,
+        historical_rounds: int = DEFAULT_HISTORICAL_ROUNDS,
+        historical_eligible_dates_fetcher: HistoricalEligibleDatesFetcher | None = None,
     ) -> None:
         if historical_fetch_concurrency < 1:
             raise ValueError("historical_fetch_concurrency must be at least 1.")
+        if historical_start_year > historical_end_year:
+            raise ValueError("historical_start_year must be less than or equal to historical_end_year.")
+        if historical_rounds < 1:
+            raise ValueError("historical_rounds must be at least 1.")
         self._engine = engine
         self._provider = provider
         self._rng = rng or Random()
         self._historical_fetch_concurrency = historical_fetch_concurrency
+        self._historical_start_year = historical_start_year
+        self._historical_end_year = historical_end_year
+        self._historical_rounds = historical_rounds
+        self._historical_eligible_dates_fetcher = historical_eligible_dates_fetcher
         self._active_run: _ActiveRun | None = None
 
     async def start_run(
@@ -320,24 +340,30 @@ class GameplayService:
         candidate_dates: Sequence[date] | None,
     ) -> tuple[date, tuple[GameBoxScore, ...]]:
         if source_date is not None:
-            games = tuple(await self._provider.get_games_by_date(source_date))
+            games = tuple(sorted(await self._provider.get_games_by_date(source_date), key=lambda g: g.game_id))
             if not games:
                 raise LookupError(f"No games found for source date: {source_date.isoformat()}")
-            return source_date, tuple(sorted(games, key=lambda g: g.game_id))
+            if mode is GameMode.HISTORICAL:
+                return source_date, self._sample_historical_games(source_date, games)
+            return source_date, games
 
         if candidate_dates is None:
+            if mode is GameMode.HISTORICAL:
+                return await self._resolve_historical_games_from_index()
             raise ValueError("candidate_dates is required when source_date is not provided.")
 
         if mode is GameMode.HISTORICAL:
+            required_historical_games = self._required_historical_games
             games_per_date = await self._fetch_games_for_dates(candidate_dates)
             eligible_dates: list[tuple[date, tuple[GameBoxScore, ...]]] = []
             for current_date, games_for_date in zip(candidate_dates, games_per_date, strict=True):
                 games_for_date_sorted = tuple(sorted(games_for_date, key=lambda g: g.game_id))
-                if len(games_for_date_sorted) >= MIN_HISTORICAL_GAMES:
+                if len(games_for_date_sorted) >= required_historical_games:
                     eligible_dates.append((current_date, games_for_date_sorted))
             if not eligible_dates:
                 raise LookupError("No historical date with enough games was found.")
-            return self._rng.choice(eligible_dates)
+            selected_date, games_for_date = self._rng.choice(eligible_dates)
+            return selected_date, self._sample_historical_games(selected_date, games_for_date)
 
         for current_date in candidate_dates:
             games_for_date = tuple(await self._provider.get_games_by_date(current_date))
@@ -359,6 +385,62 @@ class GameplayService:
         if self._active_run is None:
             raise ValueError("No active run. Start a run before answering.")
         return self._active_run
+
+    @property
+    def _required_historical_games(self) -> int:
+        return max(MIN_HISTORICAL_GAMES, self._historical_rounds)
+
+    async def _resolve_historical_games_from_index(self) -> tuple[date, tuple[GameBoxScore, ...]]:
+        eligible_dates = tuple(
+            await self._get_historical_eligible_dates(
+                start_year=self._historical_start_year,
+                end_year=self._historical_end_year,
+                min_games=self._required_historical_games,
+            )
+        )
+        if not eligible_dates:
+            raise LookupError("No historical date with enough games was found.")
+
+        selected_date = self._rng.choice(eligible_dates)
+        games_for_date = tuple(sorted(await self._provider.get_games_by_date(selected_date), key=lambda g: g.game_id))
+        return selected_date, self._sample_historical_games(selected_date, games_for_date)
+
+    def _sample_historical_games(
+        self,
+        selected_date: date,
+        games_for_date: tuple[GameBoxScore, ...],
+    ) -> tuple[GameBoxScore, ...]:
+        required_historical_games = self._required_historical_games
+        total_games = len(games_for_date)
+        if total_games < required_historical_games:
+            raise LookupError(
+                "Historical date "
+                f"{selected_date.isoformat()} has {total_games} game(s), "
+                f"but at least {required_historical_games} are required."
+            )
+
+        sampled_games = self._rng.sample(games_for_date, k=self._historical_rounds)
+        return tuple(sorted(sampled_games, key=lambda g: g.game_id))
+
+    async def _get_historical_eligible_dates(
+        self,
+        *,
+        start_year: int,
+        end_year: int,
+        min_games: int,
+    ) -> Sequence[date]:
+        if self._historical_eligible_dates_fetcher is not None:
+            return await self._historical_eligible_dates_fetcher(start_year, end_year, min_games)
+
+        with session_scope(self._engine) as session:
+            historical_date_service = HistoricalDateService(
+                index_repository=HistoricalIndexRepository(session),
+            )
+            return await historical_date_service.get_or_build_eligible_dates(
+                start_year=start_year,
+                end_year=end_year,
+                min_games=min_games,
+            )
 
     def _should_end_historical_run(self, active_run: _ActiveRun) -> bool:
         return (

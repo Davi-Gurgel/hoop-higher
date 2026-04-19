@@ -1,3 +1,6 @@
+from typing import Literal
+
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from hoophigher.data.db import DEFAULT_SQLITE_URL
@@ -11,6 +14,21 @@ class Settings(BaseSettings):
     sqlite_journal_mode: str | None = "WAL"
     sqlite_synchronous: str | None = "NORMAL"
     sqlite_busy_timeout_ms: int | None = 5000
+    stats_provider: Literal["mock", "nba_api"] = "mock"
+    historical_start_year: int = 2010
+    historical_end_year: int = 2020
+    historical_rounds: int = 5
+    nba_api_timeout_seconds: int = 20
+
+    @model_validator(mode="after")
+    def validate_historical_settings(self) -> "Settings":
+        if self.historical_start_year > self.historical_end_year:
+            raise ValueError("historical_start_year must be less than or equal to historical_end_year")
+        if self.historical_rounds < 1:
+            raise ValueError("historical_rounds must be greater than or equal to 1")
+        if self.nba_api_timeout_seconds < 1:
+            raise ValueError("nba_api_timeout_seconds must be greater than or equal to 1")
+        return self
 
     model_config = SettingsConfigDict(
         env_prefix="HOOPHIGHER_",

@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from datetime import date
 
+from sqlalchemy.engine import Engine
 from textual.app import App
 
-from hoophigher.config import settings
+from hoophigher.config import Settings
 from hoophigher.data import create_sqlite_engine, init_db
-from hoophigher.data.api import MockProvider
+from hoophigher.data.api import MockProvider, NBAApiProvider, StatsProvider
 from hoophigher.domain.enums import GameMode
 from hoophigher.services import GameplayService, LeaderboardService, StatsService
 from hoophigher.tui.screens import (
@@ -23,10 +24,25 @@ MOCK_CANDIDATE_DATES = (
 )
 
 
+def create_stats_provider(
+    provider_name: str,
+    *,
+    timeout_seconds: int = 20,
+    engine: Engine | None = None,
+) -> StatsProvider:
+    if provider_name == "mock":
+        return MockProvider()
+    if provider_name == "nba_api":
+        return NBAApiProvider(engine=engine, timeout_seconds=timeout_seconds)
+    raise ValueError(
+        f"Unknown stats provider '{provider_name}'. Expected one of: 'mock', 'nba_api'."
+    )
+
+
 class HoopHigherApp(App[None]):
     CSS_PATH = "tui/styles.tcss"
     TITLE = "Hoop Higher"
-    SUB_TITLE = "Mock gameplay"
+    SUB_TITLE = "Local gameplay"
     HORIZONTAL_BREAKPOINTS = [
         (0, "-w-xs"),
         (72, "-w-sm"),
@@ -42,19 +58,29 @@ class HoopHigherApp(App[None]):
 
     def __init__(self, *, database_url: str | None = None, **kwargs: object) -> None:
         super().__init__(**kwargs)
-        self._database_url = database_url or settings.database_url
+        self._database_url = database_url
 
     def on_mount(self) -> None:
+        settings = Settings()
         engine = create_sqlite_engine(
-            self._database_url,
+            self._database_url or settings.database_url,
             sqlite_journal_mode=settings.sqlite_journal_mode,
             sqlite_synchronous=settings.sqlite_synchronous,
             sqlite_busy_timeout_ms=settings.sqlite_busy_timeout_ms,
         )
         init_db(engine)
+        provider = create_stats_provider(
+            settings.stats_provider,
+            timeout_seconds=settings.nba_api_timeout_seconds,
+            engine=engine,
+        )
+        self._uses_mock_provider = isinstance(provider, MockProvider)
         self.gameplay_service = GameplayService(
             engine=engine,
-            provider=MockProvider(),
+            provider=provider,
+            historical_start_year=settings.historical_start_year,
+            historical_end_year=settings.historical_end_year,
+            historical_rounds=settings.historical_rounds,
         )
         self.leaderboard_service = LeaderboardService(engine=engine)
         self.stats_service = StatsService(engine=engine)
@@ -65,9 +91,8 @@ class HoopHigherApp(App[None]):
         self.push_screen("home")
 
     async def start_game(self, mode: GameMode) -> None:
-        snapshot = await self.gameplay_service.start_run(
-            mode,
-            candidate_dates=MOCK_CANDIDATE_DATES,
-            total_questions=5,
-        )
+        start_run_kwargs: dict[str, object] = {"total_questions": 5}
+        if self._uses_mock_provider:
+            start_run_kwargs["candidate_dates"] = MOCK_CANDIDATE_DATES
+        snapshot = await self.gameplay_service.start_run(mode, **start_run_kwargs)
         self.push_screen(GameScreen(snapshot))

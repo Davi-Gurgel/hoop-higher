@@ -14,7 +14,7 @@ from hoophigher.data import (
 )
 from hoophigher.data.api import MockProvider
 from hoophigher.domain.enums import GameMode, GuessDirection, RunEndReason
-from hoophigher.domain.models import GameBoxScore
+from hoophigher.domain.models import GameBoxScore, PlayerLine, TeamGameInfo
 from hoophigher.services import GameplayService
 
 
@@ -123,7 +123,7 @@ def test_submit_answer_rejects_finished_run(tmp_path) -> None:
         asyncio.run(service.submit_answer(GuessDirection.HIGHER))
 
 
-def test_start_run_requires_candidate_dates_without_source_date(tmp_path) -> None:
+def test_non_historical_start_run_requires_candidate_dates_without_source_date(tmp_path) -> None:
     engine = _make_engine(tmp_path)
     service = GameplayService(engine=engine, provider=MockProvider(), rng=Random(1))
 
@@ -283,6 +283,205 @@ def test_historical_uses_only_eligible_dates(tmp_path) -> None:
     )
 
     assert snapshot.source_date == date(2025, 1, 12)
+
+
+def test_historical_can_start_without_candidate_dates_using_indexed_dates(tmp_path) -> None:
+    engine = _make_engine(tmp_path)
+    provider = MockProvider()
+
+    requested_window: list[tuple[int, int, int]] = []
+
+    async def fake_eligible_dates_fetcher(start_year: int, end_year: int, min_games: int):
+        requested_window.append((start_year, end_year, min_games))
+        return (date(2025, 1, 12),)
+
+    service = GameplayService(
+        engine=engine,
+        provider=provider,
+        rng=Random(1),
+        historical_start_year=2010,
+        historical_end_year=2020,
+        historical_rounds=5,
+        historical_eligible_dates_fetcher=fake_eligible_dates_fetcher,
+    )
+
+    snapshot = asyncio.run(service.start_run(GameMode.HISTORICAL, total_questions=5))
+
+    assert requested_window == [(2010, 2020, 5)]
+    assert snapshot.source_date == date(2025, 1, 12)
+    assert len(snapshot.games_today) == 5
+
+
+def test_historical_selected_date_belongs_to_indexed_eligible_set(tmp_path) -> None:
+    engine = _make_engine(tmp_path)
+    provider = MockProvider()
+    eligible_dates = (date(2025, 1, 12),)
+
+    async def fake_eligible_dates_fetcher(_start_year: int, _end_year: int, _min_games: int):
+        return eligible_dates
+
+    service = GameplayService(
+        engine=engine,
+        provider=provider,
+        rng=Random(8),
+        historical_eligible_dates_fetcher=fake_eligible_dates_fetcher,
+    )
+
+    snapshot = asyncio.run(service.start_run(GameMode.HISTORICAL, total_questions=5))
+
+    assert snapshot.source_date in eligible_dates
+
+
+class _ManyGamesProvider:
+    def __init__(self) -> None:
+        game_date = date(2018, 2, 14)
+        self._games = tuple(self._build_game(game_date=game_date, index=index) for index in range(1, 8))
+        self._games_by_id = {game.game_id: game for game in self._games}
+
+    async def get_games_by_date(self, game_date: date) -> list[GameBoxScore]:
+        if game_date == date(2018, 2, 14):
+            return list(self._games)
+        return []
+
+    async def get_game_boxscore(self, game_id: str) -> GameBoxScore:
+        return self._games_by_id[game_id]
+
+    def _build_game(self, *, game_date: date, index: int) -> GameBoxScore:
+        game_id = f"2018-02-14-game-{index:02d}"
+        return GameBoxScore(
+            game_id=game_id,
+            game_date=game_date,
+            home_team=TeamGameInfo(team_id=f"h-{index}", name="Home", abbreviation="HOM", score=110),
+            away_team=TeamGameInfo(team_id=f"a-{index}", name="Away", abbreviation="AWY", score=103),
+            player_lines=(
+                PlayerLine(
+                    player_id=f"{game_id}-p1",
+                    player_name="Player A",
+                    team_id=f"a-{index}",
+                    team_abbreviation="AWY",
+                    points=26,
+                    minutes=34,
+                ),
+                PlayerLine(
+                    player_id=f"{game_id}-p2",
+                    player_name="Player B",
+                    team_id=f"h-{index}",
+                    team_abbreviation="HOM",
+                    points=20,
+                    minutes=31,
+                ),
+                PlayerLine(
+                    player_id=f"{game_id}-p3",
+                    player_name="Player C",
+                    team_id=f"a-{index}",
+                    team_abbreviation="AWY",
+                    points=17,
+                    minutes=29,
+                ),
+                PlayerLine(
+                    player_id=f"{game_id}-p4",
+                    player_name="Player D",
+                    team_id=f"h-{index}",
+                    team_abbreviation="HOM",
+                    points=13,
+                    minutes=27,
+                ),
+                PlayerLine(
+                    player_id=f"{game_id}-p5",
+                    player_name="Player E",
+                    team_id=f"a-{index}",
+                    team_abbreviation="AWY",
+                    points=9,
+                    minutes=25,
+                ),
+                PlayerLine(
+                    player_id=f"{game_id}-p6",
+                    player_name="Player F",
+                    team_id=f"h-{index}",
+                    team_abbreviation="HOM",
+                    points=7,
+                    minutes=23,
+                ),
+            ),
+        )
+
+
+def test_historical_uses_exactly_configured_rounds_even_when_date_has_more_games(tmp_path) -> None:
+    engine = _make_engine(tmp_path)
+
+    async def fake_eligible_dates_fetcher(_start_year: int, _end_year: int, _min_games: int):
+        return (date(2018, 2, 14),)
+
+    service = GameplayService(
+        engine=engine,
+        provider=_ManyGamesProvider(),
+        rng=Random(4),
+        historical_rounds=5,
+        historical_eligible_dates_fetcher=fake_eligible_dates_fetcher,
+    )
+
+    start_snapshot = asyncio.run(service.start_run(GameMode.HISTORICAL, total_questions=5))
+
+    assert len(start_snapshot.games_today) == 5
+    sampled_game_ids = {game.game_id for game in start_snapshot.games_today}
+    assert len(sampled_game_ids) == 5
+
+    for _ in range(5):
+        round_snapshot = service.snapshot()
+        for _ in range(round_snapshot.total_questions):
+            question = service.snapshot().current_question
+            assert question is not None
+            asyncio.run(service.submit_answer(question.answer))
+
+    final_snapshot = service.snapshot()
+
+    assert final_snapshot.is_finished is True
+    assert final_snapshot.end_reason is RunEndReason.NO_MORE_GAMES
+    assert final_snapshot.round_index == 4
+
+
+def test_historical_candidate_dates_samples_exactly_configured_rounds(tmp_path) -> None:
+    engine = _make_engine(tmp_path)
+    service = GameplayService(
+        engine=engine,
+        provider=_ManyGamesProvider(),
+        rng=Random(4),
+        historical_rounds=5,
+    )
+
+    snapshot = asyncio.run(
+        service.start_run(
+            GameMode.HISTORICAL,
+            candidate_dates=[date(2018, 2, 14)],
+            total_questions=5,
+        )
+    )
+
+    assert snapshot.source_date == date(2018, 2, 14)
+    assert len(snapshot.games_today) == 5
+    assert len({game.game_id for game in snapshot.games_today}) == 5
+
+
+def test_historical_source_date_requires_minimum_games(tmp_path) -> None:
+    engine = _make_engine(tmp_path)
+    service = GameplayService(
+        engine=engine,
+        provider=_ManyGamesProvider(),
+        rng=Random(4),
+        historical_rounds=8,
+    )
+
+    with pytest.raises(
+        LookupError,
+        match=r"Historical date 2018-02-14 has 7 game\(s\), but at least 8 are required\.",
+    ):
+        asyncio.run(
+            service.start_run(
+                GameMode.HISTORICAL,
+                source_date=date(2018, 2, 14),
+                total_questions=5,
+            )
+        )
 
 
 def test_historical_carries_configured_total_questions_into_next_round(tmp_path) -> None:
