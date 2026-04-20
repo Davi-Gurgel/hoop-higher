@@ -112,7 +112,7 @@ def test_leaderboard_service_preserves_repository_ordering_rules(tmp_path) -> No
     ]
     assert all(isinstance(row.mode, GameMode) for row in result.rows)
     assert [row.correct_answers for row in result.rows] == [7, 7, 3]
-    assert [row.source_date_label for row in result.rows] == ["--", "2025-01-13", "2025-01-12"]
+    assert [row.source_date_label for row in result.rows] == ["--", "13-01-2025", "12-01-2025"]
     assert [row.rank for row in result.rows] == [1, 2, 3]
 
 

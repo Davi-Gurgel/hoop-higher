@@ -93,12 +93,13 @@ After the answer:
 - a wrong answer ends the match immediately
 
 ### Historical
-- uses a random past date
-- the chosen date must have **at least 5 games**
+- uses a random historical date in the configured window (default: 2010 to 2020)
+- the chosen date must have at least one playable game
 - MVP historical scoring is explicit: correct `+100`, wrong `-60`
 - a wrong answer does **not** end the run
-- the run goes through the games on that date **once each**
-- after all games on that date are consumed, the run ends with `no_more_games`
+- the run samples up to `HOOPHIGHER_HISTORICAL_ROUNDS` playable games from that date and goes through them once each (default maximum: **5**)
+- if fewer playable games are available, the number of rounds adapts to the available games
+- after all sampled games are consumed, the run ends with `no_more_games`
 - it may start mocked and later move to real data
 
 ### Yesterday
@@ -185,7 +186,7 @@ Use **mocked** data to validate:
 Integrate a real provider, preferably behind an interface such as `StatsProvider`.
 
 ### Suggested API
-- `BallDontLieProvider` as the first real implementation
+- `NBAApiProvider` (`nba_api`) as the first real implementation
 
 ### Architectural rule
 The UI must not depend directly on the external provider.
@@ -202,6 +203,7 @@ The system should be prepared to cache:
 - check cache before calling the API
 - persist raw or normalized responses consistently
 - differentiate historical cache from recent cache
+- for historical mode, persist and reuse an eligible-date index for the configured year window to avoid repeated full scans
 
 ---
 

@@ -86,6 +86,11 @@ class GameOverScreen(ModalScreen[None]):
                 f"Mode: {s.mode.value.upper()}",
                 classes="gameover-stat",
             )
+            if s.source_date is not None:
+                yield Label(
+                    f"Date: {s.source_date:%d-%m-%Y}",
+                    classes="gameover-stat",
+                )
             yield Label(f"Final Score: {s.score}", classes="gameover-stat-highlight")
             yield Label(
                 f"✓ {s.correct_answers}  ✕ {s.wrong_answers}",
@@ -312,6 +317,7 @@ class GameScreen(Screen[None]):
             summary = RoundSummary(
                 round_index=self._snapshot.round_index - 1,
                 game_id=previous_snapshot.game_id,
+                game_date=previous_snapshot.current_game.game_date,
                 questions=len(self._round_history),
                 correct_answers=sum(
                     1 for item in self._round_history if item.is_correct

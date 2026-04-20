@@ -174,7 +174,7 @@ class GameContextStrip(Vertical):
 
     def _update_header(self, game: GameBoxScore) -> None:
         self.query_one("#active-game-title", Label).update(
-            f"{game.away_team.abbreviation} @ {game.home_team.abbreviation}"
+            f"{game.game_date:%d-%m-%Y} • {game.away_team.abbreviation} @ {game.home_team.abbreviation}"
         )
         away_score = game.away_team.score if game.away_team.score is not None else "?"
         home_score = game.home_team.score if game.home_team.score is not None else "?"

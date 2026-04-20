@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
 from textual.widgets import Label
 from sqlmodel import Session
 
@@ -9,6 +10,11 @@ import hoophigher.tui.screens.game as game_screen_module
 from hoophigher.data import RunRepository, create_sqlite_engine
 from hoophigher.domain.enums import RunEndReason
 from hoophigher.app import HoopHigherApp
+
+
+@pytest.fixture(autouse=True)
+def _use_mock_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HOOPHIGHER_STATS_PROVIDER", "mock")
 
 
 def _correct_guess_key(app: HoopHigherApp) -> str:

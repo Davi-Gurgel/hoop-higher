@@ -22,7 +22,7 @@ class LeaderboardRow:
 
     @property
     def source_date_label(self) -> str:
-        return self.source_date.isoformat() if self.source_date is not None else "--"
+        return f"{self.source_date:%d-%m-%Y}" if self.source_date is not None else "--"
 
 
 @dataclass(frozen=True, slots=True)

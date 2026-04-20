@@ -62,6 +62,7 @@ def test_init_db_creates_expected_tables(tmp_path) -> None:
     assert set(inspector.get_table_names()) == {
         "cached_game_stats",
         "cached_games",
+        "historical_eligible_dates",
         "questions",
         "rounds",
         "runs",

@@ -196,7 +196,12 @@ class MockProvider(StatsProvider):
     async def get_games_by_date(self, game_date: date) -> list[GameBoxScore]:
         return list(self._dataset.games_by_date.get(game_date, ()))
 
-    async def get_game_boxscore(self, game_id: str) -> GameBoxScore:
+    async def get_game_boxscore(
+        self,
+        game_id: str,
+        *,
+        game_date_fallback: date | None = None,
+    ) -> GameBoxScore:
         try:
             return self._dataset.games_by_id[game_id]
         except KeyError as exc:
