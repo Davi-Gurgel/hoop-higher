@@ -296,7 +296,7 @@ The screen does not calculate score or generate questions by itself. It only con
 1. historical service queries `HistoricalIndexRepository` for eligible dates in the configured window
 2. if index exists, reuse it immediately
 3. otherwise, fetch season-level data, compute dates with enough games, and persist the index
-4. gameplay service selects one random indexed date and samples configured rounds from that date
+4. gameplay service selects one random indexed date and samples up to the configured round count from the playable games returned for that date
 
 ### Box score by game
 1. service asks for box score by `game_id`

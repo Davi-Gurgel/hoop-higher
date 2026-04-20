@@ -56,7 +56,7 @@ The app reads environment variables with the `HOOPHIGHER_` prefix.
 - `HOOPHIGHER_HISTORICAL_END_YEAR` (default: `2020`)
 - `HOOPHIGHER_HISTORICAL_ROUNDS` (default: `5`)
 
-Historical mode selects one random eligible date inside the configured year window, then samples exactly `HOOPHIGHER_HISTORICAL_ROUNDS` games from that date.
+Historical mode selects one random eligible date inside the configured year window, then samples up to `HOOPHIGHER_HISTORICAL_ROUNDS` playable games from that date. If fewer playable games are available, the run uses each available game once and ends after those rounds.
 
 ### nba_api timeout
 

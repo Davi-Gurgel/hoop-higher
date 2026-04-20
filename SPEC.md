@@ -94,10 +94,11 @@ After the answer:
 
 ### Historical
 - uses a random historical date in the configured window (default: 2010 to 2020)
-- the chosen date must have **at least 5 games**
+- the chosen date must have at least one playable game
 - MVP historical scoring is explicit: correct `+100`, wrong `-60`
 - a wrong answer does **not** end the run
-- the run samples exactly `HOOPHIGHER_HISTORICAL_ROUNDS` games from that date and goes through them once each (default: **5**)
+- the run samples up to `HOOPHIGHER_HISTORICAL_ROUNDS` playable games from that date and goes through them once each (default maximum: **5**)
+- if fewer playable games are available, the number of rounds adapts to the available games
 - after all sampled games are consumed, the run ends with `no_more_games`
 - it may start mocked and later move to real data
 
