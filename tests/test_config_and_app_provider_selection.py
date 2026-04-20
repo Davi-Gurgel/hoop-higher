@@ -11,9 +11,7 @@ import hoophigher.app as app_module
 import hoophigher.config as config_module
 from hoophigher.data import (
     CacheRepository,
-    HistoricalIndexRepository,
     create_sqlite_engine,
-    init_db,
     session_scope,
 )
 from hoophigher.data.api import MockProvider, NBAApiProvider
@@ -181,27 +179,14 @@ def test_app_wires_nba_api_cache_to_configured_database(monkeypatch, tmp_path) -
         assert CacheRepository(session).get_game_boxscore("0022500999") == cached_game
 
 
-def test_app_wires_historical_index_fetcher_for_nba_api_provider(monkeypatch, tmp_path) -> None:
-    database_url = f"sqlite:///{tmp_path / 'historical-index.db'}"
-    engine = create_sqlite_engine(database_url)
-    init_db(engine)
-    with session_scope(engine) as session:
-        HistoricalIndexRepository(session).replace_window(
-            start_year=2010,
-            end_year=2020,
-            min_games=5,
-            rows=[(date(2016, 2, 10), 7)],
-        )
-
+def test_app_uses_bounded_historical_probes_for_nba_api_provider(monkeypatch) -> None:
     monkeypatch.setenv("HOOPHIGHER_STATS_PROVIDER", "nba_api")
     _reload_app_module()
 
     async def scenario() -> None:
-        app = app_module.HoopHigherApp(database_url=database_url)
+        app = app_module.HoopHigherApp(database_url="sqlite://")
         async with app.run_test():
-            fetcher = app.gameplay_service._historical_eligible_dates_fetcher
-            assert fetcher is not None
-            assert await fetcher(2010, 2020, 5) == (date(2016, 2, 10),)
+            assert app.gameplay_service._historical_eligible_dates_fetcher is None
 
     asyncio.run(scenario())
 
@@ -262,6 +247,84 @@ def test_start_game_omits_recent_candidate_dates_for_real_historical_provider(
 
     assert fake_service.calls == [(GameMode.HISTORICAL, {"total_questions": 5})]
     assert pushed_screens
+
+
+def test_start_game_reuses_successful_real_date_for_other_non_historical_modes(
+    monkeypatch,
+) -> None:
+    app = app_module.HoopHigherApp(database_url="sqlite://")
+    app._uses_mock_provider = False
+    app._recent_candidate_dates = (date(2025, 2, 10), date(2025, 2, 9))
+    pushed_screens: list[object] = []
+
+    class FakeGameplayService:
+        def __init__(self) -> None:
+            self.calls: list[tuple[GameMode, dict[str, object]]] = []
+
+        async def start_run(self, mode: GameMode, **kwargs: object) -> GameplaySnapshot:
+            self.calls.append((mode, kwargs))
+            return _make_snapshot(mode, source_date=date(2025, 2, 9))
+
+    fake_service = FakeGameplayService()
+    app.gameplay_service = fake_service
+    monkeypatch.setattr(app, "push_screen", lambda screen: pushed_screens.append(screen))
+
+    asyncio.run(app.start_game(GameMode.ENDLESS))
+    asyncio.run(app.start_game(GameMode.ARCADE))
+
+    assert fake_service.calls == [
+        (
+            GameMode.ENDLESS,
+            {
+                "total_questions": 5,
+                "candidate_dates": (date(2025, 2, 10), date(2025, 2, 9)),
+            },
+        ),
+        (
+            GameMode.ARCADE,
+            {
+                "total_questions": 5,
+                "source_date": date(2025, 2, 9),
+            },
+        ),
+    ]
+    assert len(pushed_screens) == 2
+
+
+def test_start_game_reuses_successful_real_historical_date_for_session(
+    monkeypatch,
+) -> None:
+    app = app_module.HoopHigherApp(database_url="sqlite://")
+    app._uses_mock_provider = False
+    app._recent_candidate_dates = (date(2025, 2, 10),)
+    pushed_screens: list[object] = []
+
+    class FakeGameplayService:
+        def __init__(self) -> None:
+            self.calls: list[tuple[GameMode, dict[str, object]]] = []
+
+        async def start_run(self, mode: GameMode, **kwargs: object) -> GameplaySnapshot:
+            self.calls.append((mode, kwargs))
+            return _make_snapshot(mode, source_date=date(2016, 2, 10))
+
+    fake_service = FakeGameplayService()
+    app.gameplay_service = fake_service
+    monkeypatch.setattr(app, "push_screen", lambda screen: pushed_screens.append(screen))
+
+    asyncio.run(app.start_game(GameMode.HISTORICAL))
+    asyncio.run(app.start_game(GameMode.HISTORICAL))
+
+    assert fake_service.calls == [
+        (GameMode.HISTORICAL, {"total_questions": 5}),
+        (
+            GameMode.HISTORICAL,
+            {
+                "total_questions": 5,
+                "source_date": date(2016, 2, 10),
+            },
+        ),
+    ]
+    assert len(pushed_screens) == 2
 
 
 def test_start_game_does_not_show_loading_notice_after_fast_success(monkeypatch) -> None:
@@ -326,10 +389,14 @@ def test_start_game_notifies_when_real_data_cannot_start(monkeypatch) -> None:
     ]
 
 
-def _make_snapshot(mode: GameMode) -> GameplaySnapshot:
+def _make_snapshot(
+    mode: GameMode,
+    *,
+    source_date: date = date(2025, 2, 10),
+) -> GameplaySnapshot:
     game = GameBoxScore(
         game_id="0022500999",
-        game_date=date(2025, 2, 10),
+        game_date=source_date,
         home_team=TeamGameInfo(team_id="1610612737", name="Hawks", abbreviation="ATL", score=110),
         away_team=TeamGameInfo(team_id="1610612738", name="Celtics", abbreviation="BOS", score=108),
         player_lines=(
@@ -347,7 +414,7 @@ def _make_snapshot(mode: GameMode) -> GameplaySnapshot:
         run_id=1,
         round_id=1,
         mode=mode,
-        source_date=game.game_date,
+        source_date=source_date,
         score=0,
         current_streak=0,
         best_streak=0,

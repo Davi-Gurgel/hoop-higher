@@ -69,7 +69,6 @@ Used for scoreboard and boxscore requests when `HOOPHIGHER_STATS_PROVIDER=nba_ap
 By default, or when `HOOPHIGHER_STATS_PROVIDER=nba_api`:
 
 - The app uses cache-first reads for games-by-date and game boxscores.
-- Historical mode builds and persists an eligible-date index in SQLite for the configured window.
-- First historical run can take longer while the date index is built.
-- Later historical runs reuse the persisted index and local cache to reduce requests.
+- Historical mode uses bounded random date probes to avoid a long first-run index build.
+- Later historical runs in the same app session reuse the first successful historical date.
 - Upstream failures are surfaced as explicit errors instead of silent fallbacks.

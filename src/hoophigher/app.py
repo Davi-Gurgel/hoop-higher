@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable, Sequence
 from contextlib import suppress
 from datetime import date, timedelta
 
@@ -9,17 +8,11 @@ from sqlalchemy.engine import Engine
 from textual.app import App
 
 from hoophigher.config import Settings
-from hoophigher.data import (
-    HistoricalIndexRepository,
-    create_sqlite_engine,
-    init_db,
-    session_scope,
-)
+from hoophigher.data import create_sqlite_engine, init_db
 from hoophigher.data.api import MockProvider, NBAApiProvider, StatsProvider
 from hoophigher.domain.enums import GameMode
 from hoophigher.services import (
     GameplayService,
-    HistoricalDateService,
     LeaderboardService,
     StatsService,
 )
@@ -37,7 +30,6 @@ MOCK_CANDIDATE_DATES = (
 )
 RECENT_CANDIDATE_DAYS = 3
 LOADING_NOTICE_DELAY_SECONDS = 0.35
-HistoricalEligibleDatesFetcher = Callable[[int, int, int], Awaitable[Sequence[date]]]
 
 
 def create_stats_provider(
@@ -91,6 +83,8 @@ class HoopHigherApp(App[None]):
     def __init__(self, *, database_url: str | None = None, **kwargs: object) -> None:
         super().__init__(**kwargs)
         self._database_url = database_url
+        self._session_historical_date: date | None = None
+        self._session_recent_date: date | None = None
 
     def on_mount(self) -> None:
         settings = Settings()
@@ -109,12 +103,6 @@ class HoopHigherApp(App[None]):
         )
         self._uses_mock_provider = isinstance(provider, MockProvider)
         self._recent_candidate_dates = recent_candidate_dates()
-        historical_eligible_dates_fetcher: HistoricalEligibleDatesFetcher | None = None
-        if not self._uses_mock_provider:
-            historical_eligible_dates_fetcher = self._create_historical_eligible_dates_fetcher(
-                engine=engine,
-                timeout_seconds=settings.nba_api_timeout_seconds,
-            )
         self.gameplay_service = GameplayService(
             engine=engine,
             provider=provider,
@@ -123,7 +111,6 @@ class HoopHigherApp(App[None]):
             historical_rounds=settings.historical_rounds,
             historical_max_date_probes=settings.historical_max_date_probes,
             playable_game_fetch_concurrency=settings.nba_api_fetch_concurrency,
-            historical_eligible_dates_fetcher=historical_eligible_dates_fetcher,
         )
         self.leaderboard_service = LeaderboardService(engine=engine)
         self.stats_service = StatsService(engine=engine)
@@ -133,30 +120,6 @@ class HoopHigherApp(App[None]):
         self.install_screen(ModeSelectScreen(), name="mode-select")
         self.push_screen("home")
 
-    def _create_historical_eligible_dates_fetcher(
-        self,
-        *,
-        engine: Engine,
-        timeout_seconds: int,
-    ) -> HistoricalEligibleDatesFetcher:
-        async def fetch_eligible_dates(
-            start_year: int,
-            end_year: int,
-            min_games: int,
-        ) -> tuple[date, ...]:
-            with session_scope(engine) as session:
-                historical_date_service = HistoricalDateService(
-                    index_repository=HistoricalIndexRepository(session),
-                    timeout_seconds=timeout_seconds,
-                )
-                return await historical_date_service.get_or_build_eligible_dates(
-                    start_year=start_year,
-                    end_year=end_year,
-                    min_games=min_games,
-                )
-
-        return fetch_eligible_dates
-
     async def start_game(self, mode: GameMode) -> None:
         loading_notice_task: asyncio.Task[None] | None = None
         if not self._uses_mock_provider:
@@ -164,6 +127,10 @@ class HoopHigherApp(App[None]):
         start_run_kwargs: dict[str, object] = {"total_questions": 5}
         if self._uses_mock_provider:
             start_run_kwargs["candidate_dates"] = MOCK_CANDIDATE_DATES
+        elif mode is GameMode.HISTORICAL and self._session_historical_date is not None:
+            start_run_kwargs["source_date"] = self._session_historical_date
+        elif mode is not GameMode.HISTORICAL and self._session_recent_date is not None:
+            start_run_kwargs["source_date"] = self._session_recent_date
         elif mode is not GameMode.HISTORICAL:
             start_run_kwargs["candidate_dates"] = self._recent_candidate_dates
         try:
@@ -177,6 +144,10 @@ class HoopHigherApp(App[None]):
         await self._cancel_loading_notice(loading_notice_task)
         if not self._uses_mock_provider:
             self.clear_notifications()
+            if mode is GameMode.HISTORICAL:
+                self._session_historical_date = snapshot.source_date
+            else:
+                self._session_recent_date = snapshot.source_date
         self.push_screen(GameScreen(snapshot))
 
     async def _notify_loading_if_slow(self) -> None:
