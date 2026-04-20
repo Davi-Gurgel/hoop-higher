@@ -50,7 +50,7 @@ A modern terminal-based game inspired by "Higher or Lower", utilizing real NBA p
    uv run hoophigher
    ```
 
-## Install from PyPI 📦
+## Install from PyPI
 
 Once published, you can run Hoop Higher without cloning the repo.
 
