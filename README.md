@@ -1,74 +1,81 @@
-# Hoop Higher
+# Hoop Higher 🏀
 
-Terminal game inspired by Higher or Lower using NBA player point totals.
+[![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/release/python-3130/)
+[![Textual](https://img.shields.io/badge/GUI-Textual-green.svg)](https://github.com/Textualize/textual)
 
-## Stack
+A modern terminal-based game inspired by "Higher or Lower", utilizing real NBA player point totals. Built natively with Python and Textual to provide a sleek, fast, and responsive TUI experience.
 
-- Python 3.13+
-- Textual
-- SQLite
-- SQLModel
-- httpx
-- pydantic-settings
-- pytest
-- uv
+## Features ✨
 
-## Development
+* **Multiple Game Modes:**
+  * **Endless:** Keep playing and building your score multiplier. Wrong answers deduct points, but don't end the game!
+  * **Arcade:** Strive for perfection. One wrong answer and your run is over.
+  * **Historical:** Journey back in time! Play rounds using real NBA game data sampled from random historical dates across defined eras.
+* **Live & Cached NBA Data:** Seamlessly interfaces with the real NBA stats API, falling back on an intelligent SQLite-backed caching layer for speed and resilience.
+* **Fast & Tactile UI:** A beautiful TUI architecture built with `Textual`, featuring keyboard shortcuts, fluid layouts, and immediate visual feedback.
+* **Local Leaderboards:** Track your high scores, best streaks, and overall stats locally via SQLModel and SQLite.
 
-Create or reuse the virtual environment:
+## Tech Stack 🛠️
 
-```bash
-uv venv
-source .venv/bin/activate
-```
+* **Language:** Python 3.13+
+* **TUI Framework:** [Textual](https://textual.textualize.io/)
+* **Database:** SQLite
+* **ORM:** [SQLModel](https://sqlmodel.tiangolo.com/)
+* **HTTP Client:** `httpx` and `nba_api`
+* **Configuration:** `pydantic-settings`
+* **Package Manager:** `uv`
+* **Testing:** `pytest`
 
-Install dependencies:
+## Installation and Setup 🚀
 
-```bash
-uv sync --all-groups
-```
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/Davi-Gurgel/hoop-higher.git
+   cd hoop-higher
+   ```
 
-Run the app:
+2. **Set up the virtual environment using `uv`:**
+   ```bash
+   uv venv
+   source .venv/bin/activate
+   ```
 
-```bash
-uv run hoophigher
-```
+3. **Install dependencies:**
+   ```bash
+   uv sync --all-groups
+   ```
 
-Run tests:
+4. **Run the game:**
+   ```bash
+   uv run hoophigher
+   ```
 
-```bash
-uv run pytest
-```
+## Configuration ⚙️
 
-## Configuration
+Customize the app's behavior by overriding these environment variables (all prefixed with `HOOPHIGHER_`):
 
-The app reads environment variables with the `HOOPHIGHER_` prefix.
+* **`HOOPHIGHER_STATS_PROVIDER`**
+  * `nba_api` (default): Uses real NBA data with a SQLite caching layer.
+  * `mock`: Uses pre-populated mock data for incredibly fast local development and testing.
+* **`HOOPHIGHER_HISTORICAL_START_YEAR`** (default: `2010`)
+* **`HOOPHIGHER_HISTORICAL_END_YEAR`** (default: `2020`)
+* **`HOOPHIGHER_HISTORICAL_ROUNDS`** (default: `5`)
+* **`HOOPHIGHER_NBA_API_TIMEOUT_SECONDS`** (default: `20`)
 
-### Provider selection
+*Note: Historical mode intelligently probes and samples available games on the fly, avoiding massive initial database syncs and ensuring a fast start.*
 
-- `HOOPHIGHER_STATS_PROVIDER`
-  - `nba_api` (default): real NBA data with SQLite-backed cache.
-  - `mock`: local mock data for fast development and tests.
+## Local Development & Testing 🧪
 
-### Historical mode controls
+Code quality, formatting, and tests are heavily utilized in this repository.
 
-- `HOOPHIGHER_HISTORICAL_START_YEAR` (default: `2010`)
-- `HOOPHIGHER_HISTORICAL_END_YEAR` (default: `2020`)
-- `HOOPHIGHER_HISTORICAL_ROUNDS` (default: `5`)
+* **Run all tests:**
+  ```bash
+  uv run pytest
+  ```
+* **Linting & Formatting:** (via ruff)
+  ```bash
+  uv run ruff check src tests
+  ```
 
-Historical mode selects one random eligible date inside the configured year window, then samples up to `HOOPHIGHER_HISTORICAL_ROUNDS` playable games from that date. If fewer playable games are available, the run uses each available game once and ends after those rounds.
-
-### nba_api timeout
-
-- `HOOPHIGHER_NBA_API_TIMEOUT_SECONDS` (default: `20`)
-
-Used for scoreboard and boxscore requests when `HOOPHIGHER_STATS_PROVIDER=nba_api`.
-
-## Real data behavior
-
-By default, or when `HOOPHIGHER_STATS_PROVIDER=nba_api`:
-
-- The app uses cache-first reads for games-by-date and game boxscores.
-- Historical mode uses bounded random date probes to avoid a long first-run index build.
-- Later historical runs in the same app session reuse the first successful historical date.
-- Upstream failures are surfaced as explicit errors instead of silent fallbacks.
+---
+*For more architectural guidelines and decisions, view [ARCHITECTURE.md](ARCHITECTURE.md) and [AGENTS.md](AGENTS.md).*
