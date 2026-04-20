@@ -27,12 +27,12 @@ def _reload_app_module() -> None:
     importlib.reload(app_module)
 
 
-def test_settings_defaults_to_mock_provider(monkeypatch) -> None:
+def test_settings_defaults_to_nba_api_provider(monkeypatch) -> None:
     monkeypatch.delenv("HOOPHIGHER_STATS_PROVIDER", raising=False)
 
     values = config_module.Settings()
 
-    assert values.stats_provider == "mock"
+    assert values.stats_provider == "nba_api"
 
 
 def test_settings_accepts_mock_provider_and_historical_env_values(monkeypatch) -> None:
@@ -93,14 +93,14 @@ def test_recent_candidate_dates_returns_today_first() -> None:
     )
 
 
-def test_app_selects_mock_provider_by_default(monkeypatch) -> None:
+def test_app_selects_nba_api_provider_by_default(monkeypatch) -> None:
     monkeypatch.delenv("HOOPHIGHER_STATS_PROVIDER", raising=False)
     _reload_app_module()
 
     async def scenario() -> None:
         app = app_module.HoopHigherApp(database_url="sqlite://")
         async with app.run_test():
-            assert isinstance(app.gameplay_service._provider, MockProvider)
+            assert isinstance(app.gameplay_service._provider, NBAApiProvider)
 
     asyncio.run(scenario())
 
