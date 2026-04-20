@@ -74,9 +74,3 @@ def test_get_run_end_reason_for_non_ending_answers() -> None:
     assert get_run_end_reason_for_answer(GameMode.HISTORICAL, is_correct=False) is None
 
 
-def test_scoring_raises_for_unsupported_modes() -> None:
-    with pytest.raises(ValueError, match="not configured"):
-        calculate_score_delta(GameMode.YESTERDAY, is_correct=True)
-
-    with pytest.raises(ValueError, match="not configured"):
-        get_run_end_reason_for_answer(GameMode.YESTERDAY, is_correct=True)

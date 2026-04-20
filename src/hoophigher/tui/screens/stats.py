@@ -6,7 +6,6 @@ from textual.containers import Vertical
 from textual.screen import Screen
 from textual.widgets import Button, Footer, Header, Label
 
-from hoophigher.services import StatsResult
 from hoophigher.tui.widgets import DialogShell
 
 
