@@ -22,6 +22,8 @@ from hoophigher.domain.enums import GameMode
 @pytest.fixture(autouse=True)
 def _use_mock_provider(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HOOPHIGHER_STATS_PROVIDER", "mock")
+    # Keep SVG snapshots independent from each developer's terminal theme.
+    monkeypatch.setenv("NO_COLOR", "1")
 
 
 async def _open_mode_select(pilot: Pilot) -> None:
