@@ -1,8 +1,8 @@
 ## Resumo
 Descreva a mudança em 2 a 5 linhas.
 
-## Issue relacionada
-Closes #<id>
+## Referência relacionada
+<!-- Informe uma issue, discussão ou contexto relacionado, se existir. -->
 
 ## O que foi implementado
 - item 1
@@ -15,7 +15,7 @@ Closes #<id>
 - passo 3
 
 ## Checklist
-- [ ] escopo compatível com a issue
+- [ ] escopo compatível com o objetivo da PR
 - [ ] testes adicionados ou atualizados
 - [ ] documentação atualizada, se necessário
 - [ ] sem acoplamento desnecessário entre camadas

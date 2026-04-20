@@ -8,7 +8,7 @@ The goal is to keep the repository consistent, predictable, and easy to evolve, 
 
 - code quality
 - clear separation of responsibilities
-- disciplined issue, branch, and pull request flow
+- disciplined branch and pull request flow
 - low coupling
 - maintainability
 - a good developer experience with the chosen stack
@@ -42,7 +42,7 @@ Agents should treat this stack as the project default.
 - `src/` layout
 - layered organization: `tui`, `domain`, `services`, `data`
 
-Agents must not introduce alternative frameworks without explicit justification and a documented issue and PR.
+Agents must not introduce alternative frameworks without explicit justification in a documented PR.
 
 ---
 
@@ -51,7 +51,7 @@ Agents must not introduce alternative frameworks without explicit justification 
 1. **Prefer clarity over cleverness.**
 2. **Avoid coupling UI, business rules, persistence, and external integrations.**
 3. **Implement in small, reviewable steps.**
-4. **Never change core architecture without a dedicated issue and PR.**
+4. **Never change core architecture without explicit authorization and a documented PR.**
 5. **Every feature must be testable.**
 6. **Any decision affecting product behavior or game rules must respect the current specification.**
 7. **Do not invent undefined behavior without documenting the decision.**
@@ -204,7 +204,7 @@ Whenever a real API integration exists:
 
 ## Game Rules
 
-Agents must not change these rules without a dedicated issue:
+Agents must not change these rules without explicit authorization:
 
 - MVP main metric: **points**
 - each round corresponds to **one game**
@@ -219,45 +219,40 @@ Agents must not change these rules without a dedicated issue:
 - SQLite persistence
 
 If a rule needs to change, it must appear in:
-1. an issue
-2. a dedicated branch
-3. a PR with justification
+1. a dedicated branch
+2. a PR with justification
 
 ---
 
-## Required Issue, Branch, and PR Flow Using `gh`
+## Required Branch and PR Flow Using `gh`
 
-### 1. Create an issue before implementing
-Every relevant change should start from an issue.
+### 1. Create a branch before implementing
+Every relevant change should happen on a dedicated branch.
 
-The issue should contain:
-- a clear title
-- context
-- objective
-- scope
-- acceptance criteria
-- out-of-scope notes when needed
+An issue may be created when it helps clarify scope, but it is not required before implementation or before opening a PR.
 
-### 2. Create a branch from the issue
 Branch naming convention:
 
 ```text
-feat/<issue-id>-short-description
-fix/<issue-id>-short-description
-refactor/<issue-id>-short-description
-chore/<issue-id>-short-description
+feat/<short-description>
+fix/<short-description>
+refactor/<short-description>
+chore/<short-description>
 ```
 
-Examples:
-- `feat/12-home-screen`
-- `feat/18-mock-provider`
-- `fix/27-score-bug-endless`
-- `refactor/31-split-round-generator`
+If an issue already exists, the issue ID may be included in the branch name.
 
-### 3. Keep scope small
+Examples:
+- `feat/home-screen`
+- `feat/mock-provider`
+- `fix/score-bug-endless`
+- `refactor/split-round-generator`
+- `feat/12-home-screen`
+
+### 2. Keep scope small
 One branch should solve **one logical unit of work**.
 
-### 4. Open a PR
+### 3. Open a PR
 Every branch should become a PR before merge.
 
 The PR should contain:
@@ -265,12 +260,12 @@ The PR should contain:
 - why it was done
 - how to validate it
 - risks or trade-offs
-- a reference to the issue
+- a reference to the issue, only when one exists
 
-### 5. Merge only when reviewable
+### 4. Merge only when reviewable
 Minimum conditions for merge:
 - tests passing
-- scope aligned with the issue
+- scope aligned with the PR objective
 - no obvious dead code
 - no hidden critical TODOs
 
@@ -327,7 +322,7 @@ Avoid commits such as:
 
 ## What the Agent Must Not Decide Alone
 
-Without a dedicated issue or explicit authorization, the agent must not:
+Without explicit authorization, the agent must not:
 - replace the main stack
 - replace Textual with another framework
 - change a core game rule
@@ -342,7 +337,7 @@ Without a dedicated issue or explicit authorization, the agent must not:
 ## Definition of Done per PR
 
 A PR is only ready when it:
-- resolves a clearly defined issue
+- resolves a clearly defined objective
 - preserves the layered architecture
 - includes appropriate tests
 - does not add unnecessary technical debt
@@ -370,7 +365,7 @@ Rules:
 
 **Agents should optimize for organization, predictability, and small deliverables.**
 
-Several short, clean issues and PRs are better than one large, coupled, hard-to-review implementation.
+Several short, clean branches and PRs are better than one large, coupled, hard-to-review implementation.
 
 ---
 
