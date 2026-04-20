@@ -401,9 +401,27 @@ class GameplayService:
         if not eligible_dates:
             raise LookupError("No historical date with enough games was found.")
 
-        selected_date = self._rng.choice(eligible_dates)
-        games_for_date = tuple(sorted(await self._provider.get_games_by_date(selected_date), key=lambda g: g.game_id))
-        return selected_date, self._sample_historical_games(selected_date, games_for_date)
+        shuffled_dates = list(eligible_dates)
+        self._rng.shuffle(shuffled_dates)
+        last_error: Exception | None = None
+        for candidate_date in shuffled_dates:
+            try:
+                games_for_date = tuple(
+                    sorted(await self._provider.get_games_by_date(candidate_date), key=lambda g: g.game_id)
+                )
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                last_error = exc
+                continue
+            if len(games_for_date) < self._required_historical_games:
+                continue
+            return candidate_date, self._sample_historical_games(candidate_date, games_for_date)
+
+        error = LookupError("No historical date with enough games was found.")
+        if last_error is not None:
+            raise error from last_error
+        raise error
 
     def _sample_historical_games(
         self,

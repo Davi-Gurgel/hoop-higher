@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     sqlite_journal_mode: str | None = "WAL"
     sqlite_synchronous: str | None = "NORMAL"
     sqlite_busy_timeout_ms: int | None = 5000
-    stats_provider: Literal["mock", "nba_api"] = "mock"
+    stats_provider: Literal["mock", "nba_api"] = "nba_api"
     historical_start_year: int = 2010
     historical_end_year: int = 2020
     historical_rounds: int = 5

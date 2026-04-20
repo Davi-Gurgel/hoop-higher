@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
 from textual.geometry import Size
 from textual.widget import Widget
 from textual.widgets import Button
@@ -21,6 +22,11 @@ RESPONSIVE_TARGET_SIZES: tuple[Size, ...] = (
     *TERMINAL_SIZES,
     Size(60, 20),
 )
+
+
+@pytest.fixture(autouse=True)
+def _use_mock_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HOOPHIGHER_STATS_PROVIDER", "mock")
 
 
 def _widget_fits_terminal(widget: Widget, size: Size) -> None:

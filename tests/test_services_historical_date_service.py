@@ -111,6 +111,43 @@ def test_skips_failed_season_type_fetches_when_other_rows_are_eligible(tmp_path)
     assert result == (date(2021, 12, 25),)
 
 
+def test_skips_malformed_game_date_rows_when_other_rows_are_eligible(tmp_path) -> None:
+    session = _make_session(tmp_path)
+    repository = HistoricalIndexRepository(session)
+
+    async def fake_fetcher(_season: str, season_type: str, _timeout_seconds: int):
+        if season_type != "Regular Season":
+            return ()
+        return (
+            {"GAME_ID": "bad-date", "GAME_DATE": "not a date"},
+            {"GAME_ID": "0101", "GAME_DATE": "2021-12-25"},
+            {"GAME_ID": "0102", "GAME_DATE": "2021-12-25"},
+        )
+
+    service = HistoricalDateService(index_repository=repository, fetcher=fake_fetcher)
+
+    result = asyncio.run(
+        service.get_or_build_eligible_dates(start_year=2021, end_year=2021, min_games=2)
+    )
+
+    assert result == (date(2021, 12, 25),)
+
+
+def test_propagates_cancellation_during_eligible_date_build(tmp_path) -> None:
+    session = _make_session(tmp_path)
+    repository = HistoricalIndexRepository(session)
+
+    async def cancelling_fetcher(_season: str, _season_type: str, _timeout_seconds: int):
+        raise asyncio.CancelledError
+
+    service = HistoricalDateService(index_repository=repository, fetcher=cancelling_fetcher)
+
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(
+            service.get_or_build_eligible_dates(start_year=2021, end_year=2021, min_games=2)
+        )
+
+
 def test_raises_lookup_error_when_no_eligible_dates(tmp_path) -> None:
     session = _make_session(tmp_path)
     repository = HistoricalIndexRepository(session)

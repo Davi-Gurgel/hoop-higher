@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from datetime import date, datetime, timezone
 
+import pytest
 from textual.pilot import Pilot
 from sqlmodel import Session
 
@@ -16,6 +17,11 @@ from hoophigher.data import (
     init_db,
 )
 from hoophigher.domain.enums import GameMode
+
+
+@pytest.fixture(autouse=True)
+def _use_mock_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HOOPHIGHER_STATS_PROVIDER", "mock")
 
 
 async def _open_mode_select(pilot: Pilot) -> None:

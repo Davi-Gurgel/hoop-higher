@@ -1,8 +1,10 @@
 import asyncio
-import types
 import sys
+import time
+import types
 from contextlib import contextmanager
 from datetime import date
+from threading import Lock
 
 import pytest
 
@@ -208,6 +210,93 @@ def test_get_games_by_date_caches_date_list_after_fetch(tmp_path) -> None:
     with session_scope(engine) as session:
         cached = CacheRepository(session).get_games_by_date(target_date)
     assert cached == first
+
+
+def test_get_games_by_date_fetches_boxscores_with_bounded_concurrency(tmp_path) -> None:
+    target_date = date(2025, 2, 10)
+    engine = create_sqlite_engine(f"sqlite:///{tmp_path / 'hoophigher.db'}")
+    init_db(engine)
+    game_ids = tuple(f"00225002{index:02d}" for index in range(4))
+    lock = Lock()
+    in_flight = 0
+    max_in_flight = 0
+
+    def scoreboard_fetch(game_date: date, _timeout_seconds: int):
+        return {
+            "scoreboard": {
+                "games": [
+                    {
+                        "gameId": game_id,
+                        "gameDate": game_date.isoformat(),
+                        "homeTeam": {
+                            "teamId": "1610612737",
+                            "teamName": "Hawks",
+                            "teamTricode": "ATL",
+                            "score": "115",
+                        },
+                        "awayTeam": {
+                            "teamId": "1610612738",
+                            "teamName": "Celtics",
+                            "teamTricode": "BOS",
+                            "score": "114",
+                        },
+                    }
+                    for game_id in game_ids
+                ]
+            }
+        }
+
+    def boxscore_fetch(game_id: str, _timeout_seconds: int):
+        nonlocal in_flight, max_in_flight
+        with lock:
+            in_flight += 1
+            max_in_flight = max(max_in_flight, in_flight)
+        try:
+            time.sleep(0.02)
+            return {
+                "boxScoreTraditional": {
+                    "gameId": game_id,
+                    "gameDate": "2025-02-10",
+                    "homeTeam": {
+                        "teamId": "1610612737",
+                        "teamName": "Hawks",
+                        "teamTricode": "ATL",
+                        "score": "115",
+                    },
+                    "awayTeam": {
+                        "teamId": "1610612738",
+                        "teamName": "Celtics",
+                        "teamTricode": "BOS",
+                        "score": "114",
+                    },
+                    "playersStats": [
+                        {
+                            "personId": f"{game_id}-1",
+                            "name": "Concurrent Player",
+                            "teamId": "1610612737",
+                            "teamTricode": "ATL",
+                            "minutes": "10:00",
+                            "points": "5",
+                        }
+                    ],
+                }
+            }
+        finally:
+            with lock:
+                in_flight -= 1
+
+    provider = NBAApiProvider(
+        cache_repository_factory=_make_cache_factory(engine),
+        scoreboard_fetch=scoreboard_fetch,
+        boxscore_fetch=boxscore_fetch,
+        timeout_seconds=5,
+        boxscore_fetch_concurrency=2,
+    )
+
+    games = asyncio.run(provider.get_games_by_date(target_date))
+
+    assert [game.game_id for game in games] == sorted(game_ids)
+    assert max_in_flight == 2
 
 
 def test_mapping_parses_minutes_and_skips_blank_player_ids(tmp_path) -> None:
@@ -667,6 +756,17 @@ def test_max_retries_below_zero_raises_value_error(tmp_path) -> None:
         NBAApiProvider(
             cache_repository_factory=_make_cache_factory(engine),
             max_retries=-1,
+        )
+
+
+def test_boxscore_fetch_concurrency_below_one_raises_value_error(tmp_path) -> None:
+    engine = create_sqlite_engine(f"sqlite:///{tmp_path / 'hoophigher.db'}")
+    init_db(engine)
+
+    with pytest.raises(ValueError, match="boxscore_fetch_concurrency"):
+        NBAApiProvider(
+            cache_repository_factory=_make_cache_factory(engine),
+            boxscore_fetch_concurrency=0,
         )
 
 

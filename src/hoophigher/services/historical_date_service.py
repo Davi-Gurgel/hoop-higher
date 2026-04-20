@@ -59,6 +59,8 @@ class HistoricalDateService:
             for season_type in SEASON_TYPES:
                 try:
                     rows = await self._fetcher(season, season_type, self._timeout_seconds)
+                except asyncio.CancelledError:
+                    raise
                 except Exception:
                     continue
                 self._accumulate_rows(unique_games_by_date=unique_games_by_date, rows=rows)
@@ -180,7 +182,10 @@ class HistoricalDateService:
             game_date_raw = row.get("GAME_DATE")
             if not isinstance(game_id_raw, str) or not game_id_raw:
                 continue
-            game_date = self._parse_game_date(game_date_raw)
+            try:
+                game_date = self._parse_game_date(game_date_raw)
+            except ValueError:
+                continue
             unique_games_by_date[game_date].add(game_id_raw)
 
     def _parse_game_date(self, raw_value: object) -> date:

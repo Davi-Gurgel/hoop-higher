@@ -47,8 +47,8 @@ The app reads environment variables with the `HOOPHIGHER_` prefix.
 ### Provider selection
 
 - `HOOPHIGHER_STATS_PROVIDER`
-  - `mock` (default): local mock data for fast development.
-  - `nba_api`: real NBA data with SQLite-backed cache.
+  - `nba_api` (default): real NBA data with SQLite-backed cache.
+  - `mock`: local mock data for fast development.
 
 ### Historical mode controls
 
@@ -66,7 +66,7 @@ Used for scoreboard and boxscore requests when `HOOPHIGHER_STATS_PROVIDER=nba_ap
 
 ## Real data behavior
 
-When `HOOPHIGHER_STATS_PROVIDER=nba_api`:
+By default, or when `HOOPHIGHER_STATS_PROVIDER=nba_api`:
 
 - The app uses cache-first reads for games-by-date and game boxscores.
 - Historical mode builds and persists an eligible-date index in SQLite for the configured window.

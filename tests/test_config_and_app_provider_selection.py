@@ -21,8 +21,16 @@ def _reload_app_module() -> None:
     importlib.reload(app_module)
 
 
-def test_settings_accepts_provider_and_historical_env_values(monkeypatch) -> None:
-    monkeypatch.setenv("HOOPHIGHER_STATS_PROVIDER", "nba_api")
+def test_settings_defaults_to_nba_api_provider(monkeypatch) -> None:
+    monkeypatch.delenv("HOOPHIGHER_STATS_PROVIDER", raising=False)
+
+    values = config_module.Settings()
+
+    assert values.stats_provider == "nba_api"
+
+
+def test_settings_accepts_mock_provider_and_historical_env_values(monkeypatch) -> None:
+    monkeypatch.setenv("HOOPHIGHER_STATS_PROVIDER", "mock")
     monkeypatch.setenv("HOOPHIGHER_HISTORICAL_START_YEAR", "2012")
     monkeypatch.setenv("HOOPHIGHER_HISTORICAL_END_YEAR", "2019")
     monkeypatch.setenv("HOOPHIGHER_HISTORICAL_ROUNDS", "7")
@@ -30,7 +38,7 @@ def test_settings_accepts_provider_and_historical_env_values(monkeypatch) -> Non
 
     values = config_module.Settings()
 
-    assert values.stats_provider == "nba_api"
+    assert values.stats_provider == "mock"
     assert values.historical_start_year == 2012
     assert values.historical_end_year == 2019
     assert values.historical_rounds == 7
@@ -79,26 +87,26 @@ def test_recent_candidate_dates_returns_today_first() -> None:
     )
 
 
-def test_app_selects_mock_provider_by_default(monkeypatch) -> None:
+def test_app_selects_nba_api_provider_by_default(monkeypatch) -> None:
     monkeypatch.delenv("HOOPHIGHER_STATS_PROVIDER", raising=False)
     _reload_app_module()
 
     async def scenario() -> None:
         app = app_module.HoopHigherApp(database_url="sqlite://")
         async with app.run_test():
-            assert isinstance(app.gameplay_service._provider, MockProvider)
+            assert isinstance(app.gameplay_service._provider, NBAApiProvider)
 
     asyncio.run(scenario())
 
 
-def test_app_selects_nba_api_provider_when_env_is_set(monkeypatch) -> None:
-    monkeypatch.setenv("HOOPHIGHER_STATS_PROVIDER", "nba_api")
+def test_app_selects_mock_provider_when_env_is_set(monkeypatch) -> None:
+    monkeypatch.setenv("HOOPHIGHER_STATS_PROVIDER", "mock")
     _reload_app_module()
 
     async def scenario() -> None:
         app = app_module.HoopHigherApp(database_url="sqlite://")
         async with app.run_test():
-            assert isinstance(app.gameplay_service._provider, NBAApiProvider)
+            assert isinstance(app.gameplay_service._provider, MockProvider)
 
     asyncio.run(scenario())
 

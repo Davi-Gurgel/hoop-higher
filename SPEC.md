@@ -97,7 +97,7 @@ After the answer:
 - the chosen date must have **at least 5 games**
 - MVP historical scoring is explicit: correct `+100`, wrong `-60`
 - a wrong answer does **not** end the run
-- the run samples exactly **5 games** from that date and goes through them once each
+- the run samples exactly `HOOPHIGHER_HISTORICAL_ROUNDS` games from that date and goes through them once each (default: **5**)
 - after all sampled games are consumed, the run ends with `no_more_games`
 - it may start mocked and later move to real data
 

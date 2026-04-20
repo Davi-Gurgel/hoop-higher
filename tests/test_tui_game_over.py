@@ -2,7 +2,14 @@ from __future__ import annotations
 
 import asyncio
 
+import pytest
+
 from hoophigher.app import HoopHigherApp
+
+
+@pytest.fixture(autouse=True)
+def _use_mock_provider(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("HOOPHIGHER_STATS_PROVIDER", "mock")
 
 
 def _wrong_guess_key(app: HoopHigherApp) -> str:

@@ -28,6 +28,17 @@ def _opposite_guess(guess: GuessDirection) -> GuessDirection:
     return GuessDirection.LOWER if guess is GuessDirection.HIGHER else GuessDirection.HIGHER
 
 
+class _NoShuffleRandom(Random):
+    def shuffle(self, x) -> None:
+        return None
+
+    def choice(self, seq):
+        return seq[0]
+
+    def sample(self, population, k):
+        return list(population)[:k]
+
+
 def test_endless_continues_after_wrong_answer_and_persists_progress(tmp_path) -> None:
     engine = _make_engine(tmp_path)
     service = GameplayService(engine=engine, provider=MockProvider(), rng=Random(7))
@@ -406,6 +417,18 @@ class _ManyGamesProvider:
         )
 
 
+class _IndexedFallbackProvider(_ManyGamesProvider):
+    def __init__(self) -> None:
+        super().__init__()
+        self.requested_dates: list[date] = []
+
+    async def get_games_by_date(self, game_date: date) -> list[GameBoxScore]:
+        self.requested_dates.append(game_date)
+        if game_date == date(2018, 2, 13):
+            raise LookupError("indexed date no longer resolves")
+        return await super().get_games_by_date(game_date)
+
+
 def test_historical_uses_exactly_configured_rounds_even_when_date_has_more_games(tmp_path) -> None:
     engine = _make_engine(tmp_path)
 
@@ -438,6 +461,28 @@ def test_historical_uses_exactly_configured_rounds_even_when_date_has_more_games
     assert final_snapshot.is_finished is True
     assert final_snapshot.end_reason is RunEndReason.NO_MORE_GAMES
     assert final_snapshot.round_index == 4
+
+
+def test_historical_index_start_tries_next_date_when_first_date_fails(tmp_path) -> None:
+    engine = _make_engine(tmp_path)
+    provider = _IndexedFallbackProvider()
+
+    async def fake_eligible_dates_fetcher(_start_year: int, _end_year: int, _min_games: int):
+        return (date(2018, 2, 13), date(2018, 2, 14))
+
+    service = GameplayService(
+        engine=engine,
+        provider=provider,
+        rng=_NoShuffleRandom(),
+        historical_rounds=5,
+        historical_eligible_dates_fetcher=fake_eligible_dates_fetcher,
+    )
+
+    snapshot = asyncio.run(service.start_run(GameMode.HISTORICAL, total_questions=5))
+
+    assert provider.requested_dates == [date(2018, 2, 13), date(2018, 2, 14)]
+    assert snapshot.source_date == date(2018, 2, 14)
+    assert len(snapshot.games_today) == 5
 
 
 def test_historical_candidate_dates_samples_exactly_configured_rounds(tmp_path) -> None:

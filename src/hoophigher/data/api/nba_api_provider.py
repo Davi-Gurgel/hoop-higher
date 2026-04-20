@@ -19,6 +19,7 @@ from hoophigher.domain.models import PlayerLine, TeamGameInfo
 ScoreboardFetch = Callable[[date, int], Mapping[str, object]]
 BoxScoreFetch = Callable[[str, int], Mapping[str, object]]
 CacheRepositoryContextFactory = Callable[[], ContextManager[CacheRepository]]
+DEFAULT_BOXSCORE_FETCH_CONCURRENCY = 6
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,11 +40,14 @@ class NBAApiProvider(StatsProvider):
         boxscore_fetch: BoxScoreFetch | None = None,
         timeout_seconds: int = 20,
         max_retries: int = 2,
+        boxscore_fetch_concurrency: int = DEFAULT_BOXSCORE_FETCH_CONCURRENCY,
     ) -> None:
         if timeout_seconds < 1:
             raise ValueError("timeout_seconds must be at least 1.")
         if max_retries < 0:
             raise ValueError("max_retries must be greater than or equal to 0.")
+        if boxscore_fetch_concurrency < 1:
+            raise ValueError("boxscore_fetch_concurrency must be at least 1.")
 
         if cache_repository_factory is not None:
             self._cache_repository_factory = cache_repository_factory
@@ -55,6 +59,7 @@ class NBAApiProvider(StatsProvider):
         self._boxscore_fetch = boxscore_fetch or _default_boxscore_fetch
         self._timeout_seconds = timeout_seconds
         self._max_retries = max_retries
+        self._boxscore_fetch_concurrency = boxscore_fetch_concurrency
 
     async def get_games_by_date(self, game_date: date) -> list[GameBoxScore]:
         with self._cache_repository_factory() as cache_repository:
@@ -70,10 +75,7 @@ class NBAApiProvider(StatsProvider):
         )
         seeds = _parse_scoreboard_payload(payload, expected_date=game_date)
 
-        games: list[GameBoxScore] = []
-        for seed in seeds:
-            game = await self._get_game_boxscore(seed.game_id, game_date_fallback=seed.game_date)
-            games.append(_merge_game_seed(seed=seed, game=game))
+        games = list(await self._get_seeded_boxscores(seeds))
 
         games.sort(key=lambda game: game.game_id)
         with self._cache_repository_factory() as cache_repository:
@@ -82,6 +84,16 @@ class NBAApiProvider(StatsProvider):
 
     async def get_game_boxscore(self, game_id: str) -> GameBoxScore:
         return await self._get_game_boxscore(game_id, game_date_fallback=None)
+
+    async def _get_seeded_boxscores(self, seeds: Sequence[_ScoreboardSeed]) -> tuple[GameBoxScore, ...]:
+        semaphore = asyncio.Semaphore(self._boxscore_fetch_concurrency)
+
+        async def fetch_seed(seed: _ScoreboardSeed) -> GameBoxScore:
+            async with semaphore:
+                game = await self._get_game_boxscore(seed.game_id, game_date_fallback=seed.game_date)
+            return _merge_game_seed(seed=seed, game=game)
+
+        return tuple(await asyncio.gather(*(fetch_seed(seed) for seed in seeds)))
 
     async def _get_game_boxscore(
         self,
