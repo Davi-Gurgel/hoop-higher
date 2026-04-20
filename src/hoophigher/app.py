@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+from contextlib import suppress
 from datetime import date, timedelta
 
 from sqlalchemy.engine import Engine
@@ -22,19 +24,25 @@ MOCK_CANDIDATE_DATES = (
     date(2025, 1, 12),
     date(2025, 1, 13),
 )
-RECENT_CANDIDATE_DAYS = 7
+RECENT_CANDIDATE_DAYS = 3
+LOADING_NOTICE_DELAY_SECONDS = 0.35
 
 
 def create_stats_provider(
     provider_name: str,
     *,
     timeout_seconds: int = 20,
+    retry_delay_seconds: float = 1.0,
     engine: Engine | None = None,
 ) -> StatsProvider:
     if provider_name == "mock":
         return MockProvider()
     if provider_name == "nba_api":
-        return NBAApiProvider(engine=engine, timeout_seconds=timeout_seconds)
+        return NBAApiProvider(
+            engine=engine,
+            timeout_seconds=timeout_seconds,
+            retry_delay_seconds=retry_delay_seconds,
+        )
     raise ValueError(
         f"Unknown stats provider '{provider_name}'. Expected one of: 'mock', 'nba_api'."
     )
@@ -80,6 +88,7 @@ class HoopHigherApp(App[None]):
         provider = create_stats_provider(
             settings.stats_provider,
             timeout_seconds=settings.nba_api_timeout_seconds,
+            retry_delay_seconds=settings.nba_api_retry_delay_seconds,
             engine=engine,
         )
         self._uses_mock_provider = isinstance(provider, MockProvider)
@@ -90,6 +99,8 @@ class HoopHigherApp(App[None]):
             historical_start_year=settings.historical_start_year,
             historical_end_year=settings.historical_end_year,
             historical_rounds=settings.historical_rounds,
+            historical_max_date_probes=settings.historical_max_date_probes,
+            playable_game_fetch_concurrency=settings.nba_api_fetch_concurrency,
         )
         self.leaderboard_service = LeaderboardService(engine=engine)
         self.stats_service = StatsService(engine=engine)
@@ -100,10 +111,34 @@ class HoopHigherApp(App[None]):
         self.push_screen("home")
 
     async def start_game(self, mode: GameMode) -> None:
+        loading_notice_task: asyncio.Task[None] | None = None
+        if not self._uses_mock_provider:
+            loading_notice_task = asyncio.create_task(self._notify_loading_if_slow())
         start_run_kwargs: dict[str, object] = {"total_questions": 5}
         if self._uses_mock_provider:
             start_run_kwargs["candidate_dates"] = MOCK_CANDIDATE_DATES
         elif mode is not GameMode.HISTORICAL:
             start_run_kwargs["candidate_dates"] = self._recent_candidate_dates
-        snapshot = await self.gameplay_service.start_run(mode, **start_run_kwargs)
+        try:
+            snapshot = await self.gameplay_service.start_run(mode, **start_run_kwargs)
+        except (LookupError, ValueError) as exc:
+            await self._cancel_loading_notice(loading_notice_task)
+            if not self._uses_mock_provider:
+                self.clear_notifications()
+            self.notify(str(exc), title="Unable to start game", severity="error")
+            return
+        await self._cancel_loading_notice(loading_notice_task)
+        if not self._uses_mock_provider:
+            self.clear_notifications()
         self.push_screen(GameScreen(snapshot))
+
+    async def _notify_loading_if_slow(self) -> None:
+        await asyncio.sleep(LOADING_NOTICE_DELAY_SECONDS)
+        self.notify("Loading game data…", title="Please wait", timeout=10)
+
+    async def _cancel_loading_notice(self, task: asyncio.Task[None] | None) -> None:
+        if task is None:
+            return
+        task.cancel()
+        with suppress(asyncio.CancelledError):
+            await task

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import calendar
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import date
@@ -9,7 +10,6 @@ from typing import Sequence
 
 from sqlalchemy.engine import Engine
 
-from hoophigher.data import HistoricalIndexRepository
 from hoophigher.data.api import StatsProvider
 from hoophigher.data.db import session_scope
 from hoophigher.data.repositories import QuestionRepository, RoundRepository, RunRepository
@@ -18,13 +18,17 @@ from hoophigher.domain.enums import GameMode, GuessDirection, RunEndReason
 from hoophigher.domain.models import GameBoxScore, Question, QuestionResult, RoundProgress, RunState
 from hoophigher.domain.round_generator import generate_round
 from hoophigher.domain.scoring import calculate_score_delta, get_run_end_reason_for_answer, is_guess_correct
-from hoophigher.services.historical_date_service import HistoricalDateService
 
 MIN_HISTORICAL_GAMES = 5
-DEFAULT_HISTORICAL_FETCH_CONCURRENCY = 8
 DEFAULT_HISTORICAL_START_YEAR = 2010
 DEFAULT_HISTORICAL_END_YEAR = 2020
 DEFAULT_HISTORICAL_ROUNDS = 5
+DEFAULT_HISTORICAL_MAX_DATE_PROBES = 10
+DEFAULT_PLAYABLE_GAME_FETCH_CONCURRENCY = 5
+DEFAULT_NON_HISTORICAL_STARTUP_GAMES = 5
+
+# NBA regular season months where games are almost guaranteed.
+_NBA_SEASON_MONTHS = (10, 11, 12, 1, 2, 3, 4)
 
 HistoricalEligibleDatesFetcher = Callable[[int, int, int], Awaitable[Sequence[date]]]
 
@@ -72,25 +76,33 @@ class GameplayService:
         engine: Engine,
         provider: StatsProvider,
         rng: Random | None = None,
-        historical_fetch_concurrency: int = DEFAULT_HISTORICAL_FETCH_CONCURRENCY,
         historical_start_year: int = DEFAULT_HISTORICAL_START_YEAR,
         historical_end_year: int = DEFAULT_HISTORICAL_END_YEAR,
         historical_rounds: int = DEFAULT_HISTORICAL_ROUNDS,
+        historical_max_date_probes: int = DEFAULT_HISTORICAL_MAX_DATE_PROBES,
+        playable_game_fetch_concurrency: int = DEFAULT_PLAYABLE_GAME_FETCH_CONCURRENCY,
+        non_historical_startup_games: int = DEFAULT_NON_HISTORICAL_STARTUP_GAMES,
         historical_eligible_dates_fetcher: HistoricalEligibleDatesFetcher | None = None,
     ) -> None:
-        if historical_fetch_concurrency < 1:
-            raise ValueError("historical_fetch_concurrency must be at least 1.")
         if historical_start_year > historical_end_year:
             raise ValueError("historical_start_year must be less than or equal to historical_end_year.")
         if historical_rounds < 1:
             raise ValueError("historical_rounds must be at least 1.")
+        if historical_max_date_probes < 1:
+            raise ValueError("historical_max_date_probes must be at least 1.")
+        if playable_game_fetch_concurrency < 1:
+            raise ValueError("playable_game_fetch_concurrency must be at least 1.")
+        if non_historical_startup_games < 1:
+            raise ValueError("non_historical_startup_games must be at least 1.")
         self._engine = engine
         self._provider = provider
         self._rng = rng or Random()
-        self._historical_fetch_concurrency = historical_fetch_concurrency
         self._historical_start_year = historical_start_year
         self._historical_end_year = historical_end_year
         self._historical_rounds = historical_rounds
+        self._historical_max_date_probes = historical_max_date_probes
+        self._playable_game_fetch_concurrency = playable_game_fetch_concurrency
+        self._non_historical_startup_games = non_historical_startup_games
         self._historical_eligible_dates_fetcher = historical_eligible_dates_fetcher
         self._active_run: _ActiveRun | None = None
 
@@ -102,10 +114,14 @@ class GameplayService:
         source_date: date | None = None,
         candidate_dates: Sequence[date] | None = None,
     ) -> GameplaySnapshot:
+        if total_questions < 5 or total_questions > 10:
+            raise ValueError("Rounds must request between 5 and 10 questions.")
+
         selected_date, games = await self._resolve_games(
             mode=mode,
             source_date=source_date,
             candidate_dates=candidate_dates,
+            total_questions=total_questions,
         )
         selected_index = 0
         selected_game = games[selected_index]
@@ -338,48 +354,272 @@ class GameplayService:
         mode: GameMode,
         source_date: date | None,
         candidate_dates: Sequence[date] | None,
+        total_questions: int,
     ) -> tuple[date, tuple[GameBoxScore, ...]]:
         if source_date is not None:
-            games = tuple(sorted(await self._provider.get_games_by_date(source_date), key=lambda g: g.game_id))
-            if not games:
-                raise LookupError(f"No games found for source date: {source_date.isoformat()}")
-            if mode is GameMode.HISTORICAL:
-                return source_date, self._sample_historical_games(source_date, games)
-            return source_date, games
+            return await self._resolve_games_for_date(
+                mode=mode,
+                source_date=source_date,
+                total_questions=total_questions,
+            )
 
         if candidate_dates is None:
             if mode is GameMode.HISTORICAL:
-                return await self._resolve_historical_games_from_index()
+                return await self._resolve_historical_games_by_probing(
+                    total_questions=total_questions,
+                )
             raise ValueError("candidate_dates is required when source_date is not provided.")
 
+        return await self._resolve_games_from_candidates(
+            mode=mode,
+            candidate_dates=candidate_dates,
+            total_questions=total_questions,
+        )
+
+    async def _resolve_games_for_date(
+        self,
+        *,
+        mode: GameMode,
+        source_date: date,
+        total_questions: int,
+    ) -> tuple[date, tuple[GameBoxScore, ...]]:
+        """Resolve games for a specific date, fetching boxscores on demand."""
+        game_shells = tuple(
+            sorted(
+                await self._provider.get_games_by_date(source_date),
+                key=lambda g: g.game_id,
+            )
+        )
+        if not game_shells:
+            raise LookupError(f"No games found for source date: {source_date.isoformat()}")
+
+        full_games = await self._fetch_playable_games(
+            game_shells,
+            total_questions=total_questions,
+            max_games=(
+                self._historical_rounds
+                if mode is GameMode.HISTORICAL
+                else self._non_historical_startup_games
+            ),
+        )
+        if not full_games:
+            raise LookupError(
+                f"No playable games found for source date: {source_date.isoformat()}"
+            )
         if mode is GameMode.HISTORICAL:
-            required_historical_games = self._required_historical_games
-            games_per_date = await self._fetch_games_for_dates(candidate_dates)
-            eligible_dates: list[tuple[date, tuple[GameBoxScore, ...]]] = []
-            for current_date, games_for_date in zip(candidate_dates, games_per_date, strict=True):
-                games_for_date_sorted = tuple(sorted(games_for_date, key=lambda g: g.game_id))
-                if len(games_for_date_sorted) >= required_historical_games:
-                    eligible_dates.append((current_date, games_for_date_sorted))
-            if not eligible_dates:
-                raise LookupError("No historical date with enough games was found.")
-            selected_date, games_for_date = self._rng.choice(eligible_dates)
-            return selected_date, self._sample_historical_games(selected_date, games_for_date)
+            return source_date, self._sample_historical_games(source_date, full_games)
+        return source_date, full_games
+
+    async def _resolve_games_from_candidates(
+        self,
+        *,
+        mode: GameMode,
+        candidate_dates: Sequence[date],
+        total_questions: int,
+    ) -> tuple[date, tuple[GameBoxScore, ...]]:
+        """Iterate candidate dates, stop at the first one with playable games."""
+        last_error: Exception | None = None
+        saw_games = False
+        max_games = (
+            self._historical_rounds
+            if mode is GameMode.HISTORICAL
+            else self._non_historical_startup_games
+        )
 
         for current_date in candidate_dates:
-            games_for_date = tuple(await self._provider.get_games_by_date(current_date))
-            if games_for_date:
-                return current_date, tuple(sorted(games_for_date, key=lambda g: g.game_id))
+            try:
+                game_shells = tuple(await self._provider.get_games_by_date(current_date))
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                last_error = exc
+                continue
+            if game_shells:
+                saw_games = True
 
+            full_games = await self._fetch_playable_games(
+                tuple(sorted(game_shells, key=lambda g: g.game_id)),
+                total_questions=total_questions,
+                max_games=max_games,
+            )
+            if full_games:
+                if mode is GameMode.HISTORICAL:
+                    return current_date, self._sample_historical_games(current_date, full_games)
+                return current_date, full_games
+
+        if saw_games:
+            raise LookupError("No playable games found for provided candidate dates.")
+        if last_error is not None:
+            raise LookupError("No games found for provided candidate dates.") from last_error
         raise LookupError("No games found for provided candidate dates.")
 
-    async def _fetch_games_for_dates(self, candidate_dates: Sequence[date]) -> tuple[tuple[GameBoxScore, ...], ...]:
-        results: list[tuple[GameBoxScore, ...]] = []
-        step = self._historical_fetch_concurrency
-        for start_index in range(0, len(candidate_dates), step):
-            chunk = candidate_dates[start_index : start_index + step]
-            chunk_results = await asyncio.gather(*(self._provider.get_games_by_date(current_date) for current_date in chunk))
-            results.extend(tuple(games_for_date) for games_for_date in chunk_results)
-        return tuple(results)
+    async def _resolve_historical_games_by_probing(
+        self,
+        *,
+        total_questions: int,
+    ) -> tuple[date, tuple[GameBoxScore, ...]]:
+        """Probe random historical dates until one with playable games is found.
+
+        Instead of building a full index of eligible dates (48+ API calls),
+        this picks random dates during NBA season months and checks the
+        scoreboard directly.  Capped at ``historical_max_date_probes``
+        attempts.
+        """
+        if self._historical_eligible_dates_fetcher is not None:
+            eligible_dates = tuple(
+                await self._historical_eligible_dates_fetcher(
+                    self._historical_start_year,
+                    self._historical_end_year,
+                    self._required_historical_games,
+                )
+            )
+            if not eligible_dates:
+                raise LookupError("No historical date with playable games was found.")
+            shuffled = list(eligible_dates)
+            self._rng.shuffle(shuffled)
+            probe_dates: Sequence[date] = shuffled[: self._historical_max_date_probes]
+            # Pre-validated dates: accept even if fewer games than configured rounds.
+            enforce_min_games = False
+        else:
+            probe_dates = self._generate_random_season_dates(
+                start_year=self._historical_start_year,
+                end_year=self._historical_end_year,
+                count=self._historical_max_date_probes,
+            )
+            # Random probes: skip dates with too few games to avoid wasting API calls.
+            enforce_min_games = True
+
+        last_error: Exception | None = None
+        for candidate_date in probe_dates:
+            try:
+                game_shells = tuple(
+                    sorted(
+                        await self._provider.get_games_by_date(candidate_date),
+                        key=lambda g: g.game_id,
+                    )
+                )
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                last_error = exc
+                continue
+
+            if enforce_min_games and len(game_shells) < self._required_historical_games:
+                continue
+
+            full_games = await self._fetch_playable_games(
+                game_shells,
+                total_questions=total_questions,
+                max_games=self._historical_rounds,
+            )
+            if full_games:
+                return candidate_date, self._sample_historical_games(candidate_date, full_games)
+
+        error = LookupError(
+            f"No historical date with playable games was found after {len(probe_dates)} probes."
+        )
+        if last_error is not None:
+            raise error from last_error
+        raise error
+
+    async def _fetch_playable_games(
+        self,
+        game_shells: Sequence[GameBoxScore],
+        *,
+        total_questions: int,
+        max_games: int | None = None,
+    ) -> tuple[GameBoxScore, ...]:
+        """Fetch full boxscores on demand, stopping once enough playable games are found.
+
+        Games that already have player lines (from cache) are checked first.
+        Shells without player lines are fetched in small concurrent batches.
+        """
+        playable: list[GameBoxScore] = []
+        needs_fetch: list[GameBoxScore] = []
+
+        # First pass: check games that already have full data.
+        for game in game_shells:
+            if game.player_lines:
+                if self._can_generate_round(game, total_questions=total_questions):
+                    playable.append(game)
+                    if max_games is not None and len(playable) >= max_games:
+                        return tuple(playable)
+            else:
+                needs_fetch.append(game)
+
+        # Second pass: fetch boxscores on demand for shells without data.
+        # Shuffle so we don't always probe the same games first.
+        self._rng.shuffle(needs_fetch)
+        step = self._playable_game_fetch_concurrency
+        next_fetch_index = 0
+        while next_fetch_index < len(needs_fetch):
+            remaining_games = None if max_games is None else max_games - len(playable)
+            if remaining_games is not None and remaining_games <= 0:
+                return tuple(playable)
+            chunk_size = step if remaining_games is None else min(step, remaining_games)
+            chunk = needs_fetch[next_fetch_index : next_fetch_index + chunk_size]
+            next_fetch_index += chunk_size
+            fetched_games = await asyncio.gather(
+                *(
+                    self._fetch_playable_game(
+                        game_shell,
+                        total_questions=total_questions,
+                    )
+                    for game_shell in chunk
+                )
+            )
+            for full_game in fetched_games:
+                if full_game is None:
+                    continue
+                playable.append(full_game)
+                if max_games is not None and len(playable) >= max_games:
+                    return tuple(playable)
+
+        return tuple(playable)
+
+    async def _fetch_playable_game(
+        self,
+        game_shell: GameBoxScore,
+        *,
+        total_questions: int,
+    ) -> GameBoxScore | None:
+        try:
+            full_game = await self._provider.get_game_boxscore(
+                game_shell.game_id,
+                game_date_fallback=game_shell.game_date,
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception:  # noqa: BLE001
+            return None
+
+        if self._can_generate_round(full_game, total_questions=total_questions):
+            return full_game
+        return None
+
+    def _generate_random_season_dates(
+        self,
+        *,
+        start_year: int,
+        end_year: int,
+        count: int,
+    ) -> tuple[date, ...]:
+        """Generate random dates during NBA season months within the year window."""
+        candidates: list[date] = []
+        attempts = 0
+        max_attempts = count * 3  # guard against infinite loop
+        seen: set[date] = set()
+        while len(candidates) < count and attempts < max_attempts:
+            attempts += 1
+            year = self._rng.randint(start_year, end_year)
+            month = self._rng.choice(_NBA_SEASON_MONTHS)
+            max_day = calendar.monthrange(year, month)[1]
+            day = self._rng.randint(1, max_day)
+            candidate = date(year, month, day)
+            if candidate not in seen:
+                seen.add(candidate)
+                candidates.append(candidate)
+        return tuple(candidates)
 
     def _require_active_run(self) -> _ActiveRun:
         if self._active_run is None:
@@ -390,75 +630,29 @@ class GameplayService:
     def _required_historical_games(self) -> int:
         return max(MIN_HISTORICAL_GAMES, self._historical_rounds)
 
-    async def _resolve_historical_games_from_index(self) -> tuple[date, tuple[GameBoxScore, ...]]:
-        eligible_dates = tuple(
-            await self._get_historical_eligible_dates(
-                start_year=self._historical_start_year,
-                end_year=self._historical_end_year,
-                min_games=self._required_historical_games,
-            )
-        )
-        if not eligible_dates:
-            raise LookupError("No historical date with enough games was found.")
-
-        shuffled_dates = list(eligible_dates)
-        self._rng.shuffle(shuffled_dates)
-        last_error: Exception | None = None
-        for candidate_date in shuffled_dates:
-            try:
-                games_for_date = tuple(
-                    sorted(await self._provider.get_games_by_date(candidate_date), key=lambda g: g.game_id)
-                )
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                last_error = exc
-                continue
-            if len(games_for_date) < self._required_historical_games:
-                continue
-            return candidate_date, self._sample_historical_games(candidate_date, games_for_date)
-
-        error = LookupError("No historical date with enough games was found.")
-        if last_error is not None:
-            raise error from last_error
-        raise error
-
     def _sample_historical_games(
         self,
         selected_date: date,
         games_for_date: tuple[GameBoxScore, ...],
     ) -> tuple[GameBoxScore, ...]:
-        required_historical_games = self._required_historical_games
         total_games = len(games_for_date)
-        if total_games < required_historical_games:
+        if total_games < 1:
             raise LookupError(
-                "Historical date "
-                f"{selected_date.isoformat()} has {total_games} game(s), "
-                f"but at least {required_historical_games} are required."
+                f"Historical date {selected_date.isoformat()} has no playable games."
             )
 
-        sampled_games = self._rng.sample(games_for_date, k=self._historical_rounds)
+        sampled_games = self._rng.sample(
+            games_for_date,
+            k=min(self._historical_rounds, total_games),
+        )
         return tuple(sorted(sampled_games, key=lambda g: g.game_id))
 
-    async def _get_historical_eligible_dates(
-        self,
-        *,
-        start_year: int,
-        end_year: int,
-        min_games: int,
-    ) -> Sequence[date]:
-        if self._historical_eligible_dates_fetcher is not None:
-            return await self._historical_eligible_dates_fetcher(start_year, end_year, min_games)
-
-        with session_scope(self._engine) as session:
-            historical_date_service = HistoricalDateService(
-                index_repository=HistoricalIndexRepository(session),
-            )
-            return await historical_date_service.get_or_build_eligible_dates(
-                start_year=start_year,
-                end_year=end_year,
-                min_games=min_games,
-            )
+    def _can_generate_round(self, game: GameBoxScore, *, total_questions: int) -> bool:
+        try:
+            generate_round(game, total_questions=total_questions)
+        except ValueError:
+            return False
+        return True
 
     def _should_end_historical_run(self, active_run: _ActiveRun) -> bool:
         return (

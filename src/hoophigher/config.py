@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     historical_end_year: int = 2020
     historical_rounds: int = 5
     nba_api_timeout_seconds: int = 20
+    nba_api_retry_delay_seconds: float = 1.0
+    nba_api_fetch_concurrency: int = 5
+    historical_max_date_probes: int = 10
 
     @model_validator(mode="after")
     def validate_historical_settings(self) -> "Settings":
@@ -28,6 +31,12 @@ class Settings(BaseSettings):
             raise ValueError("historical_rounds must be greater than or equal to 1")
         if self.nba_api_timeout_seconds < 1:
             raise ValueError("nba_api_timeout_seconds must be greater than or equal to 1")
+        if self.nba_api_retry_delay_seconds < 0:
+            raise ValueError("nba_api_retry_delay_seconds must be greater than or equal to 0")
+        if self.nba_api_fetch_concurrency < 1:
+            raise ValueError("nba_api_fetch_concurrency must be greater than or equal to 1")
+        if self.historical_max_date_probes < 1:
+            raise ValueError("historical_max_date_probes must be greater than or equal to 1")
         return self
 
     model_config = SettingsConfigDict(

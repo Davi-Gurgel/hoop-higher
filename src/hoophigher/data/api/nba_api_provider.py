@@ -19,7 +19,6 @@ from hoophigher.domain.models import PlayerLine, TeamGameInfo
 ScoreboardFetch = Callable[[date, int], Mapping[str, object]]
 BoxScoreFetch = Callable[[str, int], Mapping[str, object]]
 CacheRepositoryContextFactory = Callable[[], ContextManager[CacheRepository]]
-DEFAULT_BOXSCORE_FETCH_CONCURRENCY = 6
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,14 +39,14 @@ class NBAApiProvider(StatsProvider):
         boxscore_fetch: BoxScoreFetch | None = None,
         timeout_seconds: int = 20,
         max_retries: int = 2,
-        boxscore_fetch_concurrency: int = DEFAULT_BOXSCORE_FETCH_CONCURRENCY,
+        retry_delay_seconds: float = 1.0,
     ) -> None:
         if timeout_seconds < 1:
             raise ValueError("timeout_seconds must be at least 1.")
         if max_retries < 0:
             raise ValueError("max_retries must be greater than or equal to 0.")
-        if boxscore_fetch_concurrency < 1:
-            raise ValueError("boxscore_fetch_concurrency must be at least 1.")
+        if retry_delay_seconds < 0:
+            raise ValueError("retry_delay_seconds must be greater than or equal to 0.")
 
         if cache_repository_factory is not None:
             self._cache_repository_factory = cache_repository_factory
@@ -59,12 +58,21 @@ class NBAApiProvider(StatsProvider):
         self._boxscore_fetch = boxscore_fetch or _default_boxscore_fetch
         self._timeout_seconds = timeout_seconds
         self._max_retries = max_retries
-        self._boxscore_fetch_concurrency = boxscore_fetch_concurrency
+        self._retry_delay_seconds = retry_delay_seconds
 
     async def get_games_by_date(self, game_date: date) -> list[GameBoxScore]:
+        """Return games for a date.
+
+        Returns lightweight shells from the scoreboard when full boxscores
+        are not already cached.  The caller should use ``get_game_boxscore``
+        to fetch full player-level data for the specific games it needs.
+        """
         with self._cache_repository_factory() as cache_repository:
             cached_games = cache_repository.get_games_by_date(game_date)
-        if cached_games is not None:
+        if cached_games is not None and all(
+            _is_game_shell(game) or _has_available_player_stats(game.player_lines)
+            for game in cached_games
+        ):
             return cached_games
 
         payload = await self._fetch_with_retries(
@@ -75,25 +83,41 @@ class NBAApiProvider(StatsProvider):
         )
         seeds = _parse_scoreboard_payload(payload, expected_date=game_date)
 
-        games = list(await self._get_seeded_boxscores(seeds))
+        # Build lightweight game shells from scoreboard data.
+        # No boxscore API calls are made here — those happen on demand
+        # via get_game_boxscore when the gameplay service needs them.
+        games: list[GameBoxScore] = []
+        for seed in seeds:
+            # Check if this individual game is already cached with stats.
+            with self._cache_repository_factory() as cache_repository:
+                cached_game = cache_repository.get_game_boxscore(seed.game_id)
+            if cached_game is not None and _has_available_player_stats(cached_game.player_lines):
+                games.append(_merge_game_seed(seed=seed, game=cached_game))
+            else:
+                # Return a shell with no player lines — caller fetches on demand.
+                games.append(GameBoxScore(
+                    game_id=seed.game_id,
+                    game_date=seed.game_date,
+                    home_team=seed.home_team,
+                    away_team=seed.away_team,
+                    player_lines=(),
+                ))
 
         games.sort(key=lambda game: game.game_id)
         with self._cache_repository_factory() as cache_repository:
             cache_repository.set_games_by_date(game_date, games)
         return games
 
-    async def get_game_boxscore(self, game_id: str) -> GameBoxScore:
-        return await self._get_game_boxscore(game_id, game_date_fallback=None)
-
-    async def _get_seeded_boxscores(self, seeds: Sequence[_ScoreboardSeed]) -> tuple[GameBoxScore, ...]:
-        semaphore = asyncio.Semaphore(self._boxscore_fetch_concurrency)
-
-        async def fetch_seed(seed: _ScoreboardSeed) -> GameBoxScore:
-            async with semaphore:
-                game = await self._get_game_boxscore(seed.game_id, game_date_fallback=seed.game_date)
-            return _merge_game_seed(seed=seed, game=game)
-
-        return tuple(await asyncio.gather(*(fetch_seed(seed) for seed in seeds)))
+    async def get_game_boxscore(
+        self,
+        game_id: str,
+        *,
+        game_date_fallback: date | None = None,
+    ) -> GameBoxScore:
+        return await self._get_game_boxscore(
+            game_id,
+            game_date_fallback=game_date_fallback,
+        )
 
     async def _get_game_boxscore(
         self,
@@ -103,7 +127,7 @@ class NBAApiProvider(StatsProvider):
     ) -> GameBoxScore:
         with self._cache_repository_factory() as cache_repository:
             cached_game = cache_repository.get_game_boxscore(game_id)
-        if cached_game is not None:
+        if cached_game is not None and _has_available_player_stats(cached_game.player_lines):
             return cached_game
 
         payload = await self._fetch_with_retries(
@@ -139,6 +163,8 @@ class NBAApiProvider(StatsProvider):
                 last_error = exc
                 if attempt == attempts:
                     break
+                if self._retry_delay_seconds > 0:
+                    await asyncio.sleep(self._retry_delay_seconds * attempt)
 
         if last_error is None:
             raise LookupError(
@@ -171,13 +197,16 @@ def _default_scoreboard_fetch(game_date: date, timeout_seconds: int) -> Mapping[
         scoreboardv3 = None
 
     if scoreboardv3 is not None:
-        endpoint = scoreboardv3.ScoreboardV3(
-            game_date=game_date.isoformat(),
-            timeout=timeout_seconds,
-        )
-        payload = endpoint.get_dict()
-        if _looks_like_scoreboard_v3_payload(payload):
-            return payload
+        try:
+            endpoint = scoreboardv3.ScoreboardV3(
+                game_date=game_date.isoformat(),
+                timeout=timeout_seconds,
+            )
+            payload = endpoint.get_dict()
+            if _looks_like_scoreboard_v3_payload(payload):
+                return payload
+        except Exception:
+            pass
 
     # Fallback for environments where V3 is unavailable or returns an unexpected shape.
     from nba_api.stats.endpoints import scoreboardv2
@@ -419,6 +448,7 @@ def _parse_boxscore_v3_payload(
             _require_list(flat_players_raw, field="boxScoreTraditional.playersStats"),
             field="boxScoreTraditional.playersStats",
         )
+    _require_available_player_stats(players, field="boxScoreTraditional")
     return GameBoxScore(
         game_id=game_id,
         game_date=game_date,
@@ -478,6 +508,7 @@ def _parse_boxscore_v2_payload(
         ],
         field="PlayerStats",
     )
+    _require_available_player_stats(players, field="PlayerStats")
     return GameBoxScore(
         game_id=expected_game_id,
         game_date=game_date,
@@ -626,6 +657,20 @@ def _parse_player_name(row: Mapping[str, object]) -> str | None:
     if first_name and family_name:
         return f"{first_name} {family_name}"
     return first_name or family_name or _optional_str(row.get("nameI"))
+
+
+def _require_available_player_stats(players: Sequence[PlayerLine], *, field: str) -> None:
+    if _has_available_player_stats(players):
+        return
+    raise LookupError(f"Boxscore stats are unavailable in {field}.")
+
+
+def _has_available_player_stats(players: Sequence[PlayerLine]) -> bool:
+    return any(player.minutes > 0 for player in players)
+
+
+def _is_game_shell(game: GameBoxScore) -> bool:
+    return not game.player_lines
 
 
 def _merge_game_seed(*, seed: _ScoreboardSeed, game: GameBoxScore) -> GameBoxScore:

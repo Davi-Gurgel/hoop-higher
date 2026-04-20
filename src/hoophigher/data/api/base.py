@@ -11,5 +11,10 @@ class StatsProvider(Protocol):
     async def get_games_by_date(self, game_date: date) -> list[GameBoxScore]:
         """Return all games available for a given date."""
 
-    async def get_game_boxscore(self, game_id: str) -> GameBoxScore:
+    async def get_game_boxscore(
+        self,
+        game_id: str,
+        *,
+        game_date_fallback: date | None = None,
+    ) -> GameBoxScore:
         """Return a single game box score by id."""

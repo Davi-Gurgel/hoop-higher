@@ -219,6 +219,68 @@ def test_start_game_uses_indexed_historical_path_for_real_provider(monkeypatch) 
     assert pushed_screens
 
 
+def test_start_game_does_not_show_loading_notice_after_fast_success(monkeypatch) -> None:
+    app = app_module.HoopHigherApp(database_url="sqlite://")
+    app._uses_mock_provider = False
+    app._recent_candidate_dates = (date(2025, 2, 10),)
+    pushed_screens: list[object] = []
+    notifications: list[tuple[str, dict[str, object]]] = []
+    clear_count = 0
+
+    class FakeGameplayService:
+        async def start_run(self, mode: GameMode, **kwargs: object) -> GameplaySnapshot:
+            return _make_snapshot(mode)
+
+    def clear_notifications() -> None:
+        nonlocal clear_count
+        clear_count += 1
+
+    app.gameplay_service = FakeGameplayService()
+    monkeypatch.setattr(app, "push_screen", lambda screen: pushed_screens.append(screen))
+    monkeypatch.setattr(
+        app,
+        "notify",
+        lambda message, **kwargs: notifications.append((message, kwargs)),
+    )
+    monkeypatch.setattr(app, "clear_notifications", clear_notifications)
+
+    asyncio.run(app.start_game(GameMode.ENDLESS))
+
+    assert pushed_screens
+    assert notifications == []
+    assert clear_count == 1
+
+
+def test_start_game_notifies_when_real_data_cannot_start(monkeypatch) -> None:
+    app = app_module.HoopHigherApp(database_url="sqlite://")
+    app._uses_mock_provider = False
+    app._recent_candidate_dates = (date(2025, 2, 10),)
+    pushed_screens: list[object] = []
+    notifications: list[tuple[str, dict[str, object]]] = []
+
+    class FakeGameplayService:
+        async def start_run(self, mode: GameMode, **kwargs: object) -> GameplaySnapshot:
+            raise LookupError("No playable games found for provided candidate dates.")
+
+    app.gameplay_service = FakeGameplayService()
+    monkeypatch.setattr(app, "push_screen", lambda screen: pushed_screens.append(screen))
+    monkeypatch.setattr(
+        app,
+        "notify",
+        lambda message, **kwargs: notifications.append((message, kwargs)),
+    )
+
+    asyncio.run(app.start_game(GameMode.ENDLESS))
+
+    assert pushed_screens == []
+    assert notifications == [
+        (
+            "No playable games found for provided candidate dates.",
+            {"title": "Unable to start game", "severity": "error"},
+        )
+    ]
+
+
 def _make_snapshot(mode: GameMode) -> GameplaySnapshot:
     game = GameBoxScore(
         game_id="0022500999",
