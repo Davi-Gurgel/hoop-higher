@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from textual import events
 from textual.app import ComposeResult
-from textual.containers import Horizontal, Vertical
+from textual.containers import Vertical
 from textual.screen import ModalScreen, Screen
 from textual.widgets import Button, Footer, Header, Label
 

@@ -18,10 +18,6 @@ class QuestionCandidate:
     target_id: str
 
     @property
-    def directed_key(self) -> tuple[str, str]:
-        return (self.source_id, self.target_id)
-
-    @property
     def matchup_key(self) -> frozenset[str]:
         return frozenset((self.source_id, self.target_id))
 
