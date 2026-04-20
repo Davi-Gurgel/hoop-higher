@@ -50,6 +50,20 @@ A modern terminal-based game inspired by "Higher or Lower", utilizing real NBA p
    uv run hoophigher
    ```
 
+## Install from PyPI 📦
+
+Once published, you can run Hoop Higher without cloning the repo.
+
+* **Run with `uvx` (ephemeral):**
+  ```bash
+  uvx hoop-higher
+  ```
+* **Install with `pipx` (persistent):**
+  ```bash
+  pipx install hoop-higher
+  hoop-higher
+  ```
+
 ## Configuration ⚙️
 
 Customize the app's behavior by overriding these environment variables (all prefixed with `HOOPHIGHER_`):
@@ -76,6 +90,20 @@ Code quality, formatting, and tests are heavily utilized in this repository.
   ```bash
   uv run ruff check src tests
   ```
+
+## Publishing to PyPI 🛰️
+
+This repository includes automated publishing via GitHub Actions in `.github/workflows/publish.yml`.
+
+1. Create your package on PyPI (first time only) and configure a **Trusted Publisher** pointing to this repository and workflow.
+2. Bump `version` in `pyproject.toml`.
+3. Create and push a version tag (must match `v*`):
+   ```bash
+   git tag v0.1.0
+   git push origin v0.1.0
+   ```
+
+After the workflow succeeds, users can run `uvx hoop-higher` or `pipx install hoop-higher`.
 
 ---
 *For more architectural guidelines and decisions, view [ARCHITECTURE.md](ARCHITECTURE.md) and [AGENTS.md](AGENTS.md).*

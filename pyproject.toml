@@ -3,7 +3,7 @@ requires = ["setuptools>=80.0.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "hoophigher"
+name = "hoop-higher"
 version = "0.1.0"
 description = "Terminal higher-or-lower NBA game scaffold"
 readme = "README.md"
@@ -23,10 +23,19 @@ dev = [
 ]
 
 [project.scripts]
+hoop-higher = "hoophigher.main:main"
 hoophigher = "hoophigher.main:main"
+
+[project.urls]
+Homepage = "https://github.com/Davi-Gurgel/hoop-higher"
+Repository = "https://github.com/Davi-Gurgel/hoop-higher"
+Issues = "https://github.com/Davi-Gurgel/hoop-higher/issues"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+hoophigher = ["tui/*.tcss"]
