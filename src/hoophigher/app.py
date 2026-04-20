@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable, Sequence
 from contextlib import suppress
 from datetime import date, timedelta
 
@@ -8,10 +9,20 @@ from sqlalchemy.engine import Engine
 from textual.app import App
 
 from hoophigher.config import Settings
-from hoophigher.data import create_sqlite_engine, init_db
+from hoophigher.data import (
+    HistoricalIndexRepository,
+    create_sqlite_engine,
+    init_db,
+    session_scope,
+)
 from hoophigher.data.api import MockProvider, NBAApiProvider, StatsProvider
 from hoophigher.domain.enums import GameMode
-from hoophigher.services import GameplayService, LeaderboardService, StatsService
+from hoophigher.services import (
+    GameplayService,
+    HistoricalDateService,
+    LeaderboardService,
+    StatsService,
+)
 from hoophigher.tui.screens import (
     GameScreen,
     HomeScreen,
@@ -26,6 +37,7 @@ MOCK_CANDIDATE_DATES = (
 )
 RECENT_CANDIDATE_DAYS = 3
 LOADING_NOTICE_DELAY_SECONDS = 0.35
+HistoricalEligibleDatesFetcher = Callable[[int, int, int], Awaitable[Sequence[date]]]
 
 
 def create_stats_provider(
@@ -48,7 +60,11 @@ def create_stats_provider(
     )
 
 
-def recent_candidate_dates(*, today: date | None = None, days: int = RECENT_CANDIDATE_DAYS) -> tuple[date, ...]:
+def recent_candidate_dates(
+    *,
+    today: date | None = None,
+    days: int = RECENT_CANDIDATE_DAYS,
+) -> tuple[date, ...]:
     if days < 1:
         raise ValueError("days must be at least 1.")
     current_date = today or date.today()
@@ -93,6 +109,12 @@ class HoopHigherApp(App[None]):
         )
         self._uses_mock_provider = isinstance(provider, MockProvider)
         self._recent_candidate_dates = recent_candidate_dates()
+        historical_eligible_dates_fetcher: HistoricalEligibleDatesFetcher | None = None
+        if not self._uses_mock_provider:
+            historical_eligible_dates_fetcher = self._create_historical_eligible_dates_fetcher(
+                engine=engine,
+                timeout_seconds=settings.nba_api_timeout_seconds,
+            )
         self.gameplay_service = GameplayService(
             engine=engine,
             provider=provider,
@@ -101,6 +123,7 @@ class HoopHigherApp(App[None]):
             historical_rounds=settings.historical_rounds,
             historical_max_date_probes=settings.historical_max_date_probes,
             playable_game_fetch_concurrency=settings.nba_api_fetch_concurrency,
+            historical_eligible_dates_fetcher=historical_eligible_dates_fetcher,
         )
         self.leaderboard_service = LeaderboardService(engine=engine)
         self.stats_service = StatsService(engine=engine)
@@ -109,6 +132,30 @@ class HoopHigherApp(App[None]):
         self.install_screen(StatsScreen(), name="stats")
         self.install_screen(ModeSelectScreen(), name="mode-select")
         self.push_screen("home")
+
+    def _create_historical_eligible_dates_fetcher(
+        self,
+        *,
+        engine: Engine,
+        timeout_seconds: int,
+    ) -> HistoricalEligibleDatesFetcher:
+        async def fetch_eligible_dates(
+            start_year: int,
+            end_year: int,
+            min_games: int,
+        ) -> tuple[date, ...]:
+            with session_scope(engine) as session:
+                historical_date_service = HistoricalDateService(
+                    index_repository=HistoricalIndexRepository(session),
+                    timeout_seconds=timeout_seconds,
+                )
+                return await historical_date_service.get_or_build_eligible_dates(
+                    start_year=start_year,
+                    end_year=end_year,
+                    min_games=min_games,
+                )
+
+        return fetch_eligible_dates
 
     async def start_game(self, mode: GameMode) -> None:
         loading_notice_task: asyncio.Task[None] | None = None

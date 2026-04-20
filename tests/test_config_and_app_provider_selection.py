@@ -9,7 +9,13 @@ from pydantic import ValidationError
 
 import hoophigher.app as app_module
 import hoophigher.config as config_module
-from hoophigher.data import CacheRepository, create_sqlite_engine, session_scope
+from hoophigher.data import (
+    CacheRepository,
+    HistoricalIndexRepository,
+    create_sqlite_engine,
+    init_db,
+    session_scope,
+)
 from hoophigher.data.api import MockProvider, NBAApiProvider
 from hoophigher.domain.enums import GameMode
 from hoophigher.domain.models import GameBoxScore, PlayerLine, TeamGameInfo
@@ -21,12 +27,12 @@ def _reload_app_module() -> None:
     importlib.reload(app_module)
 
 
-def test_settings_defaults_to_nba_api_provider(monkeypatch) -> None:
+def test_settings_defaults_to_mock_provider(monkeypatch) -> None:
     monkeypatch.delenv("HOOPHIGHER_STATS_PROVIDER", raising=False)
 
     values = config_module.Settings()
 
-    assert values.stats_provider == "nba_api"
+    assert values.stats_provider == "mock"
 
 
 def test_settings_accepts_mock_provider_and_historical_env_values(monkeypatch) -> None:
@@ -87,8 +93,20 @@ def test_recent_candidate_dates_returns_today_first() -> None:
     )
 
 
-def test_app_selects_nba_api_provider_by_default(monkeypatch) -> None:
+def test_app_selects_mock_provider_by_default(monkeypatch) -> None:
     monkeypatch.delenv("HOOPHIGHER_STATS_PROVIDER", raising=False)
+    _reload_app_module()
+
+    async def scenario() -> None:
+        app = app_module.HoopHigherApp(database_url="sqlite://")
+        async with app.run_test():
+            assert isinstance(app.gameplay_service._provider, MockProvider)
+
+    asyncio.run(scenario())
+
+
+def test_app_selects_nba_api_provider_when_env_is_set(monkeypatch) -> None:
+    monkeypatch.setenv("HOOPHIGHER_STATS_PROVIDER", "nba_api")
     _reload_app_module()
 
     async def scenario() -> None:
@@ -163,6 +181,31 @@ def test_app_wires_nba_api_cache_to_configured_database(monkeypatch, tmp_path) -
         assert CacheRepository(session).get_game_boxscore("0022500999") == cached_game
 
 
+def test_app_wires_historical_index_fetcher_for_nba_api_provider(monkeypatch, tmp_path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'historical-index.db'}"
+    engine = create_sqlite_engine(database_url)
+    init_db(engine)
+    with session_scope(engine) as session:
+        HistoricalIndexRepository(session).replace_window(
+            start_year=2010,
+            end_year=2020,
+            min_games=5,
+            rows=[(date(2016, 2, 10), 7)],
+        )
+
+    monkeypatch.setenv("HOOPHIGHER_STATS_PROVIDER", "nba_api")
+    _reload_app_module()
+
+    async def scenario() -> None:
+        app = app_module.HoopHigherApp(database_url=database_url)
+        async with app.run_test():
+            fetcher = app.gameplay_service._historical_eligible_dates_fetcher
+            assert fetcher is not None
+            assert await fetcher(2010, 2020, 5) == (date(2016, 2, 10),)
+
+    asyncio.run(scenario())
+
+
 def test_start_game_passes_recent_candidate_dates_for_real_non_historical_provider(monkeypatch) -> None:
     app = app_module.HoopHigherApp(database_url="sqlite://")
     app._uses_mock_provider = False
@@ -195,7 +238,9 @@ def test_start_game_passes_recent_candidate_dates_for_real_non_historical_provid
     assert pushed_screens
 
 
-def test_start_game_uses_indexed_historical_path_for_real_provider(monkeypatch) -> None:
+def test_start_game_omits_recent_candidate_dates_for_real_historical_provider(
+    monkeypatch,
+) -> None:
     app = app_module.HoopHigherApp(database_url="sqlite://")
     app._uses_mock_provider = False
     app._recent_candidate_dates = (date(2025, 2, 10),)

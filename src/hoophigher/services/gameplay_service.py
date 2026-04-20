@@ -365,7 +365,7 @@ class GameplayService:
 
         if candidate_dates is None:
             if mode is GameMode.HISTORICAL:
-                return await self._resolve_historical_games_by_probing(
+                return await self._resolve_historical_games(
                     total_questions=total_questions,
                 )
             raise ValueError("candidate_dates is required when source_date is not provided.")
@@ -453,18 +453,12 @@ class GameplayService:
             raise LookupError("No games found for provided candidate dates.") from last_error
         raise LookupError("No games found for provided candidate dates.")
 
-    async def _resolve_historical_games_by_probing(
+    async def _resolve_historical_games(
         self,
         *,
         total_questions: int,
     ) -> tuple[date, tuple[GameBoxScore, ...]]:
-        """Probe random historical dates until one with playable games is found.
-
-        Instead of building a full index of eligible dates (48+ API calls),
-        this picks random dates during NBA season months and checks the
-        scoreboard directly.  Capped at ``historical_max_date_probes``
-        attempts.
-        """
+        """Resolve historical games from an indexed date source or bounded random probes."""
         if self._historical_eligible_dates_fetcher is not None:
             eligible_dates = tuple(
                 await self._historical_eligible_dates_fetcher(
