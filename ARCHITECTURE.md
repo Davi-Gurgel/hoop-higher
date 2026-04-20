@@ -292,11 +292,11 @@ The screen does not calculate score or generate questions by itself. It only con
 5. save the result in cache
 6. return domain models
 
-### Historical eligible date index
-1. historical service queries `HistoricalIndexRepository` for eligible dates in the configured window
-2. if index exists, reuse it immediately
-3. otherwise, fetch season-level data, compute dates with enough games, and persist the index
-4. gameplay service selects one random indexed date and samples up to the configured round count from the playable games returned for that date
+### Historical mode games
+1. historical mode uses bounded random date probes against the provider to pick an eligible date within the configured window context.
+2. on success, that date's box scores are fetched through the active cache-layer mechanism.
+3. gameplay service then samples up to the configured round count from the playable games returned for that date.
+4. previous successful historical dates across the session lifecycle can be reused natively.
 
 ### Box score by game
 1. service asks for box score by `game_id`
