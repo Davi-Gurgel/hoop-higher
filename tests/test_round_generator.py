@@ -33,7 +33,7 @@ def make_game(players: tuple[PlayerLine, ...]) -> GameBoxScore:
     )
 
 
-def test_generate_round_creates_linked_question_chain() -> None:
+def test_generate_round_keeps_previous_hidden_player_on_left_without_reusing_hidden_targets() -> None:
     game = make_game(
         (
             make_player("a", 30),
@@ -50,15 +50,42 @@ def test_generate_round_creates_linked_question_chain() -> None:
     assert isinstance(round_definition, RoundDefinition)
     assert len(round_definition.questions) == 5
     seen_matchups: set[frozenset[str]] = set()
+    seen_players: set[str] = set()
 
     for index, question in enumerate(round_definition.questions):
         assert question.player_a.player_id != question.player_b.player_id
         assert question.player_a.points != question.player_b.points
+        assert question.player_b.player_id not in seen_players
         matchup_key = frozenset((question.player_a.player_id, question.player_b.player_id))
         assert matchup_key not in seen_matchups
         seen_matchups.add(matchup_key)
         if index > 0:
             assert question.player_a.player_id == round_definition.questions[index - 1].player_b.player_id
+        seen_players.update((question.player_a.player_id, question.player_b.player_id))
+
+
+def test_generate_round_prefers_high_minute_players() -> None:
+    high_minute_players = tuple(
+        make_player(str(index), 10 + index, minutes=40 - index)
+        for index in range(10)
+    )
+    low_minute_players = (
+        make_player("low-a", 40, minutes=4),
+        make_player("low-b", 1, minutes=3),
+    )
+    game = make_game(high_minute_players + low_minute_players)
+
+    round_definition = generate_round(game, total_questions=5)
+
+    player_ids = {
+        question.player_a.player_id
+        for question in round_definition.questions
+    } | {
+        question.player_b.player_id
+        for question in round_definition.questions
+    }
+    assert "low-a" not in player_ids
+    assert "low-b" not in player_ids
 
 
 def test_generate_round_uses_only_eligible_players() -> None:
