@@ -24,7 +24,6 @@ dev = [
 
 [project.scripts]
 hoop-higher = "hoophigher.main:main"
-hoophigher = "hoophigher.main:main"
 
 [project.urls]
 Homepage = "https://github.com/Davi-Gurgel/hoop-higher"

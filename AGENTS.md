@@ -7,8 +7,8 @@ This file contains high-signal context and conventions for autonomous coding age
 - **Dependency Management:** Use `uv` exclusively. Do not use `pip`, `pipenv`, or `poetry`.
   - Sync dependencies: `uv sync --all-groups`
   - Add packages: `uv add <pkg>`
-  - Run app: `uv run hoophigher`
-- **Fast Local Dev:** Prepend `HOOPHIGHER_STATS_PROVIDER=mock` when running the app locally to bypass external API calls and use immediate mock data (`HOOPHIGHER_STATS_PROVIDER=mock uv run hoophigher`).
+  - Run app: `uv run hoop-higher`
+- **Fast Local Dev:** Prepend `HOOPHIGHER_STATS_PROVIDER=mock` when running the app locally to bypass external API calls and use immediate mock data (`HOOPHIGHER_STATS_PROVIDER=mock uv run hoop-higher`).
 - **Testing:** `uv run pytest`.
 - **TUI Snapshots:** Textual UI snapshot tests live in `tests/test_tui_snapshots.py`. When you make visual layout changes, regenerate snapshots using: `uv run pytest --snapshot-update`.
 - **Linting & Formatting:** `uv run ruff check src tests` and `uv run ruff format src tests`.
