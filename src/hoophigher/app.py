@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-from contextlib import suppress
 from datetime import date, timedelta
 
 from sqlalchemy.engine import Engine
@@ -29,13 +28,14 @@ MOCK_CANDIDATE_DATES = (
     date(2025, 1, 13),
 )
 RECENT_CANDIDATE_DAYS = 3
-LOADING_NOTICE_DELAY_SECONDS = 0.35
+GAME_START_TIMEOUT_SECONDS = 45.0
 
 
 def create_stats_provider(
     provider_name: str,
     *,
     timeout_seconds: int = 20,
+    max_retries: int = 1,
     retry_delay_seconds: float = 1.0,
     engine: Engine | None = None,
 ) -> StatsProvider:
@@ -45,6 +45,7 @@ def create_stats_provider(
         return NBAApiProvider(
             engine=engine,
             timeout_seconds=timeout_seconds,
+            max_retries=max_retries,
             retry_delay_seconds=retry_delay_seconds,
         )
     raise ValueError(
@@ -85,6 +86,7 @@ class HoopHigherApp(App[None]):
         self._database_url = database_url
         self._session_historical_date: date | None = None
         self._session_recent_date: date | None = None
+        self._game_start_timeout_seconds = GAME_START_TIMEOUT_SECONDS
 
     def on_mount(self) -> None:
         settings = Settings()
@@ -98,20 +100,27 @@ class HoopHigherApp(App[None]):
         provider = create_stats_provider(
             settings.stats_provider,
             timeout_seconds=settings.nba_api_timeout_seconds,
+            max_retries=settings.nba_api_max_retries,
             retry_delay_seconds=settings.nba_api_retry_delay_seconds,
             engine=engine,
         )
         self._uses_mock_provider = isinstance(provider, MockProvider)
         self._recent_candidate_dates = recent_candidate_dates()
-        self.gameplay_service = GameplayService(
-            engine=engine,
-            provider=provider,
-            historical_start_year=settings.historical_start_year,
-            historical_end_year=settings.historical_end_year,
-            historical_rounds=settings.historical_rounds,
-            historical_max_date_probes=settings.historical_max_date_probes,
-            playable_game_fetch_concurrency=settings.nba_api_fetch_concurrency,
-        )
+        self._game_start_timeout_seconds = settings.game_start_timeout_seconds
+        gameplay_service_kwargs: dict[str, object] = {
+            "engine": engine,
+            "provider": provider,
+            "historical_start_year": settings.historical_start_year,
+            "historical_end_year": settings.historical_end_year,
+            "historical_rounds": settings.historical_rounds,
+            "historical_max_date_probes": settings.historical_max_date_probes,
+            "playable_game_fetch_concurrency": settings.nba_api_fetch_concurrency,
+        }
+        if not self._uses_mock_provider:
+            gameplay_service_kwargs["non_historical_startup_games"] = (
+                settings.nba_api_startup_games
+            )
+        self.gameplay_service = GameplayService(**gameplay_service_kwargs)
         self.leaderboard_service = LeaderboardService(engine=engine)
         self.stats_service = StatsService(engine=engine)
         self.install_screen(HomeScreen(), name="home")
@@ -120,10 +129,7 @@ class HoopHigherApp(App[None]):
         self.install_screen(ModeSelectScreen(), name="mode-select")
         self.push_screen("home")
 
-    async def start_game(self, mode: GameMode) -> None:
-        loading_notice_task: asyncio.Task[None] | None = None
-        if not self._uses_mock_provider:
-            loading_notice_task = asyncio.create_task(self._notify_loading_if_slow())
+    async def start_game(self, mode: GameMode) -> bool:
         start_run_kwargs: dict[str, object] = {"total_questions": 5}
         if self._uses_mock_provider:
             start_run_kwargs["candidate_dates"] = MOCK_CANDIDATE_DATES
@@ -134,14 +140,23 @@ class HoopHigherApp(App[None]):
         elif mode is not GameMode.HISTORICAL:
             start_run_kwargs["candidate_dates"] = self._recent_candidate_dates
         try:
-            snapshot = await self.gameplay_service.start_run(mode, **start_run_kwargs)
+            snapshot = await asyncio.wait_for(
+                self.gameplay_service.start_run(mode, **start_run_kwargs),
+                timeout=self._game_start_timeout_seconds,
+            )
+        except TimeoutError:
+            self.notify(
+                (
+                    "NBA data is taking too long to respond. Try again, use cached data, "
+                    "or lower HOOPHIGHER_NBA_API_TIMEOUT_SECONDS for faster failures."
+                ),
+                title="Unable to start game",
+                severity="error",
+            )
+            return False
         except (LookupError, ValueError) as exc:
-            await self._cancel_loading_notice(loading_notice_task)
-            if not self._uses_mock_provider:
-                self.clear_notifications()
             self.notify(str(exc), title="Unable to start game", severity="error")
-            return
-        await self._cancel_loading_notice(loading_notice_task)
+            return False
         if not self._uses_mock_provider:
             self.clear_notifications()
             if mode is GameMode.HISTORICAL:
@@ -149,14 +164,4 @@ class HoopHigherApp(App[None]):
             else:
                 self._session_recent_date = snapshot.source_date
         self.push_screen(GameScreen(snapshot))
-
-    async def _notify_loading_if_slow(self) -> None:
-        await asyncio.sleep(LOADING_NOTICE_DELAY_SECONDS)
-        self.notify("Loading game data…", title="Please wait", timeout=10)
-
-    async def _cancel_loading_notice(self, task: asyncio.Task[None] | None) -> None:
-        if task is None:
-            return
-        task.cancel()
-        with suppress(asyncio.CancelledError):
-            await task
+        return True

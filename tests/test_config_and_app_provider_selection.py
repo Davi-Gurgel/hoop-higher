@@ -39,6 +39,9 @@ def test_settings_accepts_mock_provider_and_historical_env_values(monkeypatch) -
     monkeypatch.setenv("HOOPHIGHER_HISTORICAL_END_YEAR", "2019")
     monkeypatch.setenv("HOOPHIGHER_HISTORICAL_ROUNDS", "7")
     monkeypatch.setenv("HOOPHIGHER_NBA_API_TIMEOUT_SECONDS", "25")
+    monkeypatch.setenv("HOOPHIGHER_NBA_API_MAX_RETRIES", "3")
+    monkeypatch.setenv("HOOPHIGHER_NBA_API_STARTUP_GAMES", "2")
+    monkeypatch.setenv("HOOPHIGHER_GAME_START_TIMEOUT_SECONDS", "35.5")
 
     values = config_module.Settings()
 
@@ -47,6 +50,9 @@ def test_settings_accepts_mock_provider_and_historical_env_values(monkeypatch) -
     assert values.historical_end_year == 2019
     assert values.historical_rounds == 7
     assert values.nba_api_timeout_seconds == 25
+    assert values.nba_api_max_retries == 3
+    assert values.nba_api_startup_games == 2
+    assert values.game_start_timeout_seconds == 35.5
 
 
 def test_settings_rejects_invalid_provider(monkeypatch) -> None:
@@ -75,6 +81,27 @@ def test_settings_rejects_nba_api_timeout_below_one(monkeypatch) -> None:
     monkeypatch.setenv("HOOPHIGHER_NBA_API_TIMEOUT_SECONDS", "0")
 
     with pytest.raises(ValidationError, match="nba_api_timeout_seconds"):
+        config_module.Settings()
+
+
+def test_settings_rejects_nba_api_max_retries_below_zero(monkeypatch) -> None:
+    monkeypatch.setenv("HOOPHIGHER_NBA_API_MAX_RETRIES", "-1")
+
+    with pytest.raises(ValidationError, match="nba_api_max_retries"):
+        config_module.Settings()
+
+
+def test_settings_rejects_nba_api_startup_games_below_one(monkeypatch) -> None:
+    monkeypatch.setenv("HOOPHIGHER_NBA_API_STARTUP_GAMES", "0")
+
+    with pytest.raises(ValidationError, match="nba_api_startup_games"):
+        config_module.Settings()
+
+
+def test_settings_rejects_game_start_timeout_below_one(monkeypatch) -> None:
+    monkeypatch.setenv("HOOPHIGHER_GAME_START_TIMEOUT_SECONDS", "0")
+
+    with pytest.raises(ValidationError, match="game_start_timeout_seconds"):
         config_module.Settings()
 
 
@@ -130,6 +157,9 @@ def test_app_selects_mock_provider_when_env_is_set(monkeypatch) -> None:
 def test_app_wires_nba_api_timeout_from_settings(monkeypatch) -> None:
     monkeypatch.setenv("HOOPHIGHER_STATS_PROVIDER", "nba_api")
     monkeypatch.setenv("HOOPHIGHER_NBA_API_TIMEOUT_SECONDS", "37")
+    monkeypatch.setenv("HOOPHIGHER_NBA_API_MAX_RETRIES", "4")
+    monkeypatch.setenv("HOOPHIGHER_NBA_API_STARTUP_GAMES", "3")
+    monkeypatch.setenv("HOOPHIGHER_GAME_START_TIMEOUT_SECONDS", "55")
     _reload_app_module()
 
     async def scenario() -> None:
@@ -138,6 +168,9 @@ def test_app_wires_nba_api_timeout_from_settings(monkeypatch) -> None:
             provider = app.gameplay_service._provider
             assert isinstance(provider, NBAApiProvider)
             assert provider._timeout_seconds == 37
+            assert provider._max_retries == 4
+            assert app.gameplay_service._non_historical_startup_games == 3
+            assert app._game_start_timeout_seconds == 55
 
     asyncio.run(scenario())
 
@@ -187,6 +220,19 @@ def test_app_uses_bounded_historical_probes_for_nba_api_provider(monkeypatch) ->
         app = app_module.HoopHigherApp(database_url="sqlite://")
         async with app.run_test():
             assert app.gameplay_service._historical_eligible_dates_fetcher is None
+
+    asyncio.run(scenario())
+
+
+def test_app_keeps_mock_provider_startup_game_count_for_snapshots(monkeypatch) -> None:
+    monkeypatch.setenv("HOOPHIGHER_STATS_PROVIDER", "mock")
+    monkeypatch.setenv("HOOPHIGHER_NBA_API_STARTUP_GAMES", "1")
+    _reload_app_module()
+
+    async def scenario() -> None:
+        app = app_module.HoopHigherApp(database_url="sqlite://")
+        async with app.run_test():
+            assert app.gameplay_service._non_historical_startup_games == 5
 
     asyncio.run(scenario())
 
@@ -327,16 +373,18 @@ def test_start_game_reuses_successful_real_historical_date_for_session(
     assert len(pushed_screens) == 2
 
 
-def test_start_game_does_not_show_loading_notice_after_fast_success(monkeypatch) -> None:
+def test_start_game_does_not_show_loading_notice_during_slow_success(monkeypatch) -> None:
     app = app_module.HoopHigherApp(database_url="sqlite://")
     app._uses_mock_provider = False
     app._recent_candidate_dates = (date(2025, 2, 10),)
+    app._game_start_timeout_seconds = 1
     pushed_screens: list[object] = []
     notifications: list[tuple[str, dict[str, object]]] = []
     clear_count = 0
 
     class FakeGameplayService:
         async def start_run(self, mode: GameMode, **kwargs: object) -> GameplaySnapshot:
+            await asyncio.sleep(0.4)
             return _make_snapshot(mode)
 
     def clear_notifications() -> None:
@@ -357,6 +405,49 @@ def test_start_game_does_not_show_loading_notice_after_fast_success(monkeypatch)
     assert pushed_screens
     assert notifications == []
     assert clear_count == 1
+
+
+def test_start_game_times_out_slow_real_data_provider(monkeypatch) -> None:
+    app = app_module.HoopHigherApp(database_url="sqlite://")
+    app._uses_mock_provider = False
+    app._recent_candidate_dates = (date(2025, 2, 10),)
+    app._game_start_timeout_seconds = 0.01
+    pushed_screens: list[object] = []
+    notifications: list[tuple[str, dict[str, object]]] = []
+    clear_count = 0
+
+    class FakeGameplayService:
+        async def start_run(self, mode: GameMode, **kwargs: object) -> GameplaySnapshot:
+            await asyncio.sleep(1)
+            return _make_snapshot(mode)
+
+    def clear_notifications() -> None:
+        nonlocal clear_count
+        clear_count += 1
+
+    app.gameplay_service = FakeGameplayService()
+    monkeypatch.setattr(app, "push_screen", lambda screen: pushed_screens.append(screen))
+    monkeypatch.setattr(
+        app,
+        "notify",
+        lambda message, **kwargs: notifications.append((message, kwargs)),
+    )
+    monkeypatch.setattr(app, "clear_notifications", clear_notifications)
+
+    result = asyncio.run(app.start_game(GameMode.ENDLESS))
+
+    assert result is False
+    assert pushed_screens == []
+    assert clear_count == 0
+    assert notifications == [
+        (
+            (
+                "NBA data is taking too long to respond. Try again, use cached data, "
+                "or lower HOOPHIGHER_NBA_API_TIMEOUT_SECONDS for faster failures."
+            ),
+            {"title": "Unable to start game", "severity": "error"},
+        )
+    ]
 
 
 def test_start_game_notifies_when_real_data_cannot_start(monkeypatch) -> None:
