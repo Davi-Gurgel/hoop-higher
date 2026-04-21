@@ -1,4 +1,5 @@
 import asyncio
+import time
 from datetime import date
 from random import Random
 
@@ -132,6 +133,43 @@ class _ShellBoxscoreProvider:
             return _make_service_game(game_id=shell.game_id, game_date=shell.game_date)
         finally:
             self.in_flight -= 1
+
+
+class _SlowFirstShellProvider:
+    def __init__(self, *, game_count: int, game_date: date) -> None:
+        self.requested_ids: list[str] = []
+        self.slow_fetch_cancelled = False
+        self._games = tuple(
+            GameBoxScore(
+                game_id=f"shell-game-{index}",
+                game_date=game_date,
+                home_team=TeamGameInfo(team_id=f"h-{index}", name="Home", abbreviation="HOM", score=110),
+                away_team=TeamGameInfo(team_id=f"a-{index}", name="Away", abbreviation="AWY", score=103),
+                player_lines=(),
+            )
+            for index in range(1, game_count + 1)
+        )
+
+    async def get_games_by_date(self, game_date: date) -> list[GameBoxScore]:
+        return list(self._games)
+
+    async def get_game_boxscore(
+        self,
+        game_id: str,
+        *,
+        game_date_fallback: date | None = None,
+    ) -> GameBoxScore:
+        self.requested_ids.append(game_id)
+        if game_id == "shell-game-1":
+            try:
+                await asyncio.sleep(1)
+            except asyncio.CancelledError:
+                self.slow_fetch_cancelled = True
+                raise
+        else:
+            await asyncio.sleep(0.01)
+        shell = next(game for game in self._games if game.game_id == game_id)
+        return _make_service_game(game_id=shell.game_id, game_date=shell.game_date)
 
 
 class _MixedCachedShellProvider:
@@ -456,6 +494,37 @@ def test_start_run_continues_shell_fetches_when_first_partial_batch_fails(tmp_pa
     ]
 
 
+def test_start_run_does_not_wait_for_slowest_shell_when_enough_games_load(tmp_path) -> None:
+    game_date = date(2025, 2, 10)
+    engine = _make_engine(tmp_path)
+    provider = _SlowFirstShellProvider(game_count=4, game_date=game_date)
+    service = GameplayService(
+        engine=engine,
+        provider=provider,
+        rng=_NoShuffleRandom(1),
+        playable_game_fetch_concurrency=2,
+        non_historical_startup_games=2,
+    )
+
+    started_at = time.perf_counter()
+    snapshot = asyncio.run(
+        service.start_run(
+            GameMode.ENDLESS,
+            candidate_dates=[game_date],
+            total_questions=5,
+        )
+    )
+    elapsed = time.perf_counter() - started_at
+
+    assert [game.game_id for game in snapshot.games_today] == [
+        "shell-game-2",
+        "shell-game-3",
+    ]
+    assert provider.requested_ids == ["shell-game-1", "shell-game-2", "shell-game-3"]
+    assert provider.slow_fetch_cancelled is True
+    assert elapsed < 0.5
+
+
 def test_historical_start_run_raises_when_no_candidate_date_has_playable_games(tmp_path) -> None:
     engine = _make_engine(tmp_path)
     service = GameplayService(engine=engine, provider=MockProvider(), rng=Random(1))
@@ -569,6 +638,62 @@ def test_arcade_starts_next_round_after_perfect_round_and_persists_rounds(tmp_pa
     assert run_record.correct_answers == 5
     assert [round_record.round_index for round_record in rounds] == [0, 1]
     assert [round_record.total_questions for round_record in rounds] == [5, 5]
+
+
+def test_non_historical_run_ends_after_each_fetched_game_is_played(tmp_path) -> None:
+    game_date = date(2025, 2, 10)
+    engine = _make_engine(tmp_path)
+    service = GameplayService(
+        engine=engine,
+        provider=_DateProvider(
+            {
+                game_date: (
+                    _make_service_game(game_id="game-a", game_date=game_date),
+                    _make_service_game(game_id="game-b", game_date=game_date),
+                )
+            }
+        ),
+        rng=_NoShuffleRandom(1),
+        non_historical_startup_games=2,
+    )
+
+    start_snapshot = asyncio.run(
+        service.start_run(
+            GameMode.ENDLESS,
+            candidate_dates=[game_date],
+            total_questions=5,
+        )
+    )
+
+    assert [game.game_id for game in start_snapshot.games_today] == ["game-a", "game-b"]
+
+    for _ in range(start_snapshot.total_questions):
+        question = service.snapshot().current_question
+        assert question is not None
+        asyncio.run(service.submit_answer(question.answer))
+
+    second_round_snapshot = service.snapshot()
+
+    assert second_round_snapshot.is_finished is False
+    assert second_round_snapshot.round_index == 1
+    assert second_round_snapshot.game_id == "game-b"
+
+    for _ in range(second_round_snapshot.total_questions):
+        question = service.snapshot().current_question
+        assert question is not None
+        asyncio.run(service.submit_answer(question.answer))
+
+    final_snapshot = service.snapshot()
+
+    assert final_snapshot.is_finished is True
+    assert final_snapshot.end_reason is RunEndReason.NO_MORE_GAMES
+    assert final_snapshot.round_index == 1
+    assert final_snapshot.current_question is None
+
+    with Session(engine) as session:
+        rounds = RoundRepository(session).list_by_run(start_snapshot.run_id)
+
+    assert [round_record.game_id for round_record in rounds] == ["game-a", "game-b"]
 
 
 def test_end_run_persists_user_exit_and_is_idempotent(tmp_path) -> None:

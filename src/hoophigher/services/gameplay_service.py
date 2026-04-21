@@ -211,7 +211,7 @@ class GameplayService:
         )
 
         if round_progress.is_complete and not active_run.run_state.is_finished:
-            if self._should_end_historical_run(active_run):
+            if self._should_end_run(active_run):
                 active_run.run_state.end_reason = RunEndReason.NO_MORE_GAMES
                 self._persist_run_state(active_run)
             else:
@@ -546,28 +546,46 @@ class GameplayService:
         self._rng.shuffle(needs_fetch)
         step = self._playable_game_fetch_concurrency
         next_fetch_index = 0
-        while next_fetch_index < len(needs_fetch):
-            remaining_games = None if max_games is None else max_games - len(playable)
-            if remaining_games is not None and remaining_games <= 0:
-                return tuple(playable)
-            chunk_size = step if remaining_games is None else min(step, remaining_games)
-            chunk = needs_fetch[next_fetch_index : next_fetch_index + chunk_size]
-            next_fetch_index += chunk_size
-            fetched_games = await asyncio.gather(
-                *(
-                    self._fetch_playable_game(
-                        game_shell,
-                        total_questions=total_questions,
+        pending: set[asyncio.Task[GameBoxScore | None]] = set()
+        task_order: dict[asyncio.Task[GameBoxScore | None], int] = {}
+
+        try:
+            while next_fetch_index < len(needs_fetch) or pending:
+                while (
+                    next_fetch_index < len(needs_fetch)
+                    and len(pending) < step
+                    and (max_games is None or len(playable) < max_games)
+                ):
+                    game_shell = needs_fetch[next_fetch_index]
+                    task = asyncio.create_task(
+                        self._fetch_playable_game(
+                            game_shell,
+                            total_questions=total_questions,
+                        )
                     )
-                    for game_shell in chunk
+                    pending.add(task)
+                    task_order[task] = next_fetch_index
+                    next_fetch_index += 1
+
+                if not pending:
+                    break
+
+                done, pending = await asyncio.wait(
+                    pending,
+                    return_when=asyncio.FIRST_COMPLETED,
                 )
-            )
-            for full_game in fetched_games:
-                if full_game is None:
-                    continue
-                playable.append(full_game)
-                if max_games is not None and len(playable) >= max_games:
-                    return tuple(playable)
+                for task in sorted(done, key=task_order.__getitem__):
+                    full_game = task.result()
+                    if full_game is None:
+                        continue
+                    playable.append(full_game)
+                    if max_games is not None and len(playable) >= max_games:
+                        return tuple(playable)
+        finally:
+            for task in pending:
+                task.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
 
         return tuple(playable)
 
@@ -648,8 +666,5 @@ class GameplayService:
             return False
         return True
 
-    def _should_end_historical_run(self, active_run: _ActiveRun) -> bool:
-        return (
-            active_run.run_state.mode is GameMode.HISTORICAL
-            and active_run.rounds_started >= len(active_run.games)
-        )
+    def _should_end_run(self, active_run: _ActiveRun) -> bool:
+        return active_run.rounds_started >= len(active_run.games)
