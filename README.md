@@ -1,109 +1,84 @@
 # Hoop Higher
 
-[![Python 3.13+](https://img.shields.io/badge/python-3.13+-blue.svg)](https://www.python.org/downloads/release/python-3130/)
-[![Textual](https://img.shields.io/badge/GUI-Textual-green.svg)](https://github.com/Textualize/textual)
+[![PyPI](https://img.shields.io/pypi/v/hoop-higher.svg)](https://pypi.org/project/hoop-higher/)
+[![Python 3.13+](https://img.shields.io/badge/python-3.13%2B-blue.svg)](https://www.python.org/downloads/)
 
-A modern terminal-based game inspired by "Higher or Lower", utilizing real NBA player point totals. Built natively with Python and Textual to provide a sleek, fast, and responsive TUI experience.
+![Hoop Higher gameplay](docs/assets/hoop-higher-gameplay.svg)
 
-## Features
+Hoop Higher is a terminal game for NBA fans: you see one player's points from an NBA box score, then guess whether another player scored higher or lower.
 
-* **Multiple Game Modes:**
-  * **Endless:** Keep playing and building your score multiplier. Wrong answers deduct points, but don't end the game!
-  * **Arcade:** Strive for perfection. One wrong answer and your run is over.
-  * **Historical:** Journey back in time! Play rounds using real NBA game data sampled from random historical dates across defined eras.
-* **Live & Cached NBA Data:** Seamlessly interfaces with the real NBA stats API, falling back on an intelligent SQLite-backed caching layer for speed and resilience.
-* **Fast & Tactile UI:** A beautiful TUI architecture built with `Textual`, featuring keyboard shortcuts, fluid layouts, and immediate visual feedback.
-* **Local Leaderboards:** Track your high scores, best streaks, and overall stats locally via SQLModel and SQLite.
+It is quick to start, easy to play from the keyboard, and built around short runs that test your NBA instincts one matchup at a time.
 
-## Tech Stack
+## Play
 
-* **Language:** Python 3.13+
-* **TUI Framework:** [Textual](https://textual.textualize.io/)
-* **Database:** SQLite
-* **ORM:** [SQLModel](https://sqlmodel.tiangolo.com/)
-* **HTTP Client:** `httpx` and `nba_api`
-* **Configuration:** `pydantic-settings`
-* **Package Manager:** `uv`
-* **Testing:** `pytest`
+Run it without installing:
 
-## Installation and Setup
+```bash
+uvx hoop-higher
+```
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/Davi-Gurgel/hoop-higher.git
-   cd hoop-higher
-   ```
+Or install the command:
 
-2. **Set up the virtual environment using `uv`:**
-   ```bash
-   uv venv
-   source .venv/bin/activate
-   ```
+```bash
+uv tool install hoop-higher
+hoop-higher
+```
 
-3. **Install dependencies:**
-   ```bash
-   uv sync --all-groups
-   ```
+`hoop-higher` is the only supported command name.
 
-4. **Run the game:**
-   ```bash
-   uv run hoophigher
-   ```
+## How It Works
 
-## Install from PyPI
+Each question gives you a player and their point total. Your job is to decide whether the next player scored more or fewer points in that same game context.
 
-Once published, you can run Hoop Higher without cloning the repo.
+After every guess, Hoop Higher reveals the answer, updates your score, and moves to the next comparison. Runs are saved locally so you can track your best scores, streaks, and overall stats.
 
-* **Run with `uvx` (ephemeral):**
-  ```bash
-  uvx hoop-higher
-  ```
-* **Install with `pipx` (persistent):**
-  ```bash
-  pipx install hoop-higher
-  hoop-higher
-  ```
+## Game Modes
 
-## Configuration ⚙️
+| Mode | What to expect |
+| --- | --- |
+| Endless | Keep playing through misses. Wrong answers cost points, but the run continues. |
+| Arcade | One miss ends the run. Higher stakes, higher reward. |
+| Historical | Play from randomly sampled historical NBA dates. |
 
-Customize the app's behavior by overriding these environment variables (all prefixed with `HOOPHIGHER_`):
+## Controls
 
-* **`HOOPHIGHER_STATS_PROVIDER`**
-  * `nba_api` (default): Uses real NBA data with a SQLite caching layer.
-  * `mock`: Uses pre-populated mock data for incredibly fast local development and testing.
-* **`HOOPHIGHER_HISTORICAL_START_YEAR`** (default: `2010`)
-* **`HOOPHIGHER_HISTORICAL_END_YEAR`** (default: `2020`)
-* **`HOOPHIGHER_HISTORICAL_ROUNDS`** (default: `5`)
-* **`HOOPHIGHER_NBA_API_TIMEOUT_SECONDS`** (default: `20`)
+| Key | Action |
+| --- | --- |
+| `H` | Guess higher |
+| `L` | Guess lower |
+| `Left` / `Right` | Move between choices |
+| `Enter` | Select or confirm |
+| `Esc` | Go back |
+| `Q` | Quit |
+| `1`, `2`, `3` | Pick a game mode |
 
-*Note: Historical mode intelligently probes and samples available games on the fly, avoiding massive initial database syncs and ensuring a fast start.*
+## Data
 
-## Local Development & Testing
+By default, Hoop Higher uses real NBA game data through `nba_api` and caches results locally so future runs are faster.
 
-Code quality, formatting, and tests are heavily utilized in this repository.
+If the live NBA data source is slow or unavailable, you can still try the game instantly with mock data:
 
-* **Run all tests:**
-  ```bash
-  uv run pytest
-  ```
-* **Linting & Formatting:** (via ruff)
-  ```bash
-  uv run ruff check src tests
-  ```
+```bash
+HOOPHIGHER_STATS_PROVIDER=mock uvx hoop-higher
+```
 
-## Publishing to PyPI 🛰️
+Local scores, stats, and cached games are stored in `var/hoophigher.db`.
 
-This repository includes automated publishing via GitHub Actions in `.github/workflows/publish.yml`.
+## From Source
 
-1. Create your package on PyPI (first time only) and configure a **Trusted Publisher** pointing to this repository and workflow.
-2. Bump `version` in `pyproject.toml`.
-3. Create and push a version tag (must match `v*`):
-   ```bash
-   git tag v0.1.0
-   git push origin v0.1.0
-   ```
+```bash
+git clone https://github.com/Davi-Gurgel/hoop-higher.git
+cd hoop-higher
+uv sync --all-groups
+uv run hoop-higher
+```
 
-After the workflow succeeds, users can run `uvx hoop-higher` or `pipx install hoop-higher`.
+Run tests:
 
----
-*For more architectural guidelines and decisions, view [ARCHITECTURE.md](ARCHITECTURE.md) and [AGENTS.md](AGENTS.md).*
+```bash
+uv run pytest
+```
+
+## License
+
+No license file is currently included in this repository.
