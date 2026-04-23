@@ -3,8 +3,8 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-from textual.widgets import Label
 from sqlmodel import Session
+from textual.widgets import Button, Label
 
 import hoophigher.tui.screens.game as game_screen_module
 from hoophigher.data import RunRepository, create_sqlite_engine
@@ -92,6 +92,40 @@ def test_mode_select_supports_arrow_navigation() -> None:
             await pilot.press("up")
             await pilot.pause()
             assert getattr(app.screen.focused, "id", None) == "mode-arcade"
+
+    asyncio.run(scenario())
+
+
+def test_mode_select_shows_loading_state_while_starting_game(monkeypatch) -> None:
+    started = asyncio.Event()
+    release = asyncio.Event()
+
+    async def fake_start_game(self, mode) -> bool:
+        started.set()
+        await release.wait()
+        return False
+
+    monkeypatch.setattr(HoopHigherApp, "start_game", fake_start_game)
+
+    async def scenario() -> None:
+        app = HoopHigherApp(database_url="sqlite://")
+
+        async with app.run_test() as pilot:
+            await pilot.press("enter")
+            await pilot.press("1")
+            await asyncio.wait_for(started.wait(), timeout=1)
+            await pilot.pause()
+
+            assert app.screen.query_one("#mode-loading-status", Label).has_class("-visible")
+            assert app.screen.query_one("#mode-endless", Button).disabled is True
+            assert app.screen.query_one("#mode-arcade", Button).disabled is True
+            assert app.screen.query_one("#mode-historical", Button).disabled is True
+
+            release.set()
+            await pilot.pause()
+
+            assert app.screen.query_one("#mode-loading-status", Label).has_class("-visible") is False
+            assert app.screen.query_one("#mode-endless", Button).disabled is False
 
     asyncio.run(scenario())
 

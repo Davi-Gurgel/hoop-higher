@@ -24,11 +24,31 @@ DEFAULT_HISTORICAL_START_YEAR = 2010
 DEFAULT_HISTORICAL_END_YEAR = 2020
 DEFAULT_HISTORICAL_ROUNDS = 5
 DEFAULT_HISTORICAL_MAX_DATE_PROBES = 10
-DEFAULT_PLAYABLE_GAME_FETCH_CONCURRENCY = 5
+DEFAULT_PLAYABLE_GAME_FETCH_CONCURRENCY = 8
 DEFAULT_NON_HISTORICAL_STARTUP_GAMES = 5
 
-# NBA regular season months where games are almost guaranteed.
-_NBA_SEASON_MONTHS = (10, 11, 12, 1, 2, 3, 4)
+# Weighted toward the middle of the NBA regular season, where full slates are
+# more common and startup probes are less likely to land on sparse dates.
+_NBA_HISTORICAL_PROBE_MONTHS = (
+    10,
+    11,
+    11,
+    11,
+    12,
+    12,
+    12,
+    1,
+    1,
+    1,
+    2,
+    2,
+    2,
+    3,
+    3,
+    3,
+    4,
+)
+_NBA_HISTORICAL_PREFERRED_WEEKDAYS = (1, 2, 3, 4, 5)  # Tuesday-Saturday
 
 HistoricalEligibleDatesFetcher = Callable[[int, int, int], Awaitable[Sequence[date]]]
 
@@ -211,7 +231,7 @@ class GameplayService:
         )
 
         if round_progress.is_complete and not active_run.run_state.is_finished:
-            if self._should_end_historical_run(active_run):
+            if self._should_end_run(active_run):
                 active_run.run_state.end_reason = RunEndReason.NO_MORE_GAMES
                 self._persist_run_state(active_run)
             else:
@@ -546,28 +566,46 @@ class GameplayService:
         self._rng.shuffle(needs_fetch)
         step = self._playable_game_fetch_concurrency
         next_fetch_index = 0
-        while next_fetch_index < len(needs_fetch):
-            remaining_games = None if max_games is None else max_games - len(playable)
-            if remaining_games is not None and remaining_games <= 0:
-                return tuple(playable)
-            chunk_size = step if remaining_games is None else min(step, remaining_games)
-            chunk = needs_fetch[next_fetch_index : next_fetch_index + chunk_size]
-            next_fetch_index += chunk_size
-            fetched_games = await asyncio.gather(
-                *(
-                    self._fetch_playable_game(
-                        game_shell,
-                        total_questions=total_questions,
+        pending: set[asyncio.Task[GameBoxScore | None]] = set()
+        task_order: dict[asyncio.Task[GameBoxScore | None], int] = {}
+
+        try:
+            while next_fetch_index < len(needs_fetch) or pending:
+                while (
+                    next_fetch_index < len(needs_fetch)
+                    and len(pending) < step
+                    and (max_games is None or len(playable) < max_games)
+                ):
+                    game_shell = needs_fetch[next_fetch_index]
+                    task = asyncio.create_task(
+                        self._fetch_playable_game(
+                            game_shell,
+                            total_questions=total_questions,
+                        )
                     )
-                    for game_shell in chunk
+                    pending.add(task)
+                    task_order[task] = next_fetch_index
+                    next_fetch_index += 1
+
+                if not pending:
+                    break
+
+                done, pending = await asyncio.wait(
+                    pending,
+                    return_when=asyncio.FIRST_COMPLETED,
                 )
-            )
-            for full_game in fetched_games:
-                if full_game is None:
-                    continue
-                playable.append(full_game)
-                if max_games is not None and len(playable) >= max_games:
-                    return tuple(playable)
+                for task in sorted(done, key=task_order.__getitem__):
+                    full_game = task.result()
+                    if full_game is None:
+                        continue
+                    playable.append(full_game)
+                    if max_games is not None and len(playable) >= max_games:
+                        return tuple(playable)
+        finally:
+            for task in pending:
+                task.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
 
         return tuple(playable)
 
@@ -598,7 +636,7 @@ class GameplayService:
         end_year: int,
         count: int,
     ) -> tuple[date, ...]:
-        """Generate random dates during NBA season months within the year window."""
+        """Generate high-signal historical probe dates within the NBA season window."""
         candidates: list[date] = []
         attempts = 0
         max_attempts = count * 3  # guard against infinite loop
@@ -606,14 +644,29 @@ class GameplayService:
         while len(candidates) < count and attempts < max_attempts:
             attempts += 1
             year = self._rng.randint(start_year, end_year)
-            month = self._rng.choice(_NBA_SEASON_MONTHS)
+            month = self._rng.choice(_NBA_HISTORICAL_PROBE_MONTHS)
             max_day = calendar.monthrange(year, month)[1]
             day = self._rng.randint(1, max_day)
-            candidate = date(year, month, day)
+            candidate = self._normalize_historical_probe_date(date(year, month, day))
             if candidate not in seen:
                 seen.add(candidate)
                 candidates.append(candidate)
         return tuple(candidates)
+
+    def _normalize_historical_probe_date(self, candidate: date) -> date:
+        if candidate.weekday() in _NBA_HISTORICAL_PREFERRED_WEEKDAYS:
+            return candidate
+
+        max_day = calendar.monthrange(candidate.year, candidate.month)[1]
+        for offset in range(1, 4):
+            for direction in (1, -1):
+                adjusted_day = candidate.day + (offset * direction)
+                if adjusted_day < 1 or adjusted_day > max_day:
+                    continue
+                adjusted = date(candidate.year, candidate.month, adjusted_day)
+                if adjusted.weekday() in _NBA_HISTORICAL_PREFERRED_WEEKDAYS:
+                    return adjusted
+        return candidate
 
     def _require_active_run(self) -> _ActiveRun:
         if self._active_run is None:
@@ -648,8 +701,5 @@ class GameplayService:
             return False
         return True
 
-    def _should_end_historical_run(self, active_run: _ActiveRun) -> bool:
-        return (
-            active_run.run_state.mode is GameMode.HISTORICAL
-            and active_run.rounds_started >= len(active_run.games)
-        )
+    def _should_end_run(self, active_run: _ActiveRun) -> bool:
+        return active_run.rounds_started >= len(active_run.games)

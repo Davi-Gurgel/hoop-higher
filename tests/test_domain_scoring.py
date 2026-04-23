@@ -1,5 +1,3 @@
-import pytest
-
 from hoophigher.domain import (
     ARCADE_CORRECT_POINTS,
     ENDLESS_CORRECT_POINTS,
@@ -72,5 +70,4 @@ def test_get_run_end_reason_for_non_ending_answers() -> None:
     assert get_run_end_reason_for_answer(GameMode.ENDLESS, is_correct=False) is None
     assert get_run_end_reason_for_answer(GameMode.HISTORICAL, is_correct=True) is None
     assert get_run_end_reason_for_answer(GameMode.HISTORICAL, is_correct=False) is None
-
 
