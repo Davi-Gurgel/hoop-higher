@@ -112,7 +112,7 @@ def _build_default_dataset() -> _MockDataset:
             away_abbreviation="BOS",
             home_score=118,
             away_score=112,
-            player_points=(31, 24, 19, 15, 9, 4),
+            player_points=(31, 24, 19, 15, 12, 9, 7, 4, 3, 1),
         ),
         _make_game(
             game_id="2025-01-12-den-dal",
@@ -121,7 +121,7 @@ def _build_default_dataset() -> _MockDataset:
             away_abbreviation="DAL",
             home_score=109,
             away_score=105,
-            player_points=(28, 21, 17, 13, 8, 2),
+            player_points=(28, 21, 17, 13, 11, 8, 6, 4, 2, 1),
         ),
         _make_game(
             game_id="2025-01-12-nyk-mia",
@@ -130,7 +130,7 @@ def _build_default_dataset() -> _MockDataset:
             away_abbreviation="MIA",
             home_score=103,
             away_score=99,
-            player_points=(26, 20, 14, 11, 7, 3),
+            player_points=(26, 20, 16, 14, 11, 7, 5, 3, 2, 1),
         ),
         _make_game(
             game_id="2025-01-12-sas-phi",
@@ -139,7 +139,7 @@ def _build_default_dataset() -> _MockDataset:
             away_abbreviation="PHI",
             home_score=121,
             away_score=116,
-            player_points=(33, 29, 18, 12, 10, 5),
+            player_points=(33, 29, 21, 18, 12, 10, 8, 5, 3, 2),
         ),
         _make_game(
             game_id="2025-01-12-phx-gsw",
@@ -148,7 +148,7 @@ def _build_default_dataset() -> _MockDataset:
             away_abbreviation="GSW",
             home_score=115,
             away_score=110,
-            player_points=(30, 23, 16, 14, 6, 1),
+            player_points=(30, 23, 18, 16, 14, 9, 6, 4, 2, 1),
         ),
         _make_game(
             game_id="2025-01-13-min-okc",
@@ -157,7 +157,7 @@ def _build_default_dataset() -> _MockDataset:
             away_abbreviation="OKC",
             home_score=107,
             away_score=104,
-            player_points=(29, 25, 18, 15, 9, 4),
+            player_points=(29, 25, 20, 18, 15, 9, 7, 4, 2, 1),
         ),
         _make_game(
             game_id="2025-01-13-hou-sac",
@@ -166,7 +166,7 @@ def _build_default_dataset() -> _MockDataset:
             away_abbreviation="SAC",
             home_score=111,
             away_score=108,
-            player_points=(27, 22, 17, 13, 8, 2),
+            player_points=(27, 22, 19, 17, 13, 8, 6, 4, 2, 1),
         ),
     )
 

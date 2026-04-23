@@ -16,6 +16,8 @@ class QuestionCandidate:
     question: Question
     source_id: str
     target_id: str
+    source_minutes: int
+    target_minutes: int
 
     @property
     def matchup_key(self) -> frozenset[str]:
@@ -48,7 +50,12 @@ def generate_round(game: GameBoxScore, *, total_questions: int = 5) -> RoundDefi
     if total_questions < 5 or total_questions > 10:
         raise ValueError("Rounds must request between 5 and 10 questions.")
 
-    eligible_players = tuple(sorted(game.eligible_player_lines, key=lambda player: player.player_id))
+    eligible_players = tuple(
+        sorted(
+            game.eligible_player_lines,
+            key=lambda player: (-player.minutes, player.player_id),
+        )
+    )
     if len(eligible_players) < 2:
         raise ValueError("At least two eligible players are required to generate a round.")
 
@@ -85,6 +92,8 @@ def _build_question_candidates(players: tuple[PlayerLine, ...]) -> tuple[Questio
                     ),
                     source_id=player_a.player_id,
                     target_id=player_b.player_id,
+                    source_minutes=player_a.minutes,
+                    target_minutes=player_b.minutes,
                 )
             )
 
@@ -111,12 +120,14 @@ def _search_question_path(
     for starting_candidate in _sort_candidates_for_target(
         all_candidates,
         target=pick_target_difficulty(0, total_questions),
+        seen_player_ids=set(),
     ):
         result = _search_from_candidate(
             current_candidate=starting_candidate,
             by_source=by_source,
             total_questions=total_questions,
             used_matchups={starting_candidate.matchup_key},
+            seen_player_ids={starting_candidate.source_id, starting_candidate.target_id},
             selected_questions=[starting_candidate.question],
         )
         if result is not None:
@@ -131,6 +142,7 @@ def _search_from_candidate(
     by_source: dict[str, tuple[QuestionCandidate, ...]],
     total_questions: int,
     used_matchups: set[frozenset[str]],
+    seen_player_ids: set[str],
     selected_questions: list[Question],
 ) -> list[Question] | None:
     if len(selected_questions) == total_questions:
@@ -142,24 +154,32 @@ def _search_from_candidate(
         candidate
         for candidate in by_source.get(next_source_id, ())
         if candidate.matchup_key not in used_matchups
+        and candidate.target_id not in seen_player_ids
     )
 
-    for next_candidate in _sort_candidates_for_target(next_candidates, target=next_target_difficulty):
-        used_matchups.add(next_candidate.matchup_key)
-        selected_questions.append(next_candidate.question)
+    for candidate in _sort_candidates_for_target(
+        next_candidates,
+        target=next_target_difficulty,
+        seen_player_ids=seen_player_ids,
+    ):
+        used_matchups.add(candidate.matchup_key)
+        seen_player_ids.add(candidate.target_id)
+        selected_questions.append(candidate.question)
 
         result = _search_from_candidate(
-            current_candidate=next_candidate,
+            current_candidate=candidate,
             by_source=by_source,
             total_questions=total_questions,
             used_matchups=used_matchups,
+            seen_player_ids=seen_player_ids,
             selected_questions=selected_questions,
         )
         if result is not None:
             return result
 
         selected_questions.pop()
-        used_matchups.remove(next_candidate.matchup_key)
+        seen_player_ids.remove(candidate.target_id)
+        used_matchups.remove(candidate.matchup_key)
 
     return None
 
@@ -168,6 +188,7 @@ def _sort_candidates_for_target(
     candidates: tuple[QuestionCandidate, ...],
     *,
     target: Difficulty,
+    seen_player_ids: set[str],
 ) -> tuple[QuestionCandidate, ...]:
     target_rank = _DIFFICULTY_ORDER[target]
     ideal_diff = _DIFFICULTY_IDEAL_DIFF[target]
@@ -176,7 +197,13 @@ def _sort_candidates_for_target(
         sorted(
             candidates,
             key=lambda candidate: (
-                # Primary: prefer candidates whose bucket matches the target.
+                # The source is usually the previously revealed player; for the first
+                # question this still prefers a fresh high-minute source.
+                candidate.source_id in seen_player_ids,
+                # Prefer players who had the biggest role in the game.
+                -candidate.target_minutes,
+                -candidate.source_minutes,
+                # Then prefer candidates whose bucket matches the target.
                 abs(_DIFFICULTY_ORDER[candidate.question.difficulty] - target_rank),
                 # Tie-breaker: prefer candidates closest to the ideal diff for the target bucket,
                 # so EASY favours large gaps and HARD favours small ones.

@@ -24,7 +24,7 @@ def test_mock_provider_returns_game_boxscore_by_id() -> None:
 
     assert game.game_id == "2025-01-12-lal-bos"
     assert game.game_date == date(2025, 1, 12)
-    assert len(game.player_lines) == 6
+    assert len(game.player_lines) == 10
     assert game.home_team.abbreviation == "LAL"
     assert game.away_team.abbreviation == "BOS"
 
