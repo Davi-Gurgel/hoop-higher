@@ -6,6 +6,7 @@ from datetime import date
 
 import pytest
 
+import hoophigher.data.api.nba_api_provider as provider_module
 from hoophigher.data import CacheRepository, create_sqlite_engine, init_db, session_scope
 from hoophigher.data.api.nba_api_provider import NBAApiProvider, _default_boxscore_fetch, _default_scoreboard_fetch
 from hoophigher.domain.models import GameBoxScore, PlayerLine, TeamGameInfo
@@ -1082,7 +1083,7 @@ def test_default_scoreboard_fetch_falls_back_to_v2_for_unsupported_v3_shape(monk
     calls: list[str] = []
 
     class FakeScoreboardV3:
-        def __init__(self, *, game_date: str, timeout: int) -> None:
+        def __init__(self, *, game_date: str, timeout: float) -> None:
             assert game_date == "2025-02-10"
             assert timeout == 7
 
@@ -1091,9 +1092,9 @@ def test_default_scoreboard_fetch_falls_back_to_v2_for_unsupported_v3_shape(monk
             return {"scoreboard": {"games": "unsupported"}}
 
     class FakeScoreboardV2:
-        def __init__(self, *, game_date: str, timeout: int) -> None:
+        def __init__(self, *, game_date: str, timeout: float) -> None:
             assert game_date == "2025-02-10"
-            assert timeout == 7
+            assert 0 < timeout <= 7
 
         def get_dict(self) -> dict[str, object]:
             calls.append("v2")
@@ -1123,7 +1124,7 @@ def test_default_scoreboard_fetch_falls_back_to_v2_when_v3_raises(monkeypatch) -
     calls: list[str] = []
 
     class FakeScoreboardV3:
-        def __init__(self, *, game_date: str, timeout: int) -> None:
+        def __init__(self, *, game_date: str, timeout: float) -> None:
             assert game_date == "2025-02-10"
             assert timeout == 7
 
@@ -1132,9 +1133,9 @@ def test_default_scoreboard_fetch_falls_back_to_v2_when_v3_raises(monkeypatch) -
             raise TimeoutError("v3 scoreboard timed out")
 
     class FakeScoreboardV2:
-        def __init__(self, *, game_date: str, timeout: int) -> None:
+        def __init__(self, *, game_date: str, timeout: float) -> None:
             assert game_date == "2025-02-10"
-            assert timeout == 7
+            assert 0 < timeout <= 7
 
         def get_dict(self) -> dict[str, object]:
             calls.append("v2")
@@ -1164,16 +1165,16 @@ def test_default_boxscore_fetch_falls_back_to_v2_when_v3_returns_invalid_payload
     calls: list[str] = []
 
     class FakeBoxScoreTraditionalV3:
-        def __init__(self, *, game_id: str, timeout: int) -> None:
+        def __init__(self, *, game_id: str, timeout: float) -> None:
             assert game_id == "0022500106"
             assert timeout == 7
             calls.append("v3")
             raise ValueError("non-json response")
 
     class FakeBoxScoreTraditionalV2:
-        def __init__(self, *, game_id: str, timeout: int) -> None:
+        def __init__(self, *, game_id: str, timeout: float) -> None:
             assert game_id == "0022500106"
-            assert timeout == 7
+            assert 0 < timeout <= 7
             calls.append("v2")
 
         def get_dict(self) -> dict[str, object]:
@@ -1197,3 +1198,85 @@ def test_default_boxscore_fetch_falls_back_to_v2_when_v3_returns_invalid_payload
 
     assert payload == {"resultSets": []}
     assert calls == ["v3", "v2"]
+
+
+def test_default_scoreboard_fetch_skips_v2_when_v3_exhausts_timeout_budget(monkeypatch) -> None:
+    calls: list[str] = []
+
+    class FakeScoreboardV3:
+        def __init__(self, *, game_date: str, timeout: float) -> None:
+            assert game_date == "2025-02-10"
+            assert timeout == 7
+
+        def get_dict(self) -> dict[str, object]:
+            calls.append("v3")
+            raise TimeoutError("v3 scoreboard timed out")
+
+    class FakeScoreboardV2:
+        def __init__(self, *, game_date: str, timeout: float) -> None:
+            calls.append("v2")
+
+        def get_dict(self) -> dict[str, object]:
+            return {"resultSets": []}
+
+    fake_endpoints = types.ModuleType("nba_api.stats.endpoints")
+    fake_endpoints.scoreboardv3 = types.SimpleNamespace(ScoreboardV3=FakeScoreboardV3)
+    fake_endpoints.scoreboardv2 = types.SimpleNamespace(ScoreboardV2=FakeScoreboardV2)
+
+    fake_stats = types.ModuleType("nba_api.stats")
+    fake_stats.endpoints = fake_endpoints
+
+    fake_nba_api = types.ModuleType("nba_api")
+    fake_nba_api.stats = fake_stats
+
+    monkeypatch.setitem(sys.modules, "nba_api", fake_nba_api)
+    monkeypatch.setitem(sys.modules, "nba_api.stats", fake_stats)
+    monkeypatch.setitem(sys.modules, "nba_api.stats.endpoints", fake_endpoints)
+    monotonic_values = iter((100.0, 107.1))
+    monkeypatch.setattr(provider_module.time, "monotonic", lambda: next(monotonic_values))
+
+    with pytest.raises(TimeoutError, match="scoreboard fallback request"):
+        _default_scoreboard_fetch(date(2025, 2, 10), 7)
+
+    assert calls == ["v3"]
+
+
+def test_default_boxscore_fetch_skips_v2_when_v3_exhausts_timeout_budget(monkeypatch) -> None:
+    calls: list[str] = []
+
+    class FakeBoxScoreTraditionalV3:
+        def __init__(self, *, game_id: str, timeout: float) -> None:
+            assert game_id == "0022500106"
+            assert timeout == 7
+
+        def get_dict(self) -> dict[str, object]:
+            calls.append("v3")
+            raise TimeoutError("v3 boxscore timed out")
+
+    class FakeBoxScoreTraditionalV2:
+        def __init__(self, *, game_id: str, timeout: float) -> None:
+            calls.append("v2")
+
+        def get_dict(self) -> dict[str, object]:
+            return {"resultSets": []}
+
+    fake_endpoints = types.ModuleType("nba_api.stats.endpoints")
+    fake_endpoints.boxscoretraditionalv3 = types.SimpleNamespace(BoxScoreTraditionalV3=FakeBoxScoreTraditionalV3)
+    fake_endpoints.boxscoretraditionalv2 = types.SimpleNamespace(BoxScoreTraditionalV2=FakeBoxScoreTraditionalV2)
+
+    fake_stats = types.ModuleType("nba_api.stats")
+    fake_stats.endpoints = fake_endpoints
+
+    fake_nba_api = types.ModuleType("nba_api")
+    fake_nba_api.stats = fake_stats
+
+    monkeypatch.setitem(sys.modules, "nba_api", fake_nba_api)
+    monkeypatch.setitem(sys.modules, "nba_api.stats", fake_stats)
+    monkeypatch.setitem(sys.modules, "nba_api.stats.endpoints", fake_endpoints)
+    monotonic_values = iter((200.0, 207.1))
+    monkeypatch.setattr(provider_module.time, "monotonic", lambda: next(monotonic_values))
+
+    with pytest.raises(TimeoutError, match="boxscore fallback request"):
+        _default_boxscore_fetch("0022500106", 7)
+
+    assert calls == ["v3"]

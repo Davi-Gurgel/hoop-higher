@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     nba_api_timeout_seconds: int = 20
     nba_api_max_retries: int = 1
     nba_api_retry_delay_seconds: float = 1.0
-    nba_api_fetch_concurrency: int = 5
+    nba_api_fetch_concurrency: int = 8
     nba_api_startup_games: int = 5
     game_start_timeout_seconds: float = 45.0
     historical_max_date_probes: int = 10

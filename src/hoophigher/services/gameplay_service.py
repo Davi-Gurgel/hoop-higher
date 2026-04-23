@@ -24,11 +24,31 @@ DEFAULT_HISTORICAL_START_YEAR = 2010
 DEFAULT_HISTORICAL_END_YEAR = 2020
 DEFAULT_HISTORICAL_ROUNDS = 5
 DEFAULT_HISTORICAL_MAX_DATE_PROBES = 10
-DEFAULT_PLAYABLE_GAME_FETCH_CONCURRENCY = 5
+DEFAULT_PLAYABLE_GAME_FETCH_CONCURRENCY = 8
 DEFAULT_NON_HISTORICAL_STARTUP_GAMES = 5
 
-# NBA regular season months where games are almost guaranteed.
-_NBA_SEASON_MONTHS = (10, 11, 12, 1, 2, 3, 4)
+# Weighted toward the middle of the NBA regular season, where full slates are
+# more common and startup probes are less likely to land on sparse dates.
+_NBA_HISTORICAL_PROBE_MONTHS = (
+    10,
+    11,
+    11,
+    11,
+    12,
+    12,
+    12,
+    1,
+    1,
+    1,
+    2,
+    2,
+    2,
+    3,
+    3,
+    3,
+    4,
+)
+_NBA_HISTORICAL_PREFERRED_WEEKDAYS = (1, 2, 3, 4, 5)  # Tuesday-Saturday
 
 HistoricalEligibleDatesFetcher = Callable[[int, int, int], Awaitable[Sequence[date]]]
 
@@ -616,7 +636,7 @@ class GameplayService:
         end_year: int,
         count: int,
     ) -> tuple[date, ...]:
-        """Generate random dates during NBA season months within the year window."""
+        """Generate high-signal historical probe dates within the NBA season window."""
         candidates: list[date] = []
         attempts = 0
         max_attempts = count * 3  # guard against infinite loop
@@ -624,14 +644,29 @@ class GameplayService:
         while len(candidates) < count and attempts < max_attempts:
             attempts += 1
             year = self._rng.randint(start_year, end_year)
-            month = self._rng.choice(_NBA_SEASON_MONTHS)
+            month = self._rng.choice(_NBA_HISTORICAL_PROBE_MONTHS)
             max_day = calendar.monthrange(year, month)[1]
             day = self._rng.randint(1, max_day)
-            candidate = date(year, month, day)
+            candidate = self._normalize_historical_probe_date(date(year, month, day))
             if candidate not in seen:
                 seen.add(candidate)
                 candidates.append(candidate)
         return tuple(candidates)
+
+    def _normalize_historical_probe_date(self, candidate: date) -> date:
+        if candidate.weekday() in _NBA_HISTORICAL_PREFERRED_WEEKDAYS:
+            return candidate
+
+        max_day = calendar.monthrange(candidate.year, candidate.month)[1]
+        for offset in range(1, 4):
+            for direction in (1, -1):
+                adjusted_day = candidate.day + (offset * direction)
+                if adjusted_day < 1 or adjusted_day > max_day:
+                    continue
+                adjusted = date(candidate.year, candidate.month, adjusted_day)
+                if adjusted.weekday() in _NBA_HISTORICAL_PREFERRED_WEEKDAYS:
+                    return adjusted
+        return candidate
 
     def _require_active_run(self) -> _ActiveRun:
         if self._active_run is None:

@@ -99,6 +99,24 @@ class _NoShuffleRandom(Random):
         return list(population)[:k]
 
 
+class _FixedHistoricalProbeRandom(_NoShuffleRandom):
+    def __init__(self, *, years: list[int], months: list[int], days: list[int]) -> None:
+        super().__init__(1)
+        self._years = iter(years)
+        self._months = iter(months)
+        self._days = iter(days)
+
+    def randint(self, a: int, b: int) -> int:
+        if a == b:
+            return a
+        if a > 12:
+            return next(self._years)
+        return next(self._days)
+
+    def choice(self, seq):
+        return next(self._months)
+
+
 class _ShellBoxscoreProvider:
     def __init__(self, *, game_count: int, game_date: date) -> None:
         self.max_in_flight = 0
@@ -737,6 +755,34 @@ def test_historical_candidate_dates_can_use_shorter_playable_dates(tmp_path) -> 
 
     assert snapshot.source_date == date(2025, 1, 13)
     assert len(snapshot.games_today) == 2
+
+
+def test_generate_random_season_dates_biases_historical_probes_to_preferred_weekdays(
+    tmp_path,
+) -> None:
+    engine = _make_engine(tmp_path)
+    rng = _FixedHistoricalProbeRandom(
+        years=[2023, 2023, 2023, 2024, 2024, 2024, 2024],
+        months=[10, 11, 12, 1, 2, 3, 4],
+        days=[1, 1, 1, 1, 1, 1, 1],
+    )
+    service = GameplayService(engine=engine, provider=MockProvider(), rng=rng)
+
+    probe_dates = service._generate_random_season_dates(
+        start_year=2023,
+        end_year=2024,
+        count=7,
+    )
+
+    assert probe_dates == (
+        date(2023, 10, 3),
+        date(2023, 11, 1),
+        date(2023, 12, 1),
+        date(2024, 1, 2),
+        date(2024, 2, 1),
+        date(2024, 3, 1),
+        date(2024, 4, 2),
+    )
 
 
 def test_historical_can_start_without_candidate_dates_using_indexed_dates(tmp_path) -> None:

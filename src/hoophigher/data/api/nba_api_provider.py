@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 import warnings
 from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
@@ -16,8 +17,8 @@ from hoophigher.data.db import create_sqlite_engine, init_db, session_scope
 from hoophigher.domain.models import GameBoxScore
 from hoophigher.domain.models import PlayerLine, TeamGameInfo
 
-ScoreboardFetch = Callable[[date, int], Mapping[str, object]]
-BoxScoreFetch = Callable[[str, int], Mapping[str, object]]
+ScoreboardFetch = Callable[[date, float], Mapping[str, object]]
+BoxScoreFetch = Callable[[str, float], Mapping[str, object]]
 CacheRepositoryContextFactory = Callable[[], ContextManager[CacheRepository]]
 
 
@@ -190,7 +191,8 @@ class NBAApiProvider(StatsProvider):
         return cache_context
 
 
-def _default_scoreboard_fetch(game_date: date, timeout_seconds: int) -> Mapping[str, object]:
+def _default_scoreboard_fetch(game_date: date, timeout_seconds: float) -> Mapping[str, object]:
+    started_at = time.monotonic()
     try:
         from nba_api.stats.endpoints import scoreboardv3
     except ImportError:
@@ -209,16 +211,22 @@ def _default_scoreboard_fetch(game_date: date, timeout_seconds: int) -> Mapping[
             pass
 
     # Fallback for environments where V3 is unavailable or returns an unexpected shape.
+    remaining_timeout_seconds = _remaining_timeout_seconds(
+        timeout_seconds=timeout_seconds,
+        started_at=started_at,
+        operation_name="scoreboard",
+    )
     from nba_api.stats.endpoints import scoreboardv2
 
     endpoint_v2 = scoreboardv2.ScoreboardV2(
         game_date=game_date.isoformat(),
-        timeout=timeout_seconds,
+        timeout=remaining_timeout_seconds,
     )
     return endpoint_v2.get_dict()
 
 
-def _default_boxscore_fetch(game_id: str, timeout_seconds: int) -> Mapping[str, object]:
+def _default_boxscore_fetch(game_id: str, timeout_seconds: float) -> Mapping[str, object]:
+    started_at = time.monotonic()
     from nba_api.stats.endpoints import boxscoretraditionalv2, boxscoretraditionalv3
 
     try:
@@ -230,13 +238,30 @@ def _default_boxscore_fetch(game_id: str, timeout_seconds: int) -> Mapping[str, 
     except Exception:
         pass
 
+    remaining_timeout_seconds = _remaining_timeout_seconds(
+        timeout_seconds=timeout_seconds,
+        started_at=started_at,
+        operation_name="boxscore",
+    )
     with warnings.catch_warnings():
         warnings.simplefilter("ignore", DeprecationWarning)
         endpoint_v2 = boxscoretraditionalv2.BoxScoreTraditionalV2(
             game_id=game_id,
-            timeout=timeout_seconds,
+            timeout=remaining_timeout_seconds,
         )
     return endpoint_v2.get_dict()
+
+
+def _remaining_timeout_seconds(
+    *,
+    timeout_seconds: float,
+    started_at: float,
+    operation_name: str,
+) -> float:
+    remaining = timeout_seconds - (time.monotonic() - started_at)
+    if remaining <= 0:
+        raise TimeoutError(f"No timeout budget remaining for {operation_name} fallback request.")
+    return remaining
 
 
 def _looks_like_scoreboard_v3_payload(payload: object) -> bool:
