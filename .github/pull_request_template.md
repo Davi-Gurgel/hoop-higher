@@ -1,26 +1,35 @@
-## Resumo
-Descreva a mudança em 2 a 5 linhas.
+## Summary
 
-## Referência relacionada
-<!-- Informe uma issue, discussão ou contexto relacionado, se existir. -->
+<!-- What changed and why? Keep this to 2-5 concise lines. -->
 
-## O que foi implementado
-- item 1
-- item 2
-- item 3
+## Changes
 
-## Como validar
-- passo 1
-- passo 2
-- passo 3
+<!-- Use short bullets. Group by user-facing behavior, internal implementation, docs, or tests as needed. -->
+
+- 
+
+## Validation
+
+<!-- List the exact commands, checks, or manual steps used. If not run, state why. -->
+
+- 
+
+## Screenshots / Snapshots
+
+<!-- Required for visible TUI changes. Use "Not applicable" for non-visual changes. -->
+
+Not applicable
+
+## Risk & Rollback
+
+<!-- Note known risks, migration concerns, follow-up work, or how to revert safely. -->
+
+- 
 
 ## Checklist
-- [ ] escopo compatível com o objetivo da PR
-- [ ] testes adicionados ou atualizados
-- [ ] documentação atualizada, se necessário
-- [ ] sem acoplamento desnecessário entre camadas
-- [ ] sem código morto evidente
 
-## Riscos / observações
-- observação 1
-- observação 2
+- [ ] PR follows this template's section pattern.
+- [ ] Scope is focused and matches the PR title.
+- [ ] Tests, snapshots, or manual validation are documented above.
+- [ ] Documentation is updated when behavior, commands, or workflows change.
+- [ ] Layer boundaries are respected (`domain`, `data`, `services`, `tui`).
