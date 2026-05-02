@@ -158,12 +158,12 @@ class GameContextStrip(Vertical):
 
     def compose(self) -> ComposeResult:
         with Horizontal(id="context-meta"):
-            yield Label("", id="history-text")
-        yield Label("", id="active-game-title")
-        yield Label("", id="active-game-score")
+            yield Label("", id="history-text", markup=False)
+        yield Label("", id="active-game-title", markup=False)
+        yield Label("", id="active-game-score", markup=False)
         with Horizontal(id="games-tabs"):
             for index in range(self._total_games):
-                yield Label("", id=f"game-tab-{index}", classes="browser-tab")
+                yield Label("", id=f"game-tab-{index}", classes="browser-tab", markup=False)
 
     def update_snapshot(self, snapshot: GameplaySnapshot) -> None:
         self._update_header(snapshot.current_game)
@@ -257,10 +257,10 @@ class PlayerCard(Vertical):
         self._points_id = "mystery-label" if prefix == "pb" else f"{prefix}-pts"
 
     def compose(self) -> ComposeResult:
-        yield Label("", id=f"{self._prefix}-name", classes="player-name-label")
-        yield Label("", id=f"{self._prefix}-team", classes="player-team-label")
-        yield Label("", id=self._points_id, classes="player-pts-value")
-        yield Label("", id=f"{self._prefix}-minutes", classes="player-minutes-label")
+        yield Label("", id=f"{self._prefix}-name", classes="player-name-label", markup=False)
+        yield Label("", id=f"{self._prefix}-team", classes="player-team-label", markup=False)
+        yield Label("", id=self._points_id, classes="player-pts-value", markup=False)
+        yield Label("", id=f"{self._prefix}-minutes", classes="player-minutes-label", markup=False)
 
     def update_content(self, *, name: str, team: str, points: str, minutes: str) -> None:
         self.query_one(f"#{self._prefix}-name", Label).update(name)
@@ -428,8 +428,8 @@ class GuessBar(Vertical):
     """
 
     def compose(self) -> ComposeResult:
-        yield Label("", id="pb-compare")
-        yield Label("Use H/L or ←/→ + Enter", id="controls-hint")
+        yield Label("", id="pb-compare", markup=False)
+        yield Label("Use H/L or ←/→ + Enter", id="controls-hint", markup=False)
         with Horizontal(id="guess-actions"):
             yield GuessButton("▲  HIGHER  [H]", id="guess-higher", variant="success", classes="guess-btn")
             yield GuessButton("▼  LOWER  [L]", id="guess-lower", variant="error", classes="guess-btn")

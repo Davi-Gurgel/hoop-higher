@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import date
 
 import pytest
 from sqlmodel import Session
@@ -9,6 +10,7 @@ from textual.widgets import Button, Label
 import hoophigher.tui.screens.game as game_screen_module
 from hoophigher.data import RunRepository, create_sqlite_engine
 from hoophigher.domain.enums import RunEndReason
+from hoophigher.domain.models import GameBoxScore, PlayerLine, TeamGameInfo
 from hoophigher.app import HoopHigherApp
 
 
@@ -261,6 +263,65 @@ def test_game_screen_surfaces_active_game_context() -> None:
             assert app.screen.query_one(f"#game-tab-{current_game_index}", Label).has_class("browser-tab-active")
             assert player_a_name.visual.plain != ""
             assert player_b_name.visual.plain != ""
+
+    asyncio.run(scenario())
+
+
+def test_game_screen_renders_provider_strings_as_plain_text(monkeypatch: pytest.MonkeyPatch) -> None:
+    game = GameBoxScore(
+        game_id="markup-game-[red]1[/red]",
+        game_date=date(2025, 1, 12),
+        home_team=TeamGameInfo(
+            team_id="home",
+            name="Home [red]Team[/red]",
+            abbreviation="HOM [red]X[/red]",
+            score=101,
+        ),
+        away_team=TeamGameInfo(
+            team_id="away",
+            name="Away [blue]Team[/blue]",
+            abbreviation="AWY [blue]Y[/blue]",
+            score=99,
+        ),
+        player_lines=tuple(
+            PlayerLine(
+                player_id=f"p{index}",
+                player_name=f"Player {index} [red]Name[/red]",
+                team_id="home" if index % 2 == 0 else "away",
+                team_abbreviation="HOM [red]X[/red]" if index % 2 == 0 else "AWY [blue]Y[/blue]",
+                points=10 + index,
+                minutes=30 - index,
+            )
+            for index in range(1, 8)
+        ),
+    )
+
+    class MarkupProvider:
+        async def get_games_by_date(self, _game_date: date) -> list[GameBoxScore]:
+            return [game]
+
+        async def get_game_boxscore(
+            self,
+            _game_id: str,
+            *,
+            game_date_fallback: date | None = None,
+        ) -> GameBoxScore:
+            return game
+
+    monkeypatch.setattr("hoophigher.app.MockProvider", MarkupProvider)
+
+    async def scenario() -> None:
+        app = HoopHigherApp(database_url="sqlite://")
+
+        async with app.run_test() as pilot:
+            await pilot.press("enter")
+            await pilot.press("1")
+            await pilot.pause()
+
+            label_texts = _label_texts(app)
+
+            assert any("[RED]NAME[/RED]" in text for text in label_texts)
+            assert any("[red]X[/red]" in text for text in label_texts)
 
     asyncio.run(scenario())
 
