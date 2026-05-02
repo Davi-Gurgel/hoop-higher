@@ -71,7 +71,7 @@ class RoundSummaryScreen(ModalScreen[None]):
         sign = "+" if s.score_delta >= 0 else ""
         with DialogShell(id="summary-overlay"):
             yield Label(f"ROUND {s.round_index + 1} COMPLETE", id="summary-title")
-            yield Label(f"Game: {s.game_id}", classes="summary-stat")
+            yield Label(f"Game: {s.game_id}", classes="summary-stat", markup=False)
             yield Label(f"Date: {s.game_date:%d-%m-%Y}", classes="summary-stat")
             yield Label(
                 f"✓ {s.correct_answers}   ✕ {s.wrong_answers}   ({s.questions} questions)",
