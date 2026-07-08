@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Sequence
 
-from hoophigher.data.api.base import StatsSource
+from hoophigher.data.stats_sources.base import StatsSource
 from hoophigher.domain.models import NBAGame, PlayerLine, TeamGameInfo
 
 _MOCK_PLAYER_NAMES = (

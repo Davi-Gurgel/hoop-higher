@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import ContextManager
 
 from sqlalchemy.engine import Engine
-from hoophigher.data.api.base import StatsSource
+from hoophigher.data.stats_sources.base import StatsSource
 from hoophigher.data.cache_repository import CacheRepository
 from hoophigher.data.db import create_sqlite_engine, init_db, session_scope
 from hoophigher.domain.models import NBAGame

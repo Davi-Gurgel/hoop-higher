@@ -14,7 +14,7 @@ from hoophigher.data import (
     create_sqlite_engine,
     session_scope,
 )
-from hoophigher.data.api import MockStatsSource, NBAApiStatsSource
+from hoophigher.data.stats_sources import MockStatsSource, NBAApiStatsSource
 from hoophigher.domain.enums import GameMode
 from hoophigher.domain.models import NBAGame, PlayerLine, TeamGameInfo
 from hoophigher.services import GameplaySnapshot

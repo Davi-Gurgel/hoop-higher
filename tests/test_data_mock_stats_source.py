@@ -3,7 +3,7 @@ from datetime import date
 
 import pytest
 
-from hoophigher.data.api import MockStatsSource
+from hoophigher.data.stats_sources import MockStatsSource
 from hoophigher.domain.models import NBAGame
 
 

@@ -8,7 +8,7 @@ from textual.app import App
 
 from hoophigher.config import Settings
 from hoophigher.data import create_sqlite_engine, init_db
-from hoophigher.data.api import MockStatsSource, NBAApiStatsSource, StatsSource
+from hoophigher.data.stats_sources import MockStatsSource, NBAApiStatsSource, StatsSource
 from hoophigher.domain.enums import GameMode
 from hoophigher.services import (
     GameplayService,

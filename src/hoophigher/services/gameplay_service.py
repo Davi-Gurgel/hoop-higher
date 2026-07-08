@@ -10,7 +10,7 @@ from typing import Sequence
 
 from sqlalchemy.engine import Engine
 
-from hoophigher.data.api import StatsSource
+from hoophigher.data.stats_sources import StatsSource
 from hoophigher.data.db import session_scope
 from hoophigher.data.repositories import QuestionRepository, RoundRepository, RunRepository
 from hoophigher.data.schema import QuestionRecord, RoundRecord, RunRecord

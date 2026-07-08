@@ -6,9 +6,9 @@ from datetime import date
 
 import pytest
 
-import hoophigher.data.api.nba_api_stats_source as stats_source_module
+import hoophigher.data.stats_sources.nba_api_stats_source as stats_source_module
 from hoophigher.data import CacheRepository, create_sqlite_engine, init_db, session_scope
-from hoophigher.data.api.nba_api_stats_source import NBAApiStatsSource, _default_nba_game_fetch, _default_scoreboard_fetch
+from hoophigher.data.stats_sources.nba_api_stats_source import NBAApiStatsSource, _default_nba_game_fetch, _default_scoreboard_fetch
 from hoophigher.domain.models import NBAGame, PlayerLine, TeamGameInfo
 
 

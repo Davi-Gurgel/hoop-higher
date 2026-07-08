@@ -129,7 +129,7 @@ def test_run_state_tracks_score_and_streaks() -> None:
         score_delta=-60,
         revealed_points=12,
     )
-    run_state.apply_result(second_result, end_reason=RunEndReason.WRONG_ANSWER)
+    run_state.apply_result(second_result, end_reason=RunEndReason.WRONG_GUESS)
 
     assert run_state.score == 40
     assert run_state.correct_answers == 1
@@ -137,7 +137,7 @@ def test_run_state_tracks_score_and_streaks() -> None:
     assert run_state.total_answers == 2
     assert run_state.best_streak == 1
     assert run_state.current_streak == 0
-    assert run_state.end_reason is RunEndReason.WRONG_ANSWER
+    assert run_state.end_reason is RunEndReason.WRONG_GUESS
 
 
 def test_run_state_requires_active_round_before_applying_result() -> None:
@@ -217,7 +217,7 @@ def test_run_state_cannot_start_round_after_finish() -> None:
             score_delta=150,
             revealed_points=question.player_b.points,
         ),
-        end_reason=RunEndReason.WRONG_ANSWER,
+        end_reason=RunEndReason.WRONG_GUESS,
     )
 
     with pytest.raises(ValueError, match="finished run"):

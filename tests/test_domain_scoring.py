@@ -61,7 +61,7 @@ def test_calculate_score_delta_for_historical_mode() -> None:
 
 
 def test_get_run_end_reason_for_arcade_wrong_answer() -> None:
-    assert get_run_end_reason_for_guess(GameMode.ARCADE, is_correct=False) is RunEndReason.WRONG_ANSWER
+    assert get_run_end_reason_for_guess(GameMode.ARCADE, is_correct=False) is RunEndReason.WRONG_GUESS
 
 
 def test_get_run_end_reason_for_non_ending_answers() -> None:

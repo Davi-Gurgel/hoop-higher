@@ -27,7 +27,7 @@ def calculate_score_delta(mode: GameMode, *, is_correct: bool) -> int:
 
 def get_run_end_reason_for_guess(mode: GameMode, *, is_correct: bool) -> RunEndReason | None:
     if mode is GameMode.ARCADE and not is_correct:
-        return RunEndReason.WRONG_ANSWER
+        return RunEndReason.WRONG_GUESS
 
     if mode is GameMode.ENDLESS:
         return None

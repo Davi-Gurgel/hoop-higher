@@ -13,7 +13,7 @@ from hoophigher.data import (
     create_sqlite_engine,
     init_db,
 )
-from hoophigher.data.api import MockStatsSource
+from hoophigher.data.stats_sources import MockStatsSource
 from hoophigher.domain.enums import GameMode, GuessDirection, RunEndReason
 from hoophigher.domain.models import NBAGame, PlayerLine, TeamGameInfo
 from hoophigher.services import GameplayService
@@ -314,7 +314,7 @@ def test_arcade_ends_on_first_error(tmp_path) -> None:
     snapshot = service.snapshot()
 
     assert snapshot.is_finished is True
-    assert snapshot.end_reason is RunEndReason.WRONG_ANSWER
+    assert snapshot.end_reason is RunEndReason.WRONG_GUESS
     assert snapshot.score == 0
 
 
