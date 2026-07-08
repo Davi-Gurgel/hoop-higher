@@ -237,7 +237,9 @@ def test_app_keeps_mock_provider_startup_game_count_for_snapshots(monkeypatch) -
     asyncio.run(scenario())
 
 
-def test_start_game_passes_recent_candidate_dates_for_real_non_historical_provider(monkeypatch) -> None:
+def test_start_game_passes_recent_candidate_dates_for_real_non_historical_provider(
+    monkeypatch,
+) -> None:
     app = app_module.HoopHigherApp(database_url="sqlite://")
     app._uses_mock_provider = False
     app._recent_candidate_dates = (date(2025, 2, 10), date(2025, 2, 9))

@@ -96,13 +96,15 @@ class NBAApiProvider(StatsProvider):
                 games.append(_merge_game_seed(seed=seed, game=cached_game))
             else:
                 # Return a shell with no player lines — caller fetches on demand.
-                games.append(GameBoxScore(
-                    game_id=seed.game_id,
-                    game_date=seed.game_date,
-                    home_team=seed.home_team,
-                    away_team=seed.away_team,
-                    player_lines=(),
-                ))
+                games.append(
+                    GameBoxScore(
+                        game_id=seed.game_id,
+                        game_date=seed.game_date,
+                        home_team=seed.home_team,
+                        away_team=seed.away_team,
+                        player_lines=(),
+                    )
+                )
 
         games.sort(key=lambda game: game.game_id)
         with self._cache_repository_factory() as cache_repository:
@@ -274,7 +276,9 @@ def _looks_like_scoreboard_v3_payload(payload: object) -> bool:
     return isinstance(games, list)
 
 
-def _parse_scoreboard_payload(payload: Mapping[str, object], *, expected_date: date) -> list[_ScoreboardSeed]:
+def _parse_scoreboard_payload(
+    payload: Mapping[str, object], *, expected_date: date
+) -> list[_ScoreboardSeed]:
     v3_seeds = _parse_scoreboard_v3_payload(payload, expected_date=expected_date)
     if v3_seeds is not None:
         return v3_seeds
@@ -294,7 +298,9 @@ def _parse_scoreboard_v3_payload(
 
     games = scoreboard.get("games")
     if not isinstance(games, list):
-        raise ValueError("Malformed scoreboard payload: expected list at payload['scoreboard']['games'].")
+        raise ValueError(
+            "Malformed scoreboard payload: expected list at payload['scoreboard']['games']."
+        )
 
     seeds: list[_ScoreboardSeed] = []
     for raw_game in games:
@@ -359,7 +365,9 @@ def _parse_scoreboard_v2_payload(
             field="resultSets.GameHeader.GAME_DATE_EST",
             fallback=expected_date,
         )
-        home_team_id = _require_str(row.get("HOME_TEAM_ID"), field="resultSets.GameHeader.HOME_TEAM_ID")
+        home_team_id = _require_str(
+            row.get("HOME_TEAM_ID"), field="resultSets.GameHeader.HOME_TEAM_ID"
+        )
         away_team_id = _require_str(
             row.get("VISITOR_TEAM_ID"),
             field="resultSets.GameHeader.VISITOR_TEAM_ID",
@@ -405,8 +413,12 @@ def _parse_v2_result_set(
         parsed_rows: list[dict[str, object]] = []
         for raw_row in row_set:
             if not isinstance(raw_row, list):
-                raise ValueError(f"Malformed payload: expected list rows in resultSets.{set_name}.rowSet.")
-            parsed_rows.append(dict(zip([str(header) for header in headers], raw_row, strict=False)))
+                raise ValueError(
+                    f"Malformed payload: expected list rows in resultSets.{set_name}.rowSet."
+                )
+            parsed_rows.append(
+                dict(zip([str(header) for header in headers], raw_row, strict=False))
+            )
         return parsed_rows
     if optional:
         return []
@@ -420,7 +432,9 @@ def _parse_boxscore_payload(
     game_date_fallback: date | None = None,
 ) -> GameBoxScore:
     if "boxScoreTraditional" in payload:
-        box = _require_mapping(payload.get("boxScoreTraditional"), field="payload['boxScoreTraditional']")
+        box = _require_mapping(
+            payload.get("boxScoreTraditional"), field="payload['boxScoreTraditional']"
+        )
         return _parse_boxscore_v3_payload(
             box,
             expected_game_id=expected_game_id,
@@ -464,9 +478,10 @@ def _parse_boxscore_v3_payload(
 
     flat_players_raw = box.get("playersStats") or box.get("playerStats")
     if flat_players_raw is None:
-        players = (
-            _parse_v3_nested_player_rows(home_raw, team=home_team, field="boxScoreTraditional.homeTeam.players")
-            + _parse_v3_nested_player_rows(away_raw, team=away_team, field="boxScoreTraditional.awayTeam.players")
+        players = _parse_v3_nested_player_rows(
+            home_raw, team=home_team, field="boxScoreTraditional.homeTeam.players"
+        ) + _parse_v3_nested_player_rows(
+            away_raw, team=away_team, field="boxScoreTraditional.awayTeam.players"
         )
     else:
         players = _parse_player_rows(
@@ -496,8 +511,12 @@ def _parse_boxscore_v2_payload(
 
     target_header = _find_v2_game_summary(game_headers, expected_game_id=expected_game_id)
     game_date = _parse_v2_game_date(target_header, game_date_fallback=game_date_fallback)
-    home_team_id = _optional_str(target_header.get("HOME_TEAM_ID")) if target_header is not None else None
-    away_team_id = _optional_str(target_header.get("VISITOR_TEAM_ID")) if target_header is not None else None
+    home_team_id = (
+        _optional_str(target_header.get("HOME_TEAM_ID")) if target_header is not None else None
+    )
+    away_team_id = (
+        _optional_str(target_header.get("VISITOR_TEAM_ID")) if target_header is not None else None
+    )
 
     teams_by_id: dict[str, TeamGameInfo] = {}
     for row in team_rows:
@@ -509,11 +528,14 @@ def _parse_boxscore_v2_payload(
             continue
         teams_by_id[team_id] = TeamGameInfo(
             team_id=team_id,
-            name=_optional_str(row.get("TEAM_NAME")) or _require_str(
+            name=_optional_str(row.get("TEAM_NAME"))
+            or _require_str(
                 row.get("TEAM_ABBREVIATION"),
                 field="TeamStats.TEAM_ABBREVIATION",
             ),
-            abbreviation=_require_str(row.get("TEAM_ABBREVIATION"), field="TeamStats.TEAM_ABBREVIATION"),
+            abbreviation=_require_str(
+                row.get("TEAM_ABBREVIATION"), field="TeamStats.TEAM_ABBREVIATION"
+            ),
             score=_optional_int(row.get("PTS")),
         )
 
@@ -523,7 +545,9 @@ def _parse_boxscore_v2_payload(
         away_team_id=away_team_id,
     )
     if home_team is None or away_team is None:
-        raise ValueError("Malformed boxscore payload: missing TeamStats rows for home or away team.")
+        raise ValueError(
+            "Malformed boxscore payload: missing TeamStats rows for home or away team."
+        )
 
     players = _parse_player_rows(
         [
@@ -599,7 +623,9 @@ def _parse_team(
     score_keys: Sequence[str],
 ) -> TeamGameInfo:
     team_id = _require_str(_first_value(payload, team_id_keys), field=f"{field}.teamId")
-    abbreviation = _require_str(_first_value(payload, abbreviation_keys), field=f"{field}.abbreviation")
+    abbreviation = _require_str(
+        _first_value(payload, abbreviation_keys), field=f"{field}.abbreviation"
+    )
     name = _optional_str(_first_value(payload, name_keys)) or abbreviation
     score = _optional_int(_first_value(payload, score_keys))
     return TeamGameInfo(team_id=team_id, name=name, abbreviation=abbreviation, score=score)
@@ -614,7 +640,9 @@ def _parse_boxscore_v3_team(payload: Mapping[str, object], *, field: str) -> Tea
     name = _optional_str(payload.get("teamName")) or abbreviation
     statistics = payload.get("statistics")
     stats = statistics if isinstance(statistics, Mapping) else {}
-    score = _optional_int(payload.get("score") if payload.get("score") is not None else stats.get("points"))
+    score = _optional_int(
+        payload.get("score") if payload.get("score") is not None else stats.get("points")
+    )
     return TeamGameInfo(team_id=team_id, name=name, abbreviation=abbreviation, score=score)
 
 
@@ -653,7 +681,9 @@ def _parse_player_rows(
         if not player_name:
             raise ValueError(f"Malformed payload: missing player name in {field}.")
 
-        team_id = _optional_str(row.get("teamId") or row.get("TEAM_ID")) or (team.team_id if team else None)
+        team_id = _optional_str(row.get("teamId") or row.get("TEAM_ID")) or (
+            team.team_id if team else None
+        )
         team_abbreviation = _optional_str(
             row.get("teamTricode") or row.get("teamAbbreviation") or row.get("TEAM_ABBREVIATION")
         ) or (team.abbreviation if team else None)
@@ -665,7 +695,9 @@ def _parse_player_rows(
                 player_id=player_id,
                 player_name=player_name,
                 team_id=_require_str(team_id, field=f"{field}.teamId"),
-                team_abbreviation=_require_str(team_abbreviation, field=f"{field}.teamAbbreviation"),
+                team_abbreviation=_require_str(
+                    team_abbreviation, field=f"{field}.teamAbbreviation"
+                ),
                 points=points,
                 minutes=minutes,
             )
@@ -674,7 +706,9 @@ def _parse_player_rows(
 
 
 def _parse_player_name(row: Mapping[str, object]) -> str | None:
-    explicit_name = _optional_str(row.get("name") or row.get("playerName") or row.get("PLAYER_NAME"))
+    explicit_name = _optional_str(
+        row.get("name") or row.get("playerName") or row.get("PLAYER_NAME")
+    )
     if explicit_name:
         return explicit_name
     first_name = _optional_str(row.get("firstName"))

@@ -17,7 +17,11 @@ from hoophigher.data.schema import QuestionRecord, RoundRecord, RunRecord
 from hoophigher.domain.enums import GameMode, GuessDirection, RunEndReason
 from hoophigher.domain.models import GameBoxScore, Question, QuestionResult, RoundProgress, RunState
 from hoophigher.domain.round_generator import generate_round
-from hoophigher.domain.scoring import calculate_score_delta, get_run_end_reason_for_answer, is_guess_correct
+from hoophigher.domain.scoring import (
+    calculate_score_delta,
+    get_run_end_reason_for_answer,
+    is_guess_correct,
+)
 
 MIN_HISTORICAL_GAMES = 5
 DEFAULT_HISTORICAL_START_YEAR = 2010
@@ -105,7 +109,9 @@ class GameplayService:
         historical_eligible_dates_fetcher: HistoricalEligibleDatesFetcher | None = None,
     ) -> None:
         if historical_start_year > historical_end_year:
-            raise ValueError("historical_start_year must be less than or equal to historical_end_year.")
+            raise ValueError(
+                "historical_start_year must be less than or equal to historical_end_year."
+            )
         if historical_rounds < 1:
             raise ValueError("historical_rounds must be at least 1.")
         if historical_max_date_probes < 1:
@@ -423,9 +429,7 @@ class GameplayService:
             ),
         )
         if not full_games:
-            raise LookupError(
-                f"No playable games found for source date: {source_date.isoformat()}"
-            )
+            raise LookupError(f"No playable games found for source date: {source_date.isoformat()}")
         if mode is GameMode.HISTORICAL:
             return source_date, self._sample_historical_games(source_date, full_games)
         return source_date, full_games
@@ -684,9 +688,7 @@ class GameplayService:
     ) -> tuple[GameBoxScore, ...]:
         total_games = len(games_for_date)
         if total_games < 1:
-            raise LookupError(
-                f"Historical date {selected_date.isoformat()} has no playable games."
-            )
+            raise LookupError(f"Historical date {selected_date.isoformat()} has no playable games.")
 
         sampled_games = self._rng.sample(
             games_for_date,

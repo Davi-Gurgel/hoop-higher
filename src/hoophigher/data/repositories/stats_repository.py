@@ -27,7 +27,9 @@ class StatsRepository:
         return int(self.session.exec(statement).one())
 
     def list_questions(self) -> list[QuestionRecord]:
-        statement = select(QuestionRecord).order_by(QuestionRecord.created_at.asc(), QuestionRecord.id.asc())
+        statement = select(QuestionRecord).order_by(
+            QuestionRecord.created_at.asc(), QuestionRecord.id.asc()
+        )
         return list(self.session.exec(statement))
 
     def count_questions(self) -> int:
@@ -39,7 +41,9 @@ class StatsRepository:
         return int(self.session.exec(statement).one())
 
     def count_wrong_questions(self) -> int:
-        statement = select(func.count(QuestionRecord.id)).where(QuestionRecord.is_correct.is_(False))
+        statement = select(func.count(QuestionRecord.id)).where(
+            QuestionRecord.is_correct.is_(False)
+        )
         return int(self.session.exec(statement).one())
 
     def best_score(self) -> int | None:

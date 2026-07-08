@@ -41,9 +41,7 @@ def _make_service_game(
             player_name=f"Player {index}",
             team_id=away_team.team_id if index <= split_index else home_team.team_id,
             team_abbreviation=(
-                away_team.abbreviation
-                if index <= split_index
-                else home_team.abbreviation
+                away_team.abbreviation if index <= split_index else home_team.abbreviation
             ),
             points=player_points,
             minutes=minutes,
@@ -126,8 +124,12 @@ class _ShellBoxscoreProvider:
             GameBoxScore(
                 game_id=f"shell-game-{index}",
                 game_date=game_date,
-                home_team=TeamGameInfo(team_id=f"h-{index}", name="Home", abbreviation="HOM", score=110),
-                away_team=TeamGameInfo(team_id=f"a-{index}", name="Away", abbreviation="AWY", score=103),
+                home_team=TeamGameInfo(
+                    team_id=f"h-{index}", name="Home", abbreviation="HOM", score=110
+                ),
+                away_team=TeamGameInfo(
+                    team_id=f"a-{index}", name="Away", abbreviation="AWY", score=103
+                ),
                 player_lines=(),
             )
             for index in range(1, game_count + 1)
@@ -161,8 +163,12 @@ class _SlowFirstShellProvider:
             GameBoxScore(
                 game_id=f"shell-game-{index}",
                 game_date=game_date,
-                home_team=TeamGameInfo(team_id=f"h-{index}", name="Home", abbreviation="HOM", score=110),
-                away_team=TeamGameInfo(team_id=f"a-{index}", name="Away", abbreviation="AWY", score=103),
+                home_team=TeamGameInfo(
+                    team_id=f"h-{index}", name="Home", abbreviation="HOM", score=110
+                ),
+                away_team=TeamGameInfo(
+                    team_id=f"a-{index}", name="Away", abbreviation="AWY", score=103
+                ),
                 player_lines=(),
             )
             for index in range(1, game_count + 1)
@@ -835,7 +841,9 @@ def test_historical_selected_date_belongs_to_indexed_eligible_set(tmp_path) -> N
 class _ManyGamesProvider:
     def __init__(self) -> None:
         game_date = date(2018, 2, 14)
-        self._games = tuple(self._build_game(game_date=game_date, index=index) for index in range(1, 8))
+        self._games = tuple(
+            self._build_game(game_date=game_date, index=index) for index in range(1, 8)
+        )
         self._games_by_id = {game.game_id: game for game in self._games}
 
     async def get_games_by_date(self, game_date: date) -> list[GameBoxScore]:
@@ -856,8 +864,12 @@ class _ManyGamesProvider:
         return GameBoxScore(
             game_id=game_id,
             game_date=game_date,
-            home_team=TeamGameInfo(team_id=f"h-{index}", name="Home", abbreviation="HOM", score=110),
-            away_team=TeamGameInfo(team_id=f"a-{index}", name="Away", abbreviation="AWY", score=103),
+            home_team=TeamGameInfo(
+                team_id=f"h-{index}", name="Home", abbreviation="HOM", score=110
+            ),
+            away_team=TeamGameInfo(
+                team_id=f"a-{index}", name="Away", abbreviation="AWY", score=103
+            ),
             player_lines=(
                 PlayerLine(
                     player_id=f"{game_id}-p1",

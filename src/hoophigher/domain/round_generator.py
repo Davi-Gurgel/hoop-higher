@@ -115,7 +115,9 @@ def _search_question_path(
     by_source: dict[str, tuple[QuestionCandidate, ...]],
     total_questions: int,
 ) -> tuple[Question, ...] | None:
-    all_candidates = tuple(candidate for candidates in by_source.values() for candidate in candidates)
+    all_candidates = tuple(
+        candidate for candidates in by_source.values() for candidate in candidates
+    )
 
     for starting_candidate in _sort_candidates_for_target(
         all_candidates,
@@ -153,8 +155,7 @@ def _search_from_candidate(
     next_candidates = tuple(
         candidate
         for candidate in by_source.get(next_source_id, ())
-        if candidate.matchup_key not in used_matchups
-        and candidate.target_id not in seen_player_ids
+        if candidate.matchup_key not in used_matchups and candidate.target_id not in seen_player_ids
     )
 
     for candidate in _sort_candidates_for_target(

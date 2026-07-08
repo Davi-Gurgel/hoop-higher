@@ -263,8 +263,7 @@ class GameScreen(Screen[None]):
 
         previous_snapshot = self._snapshot
         was_last_question = (
-            previous_snapshot.question_index
-            == previous_snapshot.total_questions - 1
+            previous_snapshot.question_index == previous_snapshot.total_questions - 1
         )
 
         result = await self.app.gameplay_service.submit_answer(guess)
@@ -319,15 +318,9 @@ class GameScreen(Screen[None]):
                 game_id=previous_snapshot.game_id,
                 game_date=previous_snapshot.current_game.game_date,
                 questions=len(self._round_history),
-                correct_answers=sum(
-                    1 for item in self._round_history if item.is_correct
-                ),
-                wrong_answers=sum(
-                    1 for item in self._round_history if not item.is_correct
-                ),
-                score_delta=sum(
-                    item.score_delta for item in self._round_history
-                ),
+                correct_answers=sum(1 for item in self._round_history if item.is_correct),
+                wrong_answers=sum(1 for item in self._round_history if not item.is_correct),
+                score_delta=sum(item.score_delta for item in self._round_history),
             )
             self._round_history.clear()
             self.app.push_screen(RoundSummaryScreen(summary))
@@ -397,9 +390,7 @@ class GameScreen(Screen[None]):
             f"{question.player_a.points} pts?"
         )
 
-    def _show_reveal(
-        self, revealed_points: int, is_correct: bool, score_delta: int
-    ) -> None:
+    def _show_reveal(self, revealed_points: int, is_correct: bool, score_delta: int) -> None:
         """Flash feedback bar and reveal Player B's points."""
         feedback = self.query_one("#feedback-bar", Label)
         feedback.remove_class("feedback-correct", "feedback-wrong")

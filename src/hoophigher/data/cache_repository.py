@@ -34,7 +34,9 @@ class CacheRepository:
         return _deserialize_game_boxscore(record.payload_json)
 
     def set_game_boxscore(self, game: GameBoxScore) -> CachedGameStatsRecord:
-        record = CachedGameStatsRecord(game_id=game.game_id, payload_json=_serialize_game_boxscore(game))
+        record = CachedGameStatsRecord(
+            game_id=game.game_id, payload_json=_serialize_game_boxscore(game)
+        )
         record = self.session.merge(record)
         self.session.flush()
         self.session.refresh(record)
