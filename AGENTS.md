@@ -45,3 +45,17 @@ Pull requests must always follow `.github/pull_request_template.md` and keep its
 ## Security & Configuration Tips
 
 Configuration is handled through `src/hoophigher/config.py` with `pydantic-settings`. Environment variables must use the `HOOPHIGHER_` prefix. Keep secrets out of version control; use `.env.example` as the public reference for expected settings.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and PRDs are tracked in GitHub Issues for this repository. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Triage uses the default five-label vocabulary: `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, and `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+This is a single-context repo: use root `CONTEXT.md` and root `docs/adr/` when present. See `docs/agents/domain.md`.
