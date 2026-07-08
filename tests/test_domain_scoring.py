@@ -38,7 +38,7 @@ def make_question(*, points_a: int, points_b: int) -> Question:
     )
 
 
-def test_is_guess_correct_matches_question_answer() -> None:
+def test_is_guess_correct_matches_question_correct_guess() -> None:
     question = make_question(points_a=21, points_b=24)
 
     assert is_guess_correct(question, GuessDirection.HIGHER) is True

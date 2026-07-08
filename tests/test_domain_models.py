@@ -65,7 +65,7 @@ def test_game_box_score_filters_eligible_players() -> None:
     assert game.eligible_player_lines == (eligible_player,)
 
 
-def test_question_answer_is_higher_when_player_b_scores_more() -> None:
+def test_question_correct_guess_is_higher_when_player_b_scores_more() -> None:
     question = Question(
         player_a=make_player(player_id="1", points=20),
         player_b=make_player(player_id="2", points=24),
