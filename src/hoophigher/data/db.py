@@ -17,9 +17,7 @@ DEFAULT_SQLITE_URL = f"sqlite:///{Path('var/hoophigher.db').resolve()}"
 _ALLOWED_SQLITE_JOURNAL_MODES: Final[frozenset[str]] = frozenset(
     {"DELETE", "TRUNCATE", "PERSIST", "MEMORY", "WAL", "OFF"}
 )
-_ALLOWED_SQLITE_SYNCHRONOUS: Final[frozenset[str]] = frozenset(
-    {"OFF", "NORMAL", "FULL", "EXTRA"}
-)
+_ALLOWED_SQLITE_SYNCHRONOUS: Final[frozenset[str]] = frozenset({"OFF", "NORMAL", "FULL", "EXTRA"})
 
 
 def create_sqlite_engine(

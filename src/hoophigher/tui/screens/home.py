@@ -54,7 +54,9 @@ class HomeScreen(Screen[None]):
             yield Label("🏀  HOOP HIGHER", id="home-logo")
             yield Label("Can you guess who scored more?", id="home-subtitle")
             yield Button("▶  Play  [Enter]", id="start-game", variant="success", classes="home-btn")
-            yield Button("🏆  Leaderboard  [L]", id="open-leaderboard", variant="primary", classes="home-btn")
+            yield Button(
+                "🏆  Leaderboard  [L]", id="open-leaderboard", variant="primary", classes="home-btn"
+            )
             yield Button("📊  Stats  [S]", id="open-stats", variant="default", classes="home-btn")
             yield Button("✕  Quit  [Q]", id="quit-game", variant="error", classes="home-btn")
         yield Footer()

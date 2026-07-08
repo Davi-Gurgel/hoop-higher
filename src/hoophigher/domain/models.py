@@ -150,7 +150,9 @@ class RunState:
         self.rounds.append(round_progress)
         return round_progress
 
-    def apply_result(self, result: QuestionResult, *, end_reason: RunEndReason | None = None) -> None:
+    def apply_result(
+        self, result: QuestionResult, *, end_reason: RunEndReason | None = None
+    ) -> None:
         round_progress = self.current_round
         if round_progress is None:
             raise ValueError("Cannot apply a result without an active round.")

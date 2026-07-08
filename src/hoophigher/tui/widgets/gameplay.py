@@ -431,8 +431,12 @@ class GuessBar(Vertical):
         yield Label("", id="pb-compare", markup=False)
         yield Label("Use H/L or ←/→ + Enter", id="controls-hint", markup=False)
         with Horizontal(id="guess-actions"):
-            yield GuessButton("▲  HIGHER  [H]", id="guess-higher", variant="success", classes="guess-btn")
-            yield GuessButton("▼  LOWER  [L]", id="guess-lower", variant="error", classes="guess-btn")
+            yield GuessButton(
+                "▲  HIGHER  [H]", id="guess-higher", variant="success", classes="guess-btn"
+            )
+            yield GuessButton(
+                "▼  LOWER  [L]", id="guess-lower", variant="error", classes="guess-btn"
+            )
 
     def set_prompt(self, text: str) -> None:
         self.query_one("#pb-compare", Label).update(text)

@@ -84,9 +84,13 @@ class ModeSelectScreen(Screen[None]):
                 classes="mode-description",
             )
             yield Label("", id="mode-loading-status")
-            yield Button("♾  Endless  [1]", id="mode-endless", variant="primary", classes="mode-btn")
+            yield Button(
+                "♾  Endless  [1]", id="mode-endless", variant="primary", classes="mode-btn"
+            )
             yield Button("🕹  Arcade  [2]", id="mode-arcade", variant="warning", classes="mode-btn")
-            yield Button("📅  Historical  [3]", id="mode-historical", variant="default", classes="mode-btn")
+            yield Button(
+                "📅  Historical  [3]", id="mode-historical", variant="default", classes="mode-btn"
+            )
             yield Button("←  Back  [Esc]", id="mode-back", variant="default", classes="mode-btn")
         yield Footer()
 

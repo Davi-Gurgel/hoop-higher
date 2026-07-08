@@ -61,7 +61,10 @@ def test_calculate_score_delta_for_historical_mode() -> None:
 
 
 def test_get_run_end_reason_for_arcade_wrong_answer() -> None:
-    assert get_run_end_reason_for_answer(GameMode.ARCADE, is_correct=False) is RunEndReason.WRONG_ANSWER
+    assert (
+        get_run_end_reason_for_answer(GameMode.ARCADE, is_correct=False)
+        is RunEndReason.WRONG_ANSWER
+    )
 
 
 def test_get_run_end_reason_for_non_ending_answers() -> None:
@@ -70,4 +73,3 @@ def test_get_run_end_reason_for_non_ending_answers() -> None:
     assert get_run_end_reason_for_answer(GameMode.ENDLESS, is_correct=False) is None
     assert get_run_end_reason_for_answer(GameMode.HISTORICAL, is_correct=True) is None
     assert get_run_end_reason_for_answer(GameMode.HISTORICAL, is_correct=False) is None
-

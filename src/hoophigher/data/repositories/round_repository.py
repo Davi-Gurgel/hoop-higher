@@ -46,5 +46,9 @@ class RoundRepository:
         return self.session.get(RoundRecord, round_id)
 
     def list_by_run(self, run_id: int) -> list[RoundRecord]:
-        statement = select(RoundRecord).where(RoundRecord.run_id == run_id).order_by(RoundRecord.round_index.asc())
+        statement = (
+            select(RoundRecord)
+            .where(RoundRecord.run_id == run_id)
+            .order_by(RoundRecord.round_index.asc())
+        )
         return list(self.session.exec(statement))

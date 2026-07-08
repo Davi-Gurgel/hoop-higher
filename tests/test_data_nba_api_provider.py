@@ -8,7 +8,11 @@ import pytest
 
 import hoophigher.data.api.nba_api_provider as provider_module
 from hoophigher.data import CacheRepository, create_sqlite_engine, init_db, session_scope
-from hoophigher.data.api.nba_api_provider import NBAApiProvider, _default_boxscore_fetch, _default_scoreboard_fetch
+from hoophigher.data.api.nba_api_provider import (
+    NBAApiProvider,
+    _default_boxscore_fetch,
+    _default_scoreboard_fetch,
+)
 from hoophigher.domain.models import GameBoxScore, PlayerLine, TeamGameInfo
 
 
@@ -297,7 +301,9 @@ def test_get_game_boxscore_accepts_date_fallback_for_v3_payload_without_game_dat
     )
 
     assert game.game_date == date(2025, 1, 12)
-    assert [(player.player_name, player.minutes, player.points) for player in game.player_lines] == [
+    assert [
+        (player.player_name, player.minutes, player.points) for player in game.player_lines
+    ] == [
         ("Player One", 34, 31),
         ("Player Two", 31, 24),
     ]
@@ -603,7 +609,10 @@ def test_get_games_by_date_parses_nested_v3_boxscore_shape(tmp_path) -> None:
 
     # Fetch the full boxscore on demand.
     full_game = asyncio.run(provider.get_game_boxscore("0022500104"))
-    assert [(player.player_name, player.team_abbreviation, player.minutes, player.points) for player in full_game.player_lines] == [
+    assert [
+        (player.player_name, player.team_abbreviation, player.minutes, player.points)
+        for player in full_game.player_lines
+    ] == [
         ("Player One", "ATL", 12, 17),
         ("Player Two", "BOS", 9, 8),
     ]
@@ -694,7 +703,10 @@ def test_get_games_by_date_parses_v2_boxscore_without_game_summary(tmp_path) -> 
 
     # Fetch the full boxscore on demand.
     full_game = asyncio.run(provider.get_game_boxscore("0022500105"))
-    assert [(player.player_name, player.team_abbreviation, player.minutes, player.points) for player in full_game.player_lines] == [
+    assert [
+        (player.player_name, player.team_abbreviation, player.minutes, player.points)
+        for player in full_game.player_lines
+    ] == [
         ("Player One", "ATL", 12, 17),
         ("Player Two", "BOS", 9, 8),
     ]
@@ -1161,7 +1173,9 @@ def test_default_scoreboard_fetch_falls_back_to_v2_when_v3_raises(monkeypatch) -
     assert calls == ["v3", "v2"]
 
 
-def test_default_boxscore_fetch_falls_back_to_v2_when_v3_returns_invalid_payload(monkeypatch) -> None:
+def test_default_boxscore_fetch_falls_back_to_v2_when_v3_returns_invalid_payload(
+    monkeypatch,
+) -> None:
     calls: list[str] = []
 
     class FakeBoxScoreTraditionalV3:
@@ -1181,8 +1195,12 @@ def test_default_boxscore_fetch_falls_back_to_v2_when_v3_returns_invalid_payload
             return {"resultSets": []}
 
     fake_endpoints = types.ModuleType("nba_api.stats.endpoints")
-    fake_endpoints.boxscoretraditionalv3 = types.SimpleNamespace(BoxScoreTraditionalV3=FakeBoxScoreTraditionalV3)
-    fake_endpoints.boxscoretraditionalv2 = types.SimpleNamespace(BoxScoreTraditionalV2=FakeBoxScoreTraditionalV2)
+    fake_endpoints.boxscoretraditionalv3 = types.SimpleNamespace(
+        BoxScoreTraditionalV3=FakeBoxScoreTraditionalV3
+    )
+    fake_endpoints.boxscoretraditionalv2 = types.SimpleNamespace(
+        BoxScoreTraditionalV2=FakeBoxScoreTraditionalV2
+    )
 
     fake_stats = types.ModuleType("nba_api.stats")
     fake_stats.endpoints = fake_endpoints
@@ -1261,8 +1279,12 @@ def test_default_boxscore_fetch_skips_v2_when_v3_exhausts_timeout_budget(monkeyp
             return {"resultSets": []}
 
     fake_endpoints = types.ModuleType("nba_api.stats.endpoints")
-    fake_endpoints.boxscoretraditionalv3 = types.SimpleNamespace(BoxScoreTraditionalV3=FakeBoxScoreTraditionalV3)
-    fake_endpoints.boxscoretraditionalv2 = types.SimpleNamespace(BoxScoreTraditionalV2=FakeBoxScoreTraditionalV2)
+    fake_endpoints.boxscoretraditionalv3 = types.SimpleNamespace(
+        BoxScoreTraditionalV3=FakeBoxScoreTraditionalV3
+    )
+    fake_endpoints.boxscoretraditionalv2 = types.SimpleNamespace(
+        BoxScoreTraditionalV2=FakeBoxScoreTraditionalV2
+    )
 
     fake_stats = types.ModuleType("nba_api.stats")
     fake_stats.endpoints = fake_endpoints
