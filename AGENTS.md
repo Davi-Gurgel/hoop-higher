@@ -5,7 +5,7 @@
 `hoop-higher` is a Python 3.13 Textual TUI app with package code in `src/hoophigher/`.
 
 - `src/hoophigher/domain/`: pure game models, scoring, difficulty, and round generation. Keep it independent of Textual, persistence, and external APIs.
-- `src/hoophigher/data/`: API providers, SQLModel schema, database, cache, and repositories.
+- `src/hoophigher/data/`: stats source implementations, SQLModel schema, database, cache, and repositories.
 - `src/hoophigher/services/`: orchestration layer consumed by the UI.
 - `src/hoophigher/tui/`: Textual app screens, widgets, and `styles.tcss`.
 - `tests/`: pytest tests, including Textual snapshots in `tests/__snapshots__/`.

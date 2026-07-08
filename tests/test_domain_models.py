@@ -4,7 +4,7 @@ import pytest
 
 from hoophigher.domain import (
     Difficulty,
-    GameBoxScore,
+    NBAGame,
     GameMode,
     GuessDirection,
     PlayerLine,
@@ -29,10 +29,10 @@ def make_player(*, player_id: str, points: int, minutes: int = 30) -> PlayerLine
     )
 
 
-def make_game(*, players: tuple[PlayerLine, ...]) -> GameBoxScore:
-    return GameBoxScore(
+def make_game(*, players: tuple[PlayerLine, ...]) -> NBAGame:
+    return NBAGame(
         game_id="game-1",
-        game_date=date(2025, 1, 10),
+        source_date=date(2025, 1, 10),
         home_team=TeamGameInfo(team_id="home", name="Home", abbreviation="HOM", score=100),
         away_team=TeamGameInfo(team_id="away", name="Away", abbreviation="AWY", score=98),
         player_lines=players,
@@ -46,7 +46,7 @@ def make_round_definition() -> RoundDefinition:
         Question(player_a=players[index], player_b=players[index + 1], difficulty=Difficulty.MEDIUM)
         for index in range(5)
     )
-    return RoundDefinition(game=game, questions=questions)
+    return RoundDefinition(nba_game=game, questions=questions)
 
 
 def test_player_line_eligibility_depends_on_minutes() -> None:
@@ -65,14 +65,14 @@ def test_game_box_score_filters_eligible_players() -> None:
     assert game.eligible_player_lines == (eligible_player,)
 
 
-def test_question_answer_is_higher_when_player_b_scores_more() -> None:
+def test_question_correct_guess_is_higher_when_player_b_scores_more() -> None:
     question = Question(
         player_a=make_player(player_id="1", points=20),
         player_b=make_player(player_id="2", points=24),
         difficulty=Difficulty.HARD,
     )
 
-    assert question.answer is GuessDirection.HIGHER
+    assert question.correct_guess is GuessDirection.HIGHER
     assert question.point_difference == 4
 
 
@@ -101,7 +101,7 @@ def test_round_definition_requires_question_count_between_five_and_ten() -> None
     )
 
     with pytest.raises(ValueError, match="between 5 and 10"):
-        RoundDefinition(game=game, questions=questions)
+        RoundDefinition(nba_game=game, questions=questions)
 
 
 def test_run_state_tracks_score_and_streaks() -> None:
@@ -129,7 +129,7 @@ def test_run_state_tracks_score_and_streaks() -> None:
         score_delta=-60,
         revealed_points=12,
     )
-    run_state.apply_result(second_result, end_reason=RunEndReason.WRONG_ANSWER)
+    run_state.apply_result(second_result, end_reason=RunEndReason.WRONG_GUESS)
 
     assert run_state.score == 40
     assert run_state.correct_answers == 1
@@ -137,7 +137,7 @@ def test_run_state_tracks_score_and_streaks() -> None:
     assert run_state.total_answers == 2
     assert run_state.best_streak == 1
     assert run_state.current_streak == 0
-    assert run_state.end_reason is RunEndReason.WRONG_ANSWER
+    assert run_state.end_reason is RunEndReason.WRONG_GUESS
 
 
 def test_run_state_requires_active_round_before_applying_result() -> None:
@@ -165,7 +165,7 @@ def test_round_progress_rejects_result_for_wrong_question() -> None:
     wrong_question = round_definition.questions[1]
     result = QuestionResult(
         question=wrong_question,
-        guess=wrong_question.answer,
+        guess=wrong_question.correct_guess,
         is_correct=True,
         score_delta=100,
         revealed_points=wrong_question.player_b.points,
@@ -183,7 +183,7 @@ def test_round_progress_rejects_result_after_completion() -> None:
         round_progress.record_result(
             QuestionResult(
                 question=question,
-                guess=question.answer,
+                guess=question.correct_guess,
                 is_correct=True,
                 score_delta=100,
                 revealed_points=question.player_b.points,
@@ -194,7 +194,7 @@ def test_round_progress_rejects_result_after_completion() -> None:
         round_progress.record_result(
             QuestionResult(
                 question=round_definition.questions[-1],
-                guess=round_definition.questions[-1].answer,
+                guess=round_definition.questions[-1].correct_guess,
                 is_correct=True,
                 score_delta=100,
                 revealed_points=round_definition.questions[-1].player_b.points,
@@ -212,12 +212,12 @@ def test_run_state_cannot_start_round_after_finish() -> None:
     run_state.apply_result(
         QuestionResult(
             question=question,
-            guess=question.answer,
+            guess=question.correct_guess,
             is_correct=True,
             score_delta=150,
             revealed_points=question.player_b.points,
         ),
-        end_reason=RunEndReason.WRONG_ANSWER,
+        end_reason=RunEndReason.WRONG_GUESS,
     )
 
     with pytest.raises(ValueError, match="finished run"):

@@ -11,33 +11,33 @@ from pathlib import Path
 from typing import ContextManager
 
 from sqlalchemy.engine import Engine
-from hoophigher.data.api.base import StatsProvider
+from hoophigher.data.stats_sources.base import StatsSource
 from hoophigher.data.cache_repository import CacheRepository
 from hoophigher.data.db import create_sqlite_engine, init_db, session_scope
-from hoophigher.domain.models import GameBoxScore
+from hoophigher.domain.models import NBAGame
 from hoophigher.domain.models import PlayerLine, TeamGameInfo
 
 ScoreboardFetch = Callable[[date, float], Mapping[str, object]]
-BoxScoreFetch = Callable[[str, float], Mapping[str, object]]
+NBAGameFetch = Callable[[str, float], Mapping[str, object]]
 CacheRepositoryContextFactory = Callable[[], ContextManager[CacheRepository]]
 
 
 @dataclass(frozen=True, slots=True)
 class _ScoreboardSeed:
     game_id: str
-    game_date: date
+    source_date: date
     home_team: TeamGameInfo
     away_team: TeamGameInfo
 
 
-class NBAApiProvider(StatsProvider):
+class NBAApiStatsSource(StatsSource):
     def __init__(
         self,
         *,
         cache_repository_factory: CacheRepositoryContextFactory | None = None,
         engine: Engine | None = None,
         scoreboard_fetch: ScoreboardFetch | None = None,
-        boxscore_fetch: BoxScoreFetch | None = None,
+        nba_game_fetch: NBAGameFetch | None = None,
         timeout_seconds: int = 20,
         max_retries: int = 2,
         retry_delay_seconds: float = 1.0,
@@ -52,24 +52,24 @@ class NBAApiProvider(StatsProvider):
         if cache_repository_factory is not None:
             self._cache_repository_factory = cache_repository_factory
         else:
-            provider_engine = engine or self._create_default_engine()
-            self._cache_repository_factory = self._build_cache_factory(provider_engine)
+            stats_source_engine = engine or self._create_default_engine()
+            self._cache_repository_factory = self._build_cache_factory(stats_source_engine)
 
         self._scoreboard_fetch = scoreboard_fetch or _default_scoreboard_fetch
-        self._boxscore_fetch = boxscore_fetch or _default_boxscore_fetch
+        self._nba_game_fetch = nba_game_fetch or _default_nba_game_fetch
         self._timeout_seconds = timeout_seconds
         self._max_retries = max_retries
         self._retry_delay_seconds = retry_delay_seconds
 
-    async def get_games_by_date(self, game_date: date) -> list[GameBoxScore]:
-        """Return games for a date.
+    async def get_games_by_date(self, source_date: date) -> list[NBAGame]:
+        """Return games for a source date.
 
-        Returns lightweight shells from the scoreboard when full boxscores
-        are not already cached.  The caller should use ``get_game_boxscore``
+        Returns lightweight shells from the scoreboard when full NBA game
+        data is not already cached.  The caller should use ``get_nba_game``
         to fetch full player-level data for the specific games it needs.
         """
         with self._cache_repository_factory() as cache_repository:
-            cached_games = cache_repository.get_games_by_date(game_date)
+            cached_games = cache_repository.get_games_by_date(source_date)
         if cached_games is not None and all(
             _is_game_shell(game) or _has_available_player_stats(game.player_lines)
             for game in cached_games
@@ -78,28 +78,28 @@ class NBAApiProvider(StatsProvider):
 
         payload = await self._fetch_with_retries(
             fetch_operation=self._scoreboard_fetch,
-            fetch_args=(game_date, self._timeout_seconds),
+            fetch_args=(source_date, self._timeout_seconds),
             operation_name="scoreboard",
-            operation_context=f"game_date={game_date.isoformat()}",
+            operation_context=f"source_date={source_date.isoformat()}",
         )
-        seeds = _parse_scoreboard_payload(payload, expected_date=game_date)
+        seeds = _parse_scoreboard_payload(payload, expected_date=source_date)
 
         # Build lightweight game shells from scoreboard data.
-        # No boxscore API calls are made here — those happen on demand
-        # via get_game_boxscore when the gameplay service needs them.
-        games: list[GameBoxScore] = []
+        # No NBA game API calls are made here — those happen on demand
+        # via get_nba_game when the gameplay service needs them.
+        games: list[NBAGame] = []
         for seed in seeds:
             # Check if this individual game is already cached with stats.
             with self._cache_repository_factory() as cache_repository:
-                cached_game = cache_repository.get_game_boxscore(seed.game_id)
+                cached_game = cache_repository.get_nba_game(seed.game_id)
             if cached_game is not None and _has_available_player_stats(cached_game.player_lines):
                 games.append(_merge_game_seed(seed=seed, game=cached_game))
             else:
                 # Return a shell with no player lines — caller fetches on demand.
                 games.append(
-                    GameBoxScore(
+                    NBAGame(
                         game_id=seed.game_id,
-                        game_date=seed.game_date,
+                        source_date=seed.source_date,
                         home_team=seed.home_team,
                         away_team=seed.away_team,
                         player_lines=(),
@@ -108,44 +108,44 @@ class NBAApiProvider(StatsProvider):
 
         games.sort(key=lambda game: game.game_id)
         with self._cache_repository_factory() as cache_repository:
-            cache_repository.set_games_by_date(game_date, games)
+            cache_repository.set_games_by_date(source_date, games)
         return games
 
-    async def get_game_boxscore(
+    async def get_nba_game(
         self,
         game_id: str,
         *,
-        game_date_fallback: date | None = None,
-    ) -> GameBoxScore:
-        return await self._get_game_boxscore(
+        source_date_fallback: date | None = None,
+    ) -> NBAGame:
+        return await self._get_nba_game(
             game_id,
-            game_date_fallback=game_date_fallback,
+            source_date_fallback=source_date_fallback,
         )
 
-    async def _get_game_boxscore(
+    async def _get_nba_game(
         self,
         game_id: str,
         *,
-        game_date_fallback: date | None,
-    ) -> GameBoxScore:
+        source_date_fallback: date | None,
+    ) -> NBAGame:
         with self._cache_repository_factory() as cache_repository:
-            cached_game = cache_repository.get_game_boxscore(game_id)
+            cached_game = cache_repository.get_nba_game(game_id)
         if cached_game is not None and _has_available_player_stats(cached_game.player_lines):
             return cached_game
 
         payload = await self._fetch_with_retries(
-            fetch_operation=self._boxscore_fetch,
+            fetch_operation=self._nba_game_fetch,
             fetch_args=(game_id, self._timeout_seconds),
             operation_name="boxscore",
             operation_context=f"game_id={game_id}",
         )
-        game = _parse_boxscore_payload(
+        game = _parse_nba_game_payload(
             payload,
             expected_game_id=game_id,
-            game_date_fallback=game_date_fallback,
+            source_date_fallback=source_date_fallback,
         )
         with self._cache_repository_factory() as cache_repository:
-            cache_repository.set_game_boxscore(game)
+            cache_repository.set_nba_game(game)
         return game
 
     async def _fetch_with_retries(
@@ -193,7 +193,7 @@ class NBAApiProvider(StatsProvider):
         return cache_context
 
 
-def _default_scoreboard_fetch(game_date: date, timeout_seconds: float) -> Mapping[str, object]:
+def _default_scoreboard_fetch(source_date: date, timeout_seconds: float) -> Mapping[str, object]:
     started_at = time.monotonic()
     try:
         from nba_api.stats.endpoints import scoreboardv3
@@ -202,8 +202,9 @@ def _default_scoreboard_fetch(game_date: date, timeout_seconds: float) -> Mappin
 
     if scoreboardv3 is not None:
         try:
+            # `game_date` here is the nba_api library's own parameter name.
             endpoint = scoreboardv3.ScoreboardV3(
-                game_date=game_date.isoformat(),
+                game_date=source_date.isoformat(),
                 timeout=timeout_seconds,
             )
             payload = endpoint.get_dict()
@@ -221,13 +222,13 @@ def _default_scoreboard_fetch(game_date: date, timeout_seconds: float) -> Mappin
     from nba_api.stats.endpoints import scoreboardv2
 
     endpoint_v2 = scoreboardv2.ScoreboardV2(
-        game_date=game_date.isoformat(),
+        game_date=source_date.isoformat(),
         timeout=remaining_timeout_seconds,
     )
     return endpoint_v2.get_dict()
 
 
-def _default_boxscore_fetch(game_id: str, timeout_seconds: float) -> Mapping[str, object]:
+def _default_nba_game_fetch(game_id: str, timeout_seconds: float) -> Mapping[str, object]:
     started_at = time.monotonic()
     from nba_api.stats.endpoints import boxscoretraditionalv2, boxscoretraditionalv3
 
@@ -307,7 +308,7 @@ def _parse_scoreboard_v3_payload(
         if not isinstance(raw_game, Mapping):
             raise ValueError("Malformed scoreboard payload: expected mapping for each game entry.")
         game_id = _require_str(raw_game.get("gameId"), field="scoreboard.games[].gameId")
-        game_date = _parse_date_field(
+        source_date = _parse_date_field(
             raw_game.get("gameDate") or raw_game.get("gameDateEst"),
             field="scoreboard.games[].gameDate",
             fallback=expected_date,
@@ -318,7 +319,7 @@ def _parse_scoreboard_v3_payload(
         seeds.append(
             _ScoreboardSeed(
                 game_id=game_id,
-                game_date=game_date,
+                source_date=source_date,
                 home_team=_parse_team(
                     home_raw,
                     field="scoreboard.games[].homeTeam",
@@ -360,7 +361,7 @@ def _parse_scoreboard_v2_payload(
     seeds: list[_ScoreboardSeed] = []
     for row in game_headers:
         game_id = _require_str(row.get("GAME_ID"), field="resultSets.GameHeader.GAME_ID")
-        game_date = _parse_date_field(
+        source_date = _parse_date_field(
             row.get("GAME_DATE_EST"),
             field="resultSets.GameHeader.GAME_DATE_EST",
             fallback=expected_date,
@@ -378,7 +379,7 @@ def _parse_scoreboard_v2_payload(
         seeds.append(
             _ScoreboardSeed(
                 game_id=game_id,
-                game_date=game_date,
+                source_date=source_date,
                 home_team=TeamGameInfo(
                     team_id=home_team_id,
                     name=home_abbrev,
@@ -425,38 +426,38 @@ def _parse_v2_result_set(
     raise ValueError(f"Malformed payload: missing result set '{set_name}'.")
 
 
-def _parse_boxscore_payload(
+def _parse_nba_game_payload(
     payload: Mapping[str, object],
     *,
     expected_game_id: str,
-    game_date_fallback: date | None = None,
-) -> GameBoxScore:
+    source_date_fallback: date | None = None,
+) -> NBAGame:
     if "boxScoreTraditional" in payload:
         box = _require_mapping(
             payload.get("boxScoreTraditional"), field="payload['boxScoreTraditional']"
         )
-        return _parse_boxscore_v3_payload(
+        return _parse_nba_game_v3_payload(
             box,
             expected_game_id=expected_game_id,
-            game_date_fallback=game_date_fallback,
+            source_date_fallback=source_date_fallback,
         )
 
     if "resultSets" in payload:
-        return _parse_boxscore_v2_payload(
+        return _parse_nba_game_v2_payload(
             payload,
             expected_game_id=expected_game_id,
-            game_date_fallback=game_date_fallback,
+            source_date_fallback=source_date_fallback,
         )
 
     raise ValueError("Malformed boxscore payload: expected V3 or V2 structure.")
 
 
-def _parse_boxscore_v3_payload(
+def _parse_nba_game_v3_payload(
     box: Mapping[str, object],
     *,
     expected_game_id: str,
-    game_date_fallback: date | None,
-) -> GameBoxScore:
+    source_date_fallback: date | None,
+) -> NBAGame:
     game_id = _optional_str(box.get("gameId"))
     if not game_id:
         game_meta = box.get("game")
@@ -465,16 +466,16 @@ def _parse_boxscore_v3_payload(
     if not game_id or game_id != expected_game_id:
         raise LookupError(f"Game id '{expected_game_id}' not found in boxscore payload.")
 
-    game_date = _parse_date_field(
+    source_date = _parse_date_field(
         box.get("gameDate") or box.get("gameDateEst"),
         field="boxScoreTraditional.gameDate",
-        fallback=game_date_fallback,
+        fallback=source_date_fallback,
     )
     home_raw = _require_mapping(box.get("homeTeam"), field="boxScoreTraditional.homeTeam")
     away_raw = _require_mapping(box.get("awayTeam"), field="boxScoreTraditional.awayTeam")
 
-    home_team = _parse_boxscore_v3_team(home_raw, field="boxScoreTraditional.homeTeam")
-    away_team = _parse_boxscore_v3_team(away_raw, field="boxScoreTraditional.awayTeam")
+    home_team = _parse_v3_team(home_raw, field="boxScoreTraditional.homeTeam")
+    away_team = _parse_v3_team(away_raw, field="boxScoreTraditional.awayTeam")
 
     flat_players_raw = box.get("playersStats") or box.get("playerStats")
     if flat_players_raw is None:
@@ -489,28 +490,28 @@ def _parse_boxscore_v3_payload(
             field="boxScoreTraditional.playersStats",
         )
     _require_available_player_stats(players, field="boxScoreTraditional")
-    return GameBoxScore(
+    return NBAGame(
         game_id=game_id,
-        game_date=game_date,
+        source_date=source_date,
         home_team=home_team,
         away_team=away_team,
         player_lines=tuple(players),
     )
 
 
-def _parse_boxscore_v2_payload(
+def _parse_nba_game_v2_payload(
     payload: Mapping[str, object],
     *,
     expected_game_id: str,
-    game_date_fallback: date | None,
-) -> GameBoxScore:
+    source_date_fallback: date | None,
+) -> NBAGame:
     result_sets = _require_list(payload.get("resultSets"), field="payload['resultSets']")
     game_headers = _parse_v2_result_set(result_sets, set_name="GameSummary", optional=True)
     team_rows = _parse_v2_result_set(result_sets, set_name="TeamStats")
     player_rows = _parse_v2_result_set(result_sets, set_name="PlayerStats")
 
     target_header = _find_v2_game_summary(game_headers, expected_game_id=expected_game_id)
-    game_date = _parse_v2_game_date(target_header, game_date_fallback=game_date_fallback)
+    source_date = _parse_v2_source_date(target_header, source_date_fallback=source_date_fallback)
     home_team_id = (
         _optional_str(target_header.get("HOME_TEAM_ID")) if target_header is not None else None
     )
@@ -558,9 +559,9 @@ def _parse_boxscore_v2_payload(
         field="PlayerStats",
     )
     _require_available_player_stats(players, field="PlayerStats")
-    return GameBoxScore(
+    return NBAGame(
         game_id=expected_game_id,
-        game_date=game_date,
+        source_date=source_date,
         home_team=home_team,
         away_team=away_team,
         player_lines=tuple(players),
@@ -580,19 +581,19 @@ def _find_v2_game_summary(
     return None
 
 
-def _parse_v2_game_date(
+def _parse_v2_source_date(
     target_header: Mapping[str, object] | None,
     *,
-    game_date_fallback: date | None,
+    source_date_fallback: date | None,
 ) -> date:
     if target_header is None:
-        if game_date_fallback is None:
+        if source_date_fallback is None:
             raise ValueError("Malformed boxscore payload: missing GameSummary and date fallback.")
-        return game_date_fallback
+        return source_date_fallback
     return _parse_date_field(
         target_header.get("GAME_DATE_EST"),
         field="GameSummary.GAME_DATE_EST",
-        fallback=game_date_fallback,
+        fallback=source_date_fallback,
     )
 
 
@@ -631,7 +632,7 @@ def _parse_team(
     return TeamGameInfo(team_id=team_id, name=name, abbreviation=abbreviation, score=score)
 
 
-def _parse_boxscore_v3_team(payload: Mapping[str, object], *, field: str) -> TeamGameInfo:
+def _parse_v3_team(payload: Mapping[str, object], *, field: str) -> TeamGameInfo:
     team_id = _require_str(payload.get("teamId"), field=f"{field}.teamId")
     abbreviation = _require_str(
         payload.get("teamTricode") or payload.get("teamAbbreviation"),
@@ -728,11 +729,11 @@ def _has_available_player_stats(players: Sequence[PlayerLine]) -> bool:
     return any(player.minutes > 0 for player in players)
 
 
-def _is_game_shell(game: GameBoxScore) -> bool:
+def _is_game_shell(game: NBAGame) -> bool:
     return not game.player_lines
 
 
-def _merge_game_seed(*, seed: _ScoreboardSeed, game: GameBoxScore) -> GameBoxScore:
+def _merge_game_seed(*, seed: _ScoreboardSeed, game: NBAGame) -> NBAGame:
     if game.game_id != seed.game_id:
         raise LookupError(f"Game id '{seed.game_id}' not found in fetched payload.")
     home_team = TeamGameInfo(
@@ -747,9 +748,9 @@ def _merge_game_seed(*, seed: _ScoreboardSeed, game: GameBoxScore) -> GameBoxSco
         abbreviation=seed.away_team.abbreviation or game.away_team.abbreviation,
         score=seed.away_team.score if seed.away_team.score is not None else game.away_team.score,
     )
-    return GameBoxScore(
+    return NBAGame(
         game_id=game.game_id,
-        game_date=seed.game_date,
+        source_date=seed.source_date,
         home_team=home_team,
         away_team=away_team,
         player_lines=game.player_lines,

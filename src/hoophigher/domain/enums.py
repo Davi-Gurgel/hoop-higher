@@ -20,5 +20,7 @@ class GuessDirection(StrEnum):
 
 class RunEndReason(StrEnum):
     USER_EXIT = "user_exit"
-    WRONG_ANSWER = "wrong_answer"
+    # The "wrong_answer" string value is persisted in runs.end_reason; keep it
+    # for existing databases while the Python identifier follows the glossary.
+    WRONG_GUESS = "wrong_answer"
     NO_MORE_GAMES = "no_more_games"

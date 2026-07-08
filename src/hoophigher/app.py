@@ -8,7 +8,7 @@ from textual.app import App
 
 from hoophigher.config import Settings
 from hoophigher.data import create_sqlite_engine, init_db
-from hoophigher.data.api import MockProvider, NBAApiProvider, StatsProvider
+from hoophigher.data.stats_sources import MockStatsSource, NBAApiStatsSource, StatsSource
 from hoophigher.domain.enums import GameMode
 from hoophigher.services import (
     GameplayService,
@@ -31,26 +31,24 @@ RECENT_CANDIDATE_DAYS = 3
 GAME_START_TIMEOUT_SECONDS = 45.0
 
 
-def create_stats_provider(
-    provider_name: str,
+def create_stats_source(
+    source_kind: str,
     *,
     timeout_seconds: int = 20,
     max_retries: int = 1,
     retry_delay_seconds: float = 1.0,
     engine: Engine | None = None,
-) -> StatsProvider:
-    if provider_name == "mock":
-        return MockProvider()
-    if provider_name == "nba_api":
-        return NBAApiProvider(
+) -> StatsSource:
+    if source_kind == "mock":
+        return MockStatsSource()
+    if source_kind == "nba_api":
+        return NBAApiStatsSource(
             engine=engine,
             timeout_seconds=timeout_seconds,
             max_retries=max_retries,
             retry_delay_seconds=retry_delay_seconds,
         )
-    raise ValueError(
-        f"Unknown stats provider '{provider_name}'. Expected one of: 'mock', 'nba_api'."
-    )
+    raise ValueError(f"Unknown stats source '{source_kind}'. Expected one of: 'mock', 'nba_api'.")
 
 
 def recent_candidate_dates(
@@ -97,26 +95,26 @@ class HoopHigherApp(App[None]):
             sqlite_busy_timeout_ms=settings.sqlite_busy_timeout_ms,
         )
         init_db(engine)
-        provider = create_stats_provider(
+        stats_source = create_stats_source(
             settings.stats_provider,
             timeout_seconds=settings.nba_api_timeout_seconds,
             max_retries=settings.nba_api_max_retries,
             retry_delay_seconds=settings.nba_api_retry_delay_seconds,
             engine=engine,
         )
-        self._uses_mock_provider = isinstance(provider, MockProvider)
+        self._uses_mock_stats_source = isinstance(stats_source, MockStatsSource)
         self._recent_candidate_dates = recent_candidate_dates()
         self._game_start_timeout_seconds = settings.game_start_timeout_seconds
         gameplay_service_kwargs: dict[str, object] = {
             "engine": engine,
-            "provider": provider,
+            "stats_source": stats_source,
             "historical_start_year": settings.historical_start_year,
             "historical_end_year": settings.historical_end_year,
             "historical_rounds": settings.historical_rounds,
             "historical_max_date_probes": settings.historical_max_date_probes,
             "playable_game_fetch_concurrency": settings.nba_api_fetch_concurrency,
         }
-        if not self._uses_mock_provider:
+        if not self._uses_mock_stats_source:
             gameplay_service_kwargs["non_historical_startup_games"] = settings.nba_api_startup_games
         self.gameplay_service = GameplayService(**gameplay_service_kwargs)
         self.leaderboard_service = LeaderboardService(engine=engine)
@@ -129,7 +127,7 @@ class HoopHigherApp(App[None]):
 
     async def start_game(self, mode: GameMode) -> bool:
         start_run_kwargs: dict[str, object] = {"total_questions": 5}
-        if self._uses_mock_provider:
+        if self._uses_mock_stats_source:
             start_run_kwargs["candidate_dates"] = MOCK_CANDIDATE_DATES
         elif mode is GameMode.HISTORICAL and self._session_historical_date is not None:
             start_run_kwargs["source_date"] = self._session_historical_date
@@ -155,7 +153,7 @@ class HoopHigherApp(App[None]):
         except (LookupError, ValueError) as exc:
             self.notify(str(exc), title="Unable to start game", severity="error")
             return False
-        if not self._uses_mock_provider:
+        if not self._uses_mock_stats_source:
             self.clear_notifications()
             if mode is GameMode.HISTORICAL:
                 self._session_historical_date = snapshot.source_date

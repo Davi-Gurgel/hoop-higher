@@ -7,74 +7,77 @@ from datetime import date
 from sqlmodel import Session
 
 from hoophigher.data.schema import CachedGameRecord, CachedGameStatsRecord
-from hoophigher.domain.models import GameBoxScore, PlayerLine, TeamGameInfo
+from hoophigher.domain.models import NBAGame, PlayerLine, TeamGameInfo
 
 
 class CacheRepository:
     def __init__(self, session: Session) -> None:
         self.session = session
 
-    def get_games_by_date(self, game_date: date) -> list[GameBoxScore] | None:
-        record = self.session.get(CachedGameRecord, game_date)
+    def get_games_by_date(self, source_date: date) -> list[NBAGame] | None:
+        record = self.session.get(CachedGameRecord, source_date)
         if record is None:
             return None
         return _deserialize_game_list(record.payload_json)
 
-    def set_games_by_date(self, game_date: date, games: Sequence[GameBoxScore]) -> CachedGameRecord:
-        record = CachedGameRecord(game_date=game_date, payload_json=_serialize_game_list(games))
+    def set_games_by_date(self, source_date: date, games: Sequence[NBAGame]) -> CachedGameRecord:
+        # NOTE: CachedGameRecord.game_date is the persisted column name; kept as-is so
+        # existing cached rows continue to load unchanged. Only the Python-facing
+        # attribute name (NBAGame.source_date) follows the glossary.
+        record = CachedGameRecord(game_date=source_date, payload_json=_serialize_game_list(games))
         record = self.session.merge(record)
         self.session.flush()
         self.session.refresh(record)
         return record
 
-    def get_game_boxscore(self, game_id: str) -> GameBoxScore | None:
+    def get_nba_game(self, game_id: str) -> NBAGame | None:
         record = self.session.get(CachedGameStatsRecord, game_id)
         if record is None:
             return None
-        return _deserialize_game_boxscore(record.payload_json)
+        return _deserialize_nba_game(record.payload_json)
 
-    def set_game_boxscore(self, game: GameBoxScore) -> CachedGameStatsRecord:
-        record = CachedGameStatsRecord(
-            game_id=game.game_id, payload_json=_serialize_game_boxscore(game)
-        )
+    def set_nba_game(self, game: NBAGame) -> CachedGameStatsRecord:
+        record = CachedGameStatsRecord(game_id=game.game_id, payload_json=_serialize_nba_game(game))
         record = self.session.merge(record)
         self.session.flush()
         self.session.refresh(record)
         return record
 
 
-def _serialize_game_list(games: Sequence[GameBoxScore]) -> str:
-    return json.dumps([_game_boxscore_to_dict(game) for game in games], separators=(",", ":"))
+def _serialize_game_list(games: Sequence[NBAGame]) -> str:
+    return json.dumps([_nba_game_to_dict(game) for game in games], separators=(",", ":"))
 
 
-def _deserialize_game_list(payload_json: str) -> list[GameBoxScore]:
+def _deserialize_game_list(payload_json: str) -> list[NBAGame]:
     payload = json.loads(payload_json)
-    return [_game_boxscore_from_dict(item) for item in payload]
+    return [_nba_game_from_dict(item) for item in payload]
 
 
-def _serialize_game_boxscore(game: GameBoxScore) -> str:
-    return json.dumps(_game_boxscore_to_dict(game), separators=(",", ":"))
+def _serialize_nba_game(game: NBAGame) -> str:
+    return json.dumps(_nba_game_to_dict(game), separators=(",", ":"))
 
 
-def _deserialize_game_boxscore(payload_json: str) -> GameBoxScore:
+def _deserialize_nba_game(payload_json: str) -> NBAGame:
     payload = json.loads(payload_json)
-    return _game_boxscore_from_dict(payload)
+    return _nba_game_from_dict(payload)
 
 
-def _game_boxscore_to_dict(game: GameBoxScore) -> dict[str, object]:
+def _nba_game_to_dict(game: NBAGame) -> dict[str, object]:
+    # NOTE: the "game_date" key is the persisted cache payload format; kept as-is so
+    # existing cached JSON blobs continue to deserialize unchanged.
     return {
         "game_id": game.game_id,
-        "game_date": game.game_date.isoformat(),
+        "game_date": game.source_date.isoformat(),
         "home_team": _team_to_dict(game.home_team),
         "away_team": _team_to_dict(game.away_team),
         "player_lines": [_player_line_to_dict(player) for player in game.player_lines],
     }
 
 
-def _game_boxscore_from_dict(payload: dict[str, object]) -> GameBoxScore:
-    return GameBoxScore(
+def _nba_game_from_dict(payload: dict[str, object]) -> NBAGame:
+    return NBAGame(
         game_id=str(payload["game_id"]),
-        game_date=date.fromisoformat(str(payload["game_date"])),
+        source_date=date.fromisoformat(str(payload["game_date"])),
         home_team=_team_from_dict(payload["home_team"]),
         away_team=_team_from_dict(payload["away_team"]),
         player_lines=tuple(_player_line_from_dict(player) for player in payload["player_lines"]),

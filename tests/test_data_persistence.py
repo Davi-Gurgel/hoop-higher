@@ -16,13 +16,13 @@ from hoophigher.data import (
     init_db,
     session_scope,
 )
-from hoophigher.domain.models import GameBoxScore, PlayerLine, TeamGameInfo
+from hoophigher.domain.models import NBAGame, PlayerLine, TeamGameInfo
 
 
-def make_game(game_id: str, game_date: date, home_score: int, away_score: int) -> GameBoxScore:
-    return GameBoxScore(
+def make_game(game_id: str, source_date: date, home_score: int, away_score: int) -> NBAGame:
+    return NBAGame(
         game_id=game_id,
-        game_date=game_date,
+        source_date=source_date,
         home_team=TeamGameInfo(team_id="home", name="Home", abbreviation="HOM", score=home_score),
         away_team=TeamGameInfo(team_id="away", name="Away", abbreviation="AWY", score=away_score),
         player_lines=(
@@ -280,11 +280,11 @@ def test_cache_repository_round_trips_game_payloads(tmp_path) -> None:
     game_two = make_game("game-2", date(2025, 2, 1), 101, 99)
 
     cache_repo.set_games_by_date(date(2025, 2, 1), [game_one, game_two])
-    cache_repo.set_game_boxscore(game_one)
+    cache_repo.set_nba_game(game_one)
 
     assert cache_repo.get_games_by_date(date(2025, 2, 1)) == [game_one, game_two]
-    assert cache_repo.get_game_boxscore("game-1") == game_one
-    assert cache_repo.get_game_boxscore("missing") is None
+    assert cache_repo.get_nba_game("game-1") == game_one
+    assert cache_repo.get_nba_game("missing") is None
 
 
 def test_cache_repository_overwrites_existing_payloads(tmp_path) -> None:
@@ -296,12 +296,12 @@ def test_cache_repository_overwrites_existing_payloads(tmp_path) -> None:
     updated_games_for_date = [make_game("game-2", date(2025, 2, 1), 99, 97)]
 
     cache_repo.set_games_by_date(date(2025, 2, 1), original_games_for_date)
-    cache_repo.set_game_boxscore(original_game)
+    cache_repo.set_nba_game(original_game)
     cache_repo.set_games_by_date(date(2025, 2, 1), updated_games_for_date)
-    cache_repo.set_game_boxscore(updated_game)
+    cache_repo.set_nba_game(updated_game)
 
     assert cache_repo.get_games_by_date(date(2025, 2, 1)) == updated_games_for_date
-    assert cache_repo.get_game_boxscore("game-1") == updated_game
+    assert cache_repo.get_nba_game("game-1") == updated_game
 
 
 def test_session_scope_commits_on_success(tmp_path) -> None:

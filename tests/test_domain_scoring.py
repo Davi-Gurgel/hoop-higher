@@ -11,7 +11,7 @@ from hoophigher.domain import (
     Question,
     RunEndReason,
     calculate_score_delta,
-    get_run_end_reason_for_answer,
+    get_run_end_reason_for_guess,
     is_guess_correct,
 )
 
@@ -38,7 +38,7 @@ def make_question(*, points_a: int, points_b: int) -> Question:
     )
 
 
-def test_is_guess_correct_matches_question_answer() -> None:
+def test_is_guess_correct_matches_question_correct_guess() -> None:
     question = make_question(points_a=21, points_b=24)
 
     assert is_guess_correct(question, GuessDirection.HIGHER) is True
@@ -62,14 +62,13 @@ def test_calculate_score_delta_for_historical_mode() -> None:
 
 def test_get_run_end_reason_for_arcade_wrong_answer() -> None:
     assert (
-        get_run_end_reason_for_answer(GameMode.ARCADE, is_correct=False)
-        is RunEndReason.WRONG_ANSWER
+        get_run_end_reason_for_guess(GameMode.ARCADE, is_correct=False) is RunEndReason.WRONG_GUESS
     )
 
 
 def test_get_run_end_reason_for_non_ending_answers() -> None:
-    assert get_run_end_reason_for_answer(GameMode.ARCADE, is_correct=True) is None
-    assert get_run_end_reason_for_answer(GameMode.ENDLESS, is_correct=True) is None
-    assert get_run_end_reason_for_answer(GameMode.ENDLESS, is_correct=False) is None
-    assert get_run_end_reason_for_answer(GameMode.HISTORICAL, is_correct=True) is None
-    assert get_run_end_reason_for_answer(GameMode.HISTORICAL, is_correct=False) is None
+    assert get_run_end_reason_for_guess(GameMode.ARCADE, is_correct=True) is None
+    assert get_run_end_reason_for_guess(GameMode.ENDLESS, is_correct=True) is None
+    assert get_run_end_reason_for_guess(GameMode.ENDLESS, is_correct=False) is None
+    assert get_run_end_reason_for_guess(GameMode.HISTORICAL, is_correct=True) is None
+    assert get_run_end_reason_for_guess(GameMode.HISTORICAL, is_correct=False) is None

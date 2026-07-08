@@ -2,7 +2,7 @@
 
 from hoophigher.domain.enums import Difficulty, GameMode, GuessDirection, RunEndReason
 from hoophigher.domain.models import (
-    GameBoxScore,
+    NBAGame,
     PlayerLine,
     Question,
     QuestionResult,
@@ -20,13 +20,13 @@ from hoophigher.domain.scoring import (
     HISTORICAL_CORRECT_POINTS,
     HISTORICAL_WRONG_POINTS,
     calculate_score_delta,
-    get_run_end_reason_for_answer,
+    get_run_end_reason_for_guess,
     is_guess_correct,
 )
 
 __all__ = [
     "Difficulty",
-    "GameBoxScore",
+    "NBAGame",
     "GameMode",
     "generate_round",
     "GuessDirection",
@@ -47,5 +47,5 @@ __all__ = [
     "HISTORICAL_CORRECT_POINTS",
     "HISTORICAL_WRONG_POINTS",
     "calculate_score_delta",
-    "get_run_end_reason_for_answer",
+    "get_run_end_reason_for_guess",
 ]

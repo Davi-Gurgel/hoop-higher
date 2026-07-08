@@ -45,7 +45,7 @@ async def _open_round_summary(pilot: Pilot) -> None:
     for question_index in range(snapshot.total_questions):
         question = app.gameplay_service.snapshot().current_question
         assert question is not None
-        guess_key = "h" if question.answer.value == "higher" else "l"
+        guess_key = "h" if question.correct_guess.value == "higher" else "l"
         await pilot.press(guess_key)
         is_last_question = question_index == snapshot.total_questions - 1
         if is_last_question:

@@ -13,9 +13,9 @@ from hoophigher.data import (
     create_sqlite_engine,
     init_db,
 )
-from hoophigher.data.api import MockProvider
+from hoophigher.data.stats_sources import MockStatsSource
 from hoophigher.domain.enums import GameMode, GuessDirection, RunEndReason
-from hoophigher.domain.models import GameBoxScore, PlayerLine, TeamGameInfo
+from hoophigher.domain.models import NBAGame, PlayerLine, TeamGameInfo
 from hoophigher.services import GameplayService
 
 
@@ -28,9 +28,9 @@ def _make_engine(tmp_path):
 def _make_service_game(
     *,
     game_id: str,
-    game_date: date,
+    source_date: date,
     minutes: int = 30,
-) -> GameBoxScore:
+) -> NBAGame:
     home_team = TeamGameInfo(team_id=f"{game_id}-home", name="Home", abbreviation="HME", score=110)
     away_team = TeamGameInfo(team_id=f"{game_id}-away", name="Away", abbreviation="AWY", score=104)
     points = (31, 24, 19, 15, 9, 4)
@@ -48,9 +48,9 @@ def _make_service_game(
         )
         for index, player_points in enumerate(points, start=1)
     )
-    return GameBoxScore(
+    return NBAGame(
         game_id=game_id,
-        game_date=game_date,
+        source_date=source_date,
         home_team=home_team,
         away_team=away_team,
         player_lines=players,
@@ -61,22 +61,22 @@ def _opposite_guess(guess: GuessDirection) -> GuessDirection:
     return GuessDirection.LOWER if guess is GuessDirection.HIGHER else GuessDirection.HIGHER
 
 
-class _DateProvider:
+class _DateStatsSource:
     def __init__(self, games_by_date: dict[date, object]) -> None:
         self._games_by_date = games_by_date
 
-    async def get_games_by_date(self, game_date: date) -> list[GameBoxScore]:
-        value = self._games_by_date.get(game_date, ())
+    async def get_games_by_date(self, source_date: date) -> list[NBAGame]:
+        value = self._games_by_date.get(source_date, ())
         if isinstance(value, Exception):
             raise value
         return list(value)
 
-    async def get_game_boxscore(
+    async def get_nba_game(
         self,
         game_id: str,
         *,
-        game_date_fallback: date | None = None,
-    ) -> GameBoxScore:
+        source_date_fallback: date | None = None,
+    ) -> NBAGame:
         for games in self._games_by_date.values():
             if isinstance(games, Exception):
                 continue
@@ -115,15 +115,15 @@ class _FixedHistoricalProbeRandom(_NoShuffleRandom):
         return next(self._months)
 
 
-class _ShellBoxscoreProvider:
-    def __init__(self, *, game_count: int, game_date: date) -> None:
+class _ShellNBAGameStatsSource:
+    def __init__(self, *, game_count: int, source_date: date) -> None:
         self.max_in_flight = 0
         self.in_flight = 0
         self.requested_fallback_dates: list[date | None] = []
         self._games = tuple(
-            GameBoxScore(
+            NBAGame(
                 game_id=f"shell-game-{index}",
-                game_date=game_date,
+                source_date=source_date,
                 home_team=TeamGameInfo(
                     team_id=f"h-{index}", name="Home", abbreviation="HOM", score=110
                 ),
@@ -135,34 +135,34 @@ class _ShellBoxscoreProvider:
             for index in range(1, game_count + 1)
         )
 
-    async def get_games_by_date(self, game_date: date) -> list[GameBoxScore]:
+    async def get_games_by_date(self, source_date: date) -> list[NBAGame]:
         return list(self._games)
 
-    async def get_game_boxscore(
+    async def get_nba_game(
         self,
         game_id: str,
         *,
-        game_date_fallback: date | None = None,
-    ) -> GameBoxScore:
+        source_date_fallback: date | None = None,
+    ) -> NBAGame:
         self.in_flight += 1
         self.max_in_flight = max(self.max_in_flight, self.in_flight)
         try:
             await asyncio.sleep(0.01)
-            self.requested_fallback_dates.append(game_date_fallback)
+            self.requested_fallback_dates.append(source_date_fallback)
             shell = next(game for game in self._games if game.game_id == game_id)
-            return _make_service_game(game_id=shell.game_id, game_date=shell.game_date)
+            return _make_service_game(game_id=shell.game_id, source_date=shell.source_date)
         finally:
             self.in_flight -= 1
 
 
-class _SlowFirstShellProvider:
-    def __init__(self, *, game_count: int, game_date: date) -> None:
+class _SlowFirstShellStatsSource:
+    def __init__(self, *, game_count: int, source_date: date) -> None:
         self.requested_ids: list[str] = []
         self.slow_fetch_cancelled = False
         self._games = tuple(
-            GameBoxScore(
+            NBAGame(
                 game_id=f"shell-game-{index}",
-                game_date=game_date,
+                source_date=source_date,
                 home_team=TeamGameInfo(
                     team_id=f"h-{index}", name="Home", abbreviation="HOM", score=110
                 ),
@@ -174,15 +174,15 @@ class _SlowFirstShellProvider:
             for index in range(1, game_count + 1)
         )
 
-    async def get_games_by_date(self, game_date: date) -> list[GameBoxScore]:
+    async def get_games_by_date(self, source_date: date) -> list[NBAGame]:
         return list(self._games)
 
-    async def get_game_boxscore(
+    async def get_nba_game(
         self,
         game_id: str,
         *,
-        game_date_fallback: date | None = None,
-    ) -> GameBoxScore:
+        source_date_fallback: date | None = None,
+    ) -> NBAGame:
         self.requested_ids.append(game_id)
         if game_id == "shell-game-1":
             try:
@@ -193,65 +193,65 @@ class _SlowFirstShellProvider:
         else:
             await asyncio.sleep(0.01)
         shell = next(game for game in self._games if game.game_id == game_id)
-        return _make_service_game(game_id=shell.game_id, game_date=shell.game_date)
+        return _make_service_game(game_id=shell.game_id, source_date=shell.source_date)
 
 
-class _MixedCachedShellProvider:
-    def __init__(self, *, game_date: date) -> None:
+class _MixedCachedShellStatsSource:
+    def __init__(self, *, source_date: date) -> None:
         self.requested_ids: list[str] = []
         self._games = (
-            _make_service_game(game_id="cached-1", game_date=game_date),
-            _make_service_game(game_id="cached-2", game_date=game_date),
-            _make_service_game(game_id="cached-3", game_date=game_date),
-            GameBoxScore(
+            _make_service_game(game_id="cached-1", source_date=source_date),
+            _make_service_game(game_id="cached-2", source_date=source_date),
+            _make_service_game(game_id="cached-3", source_date=source_date),
+            NBAGame(
                 game_id="shell-fail-1",
-                game_date=game_date,
+                source_date=source_date,
                 home_team=TeamGameInfo(team_id="h-f1", name="Home", abbreviation="HOM", score=110),
                 away_team=TeamGameInfo(team_id="a-f1", name="Away", abbreviation="AWY", score=103),
                 player_lines=(),
             ),
-            GameBoxScore(
+            NBAGame(
                 game_id="shell-fail-2",
-                game_date=game_date,
+                source_date=source_date,
                 home_team=TeamGameInfo(team_id="h-f2", name="Home", abbreviation="HOM", score=110),
                 away_team=TeamGameInfo(team_id="a-f2", name="Away", abbreviation="AWY", score=103),
                 player_lines=(),
             ),
-            GameBoxScore(
+            NBAGame(
                 game_id="shell-ok-1",
-                game_date=game_date,
+                source_date=source_date,
                 home_team=TeamGameInfo(team_id="h-o1", name="Home", abbreviation="HOM", score=110),
                 away_team=TeamGameInfo(team_id="a-o1", name="Away", abbreviation="AWY", score=103),
                 player_lines=(),
             ),
-            GameBoxScore(
+            NBAGame(
                 game_id="shell-ok-2",
-                game_date=game_date,
+                source_date=source_date,
                 home_team=TeamGameInfo(team_id="h-o2", name="Home", abbreviation="HOM", score=110),
                 away_team=TeamGameInfo(team_id="a-o2", name="Away", abbreviation="AWY", score=103),
                 player_lines=(),
             ),
         )
 
-    async def get_games_by_date(self, game_date: date) -> list[GameBoxScore]:
+    async def get_games_by_date(self, source_date: date) -> list[NBAGame]:
         return list(self._games)
 
-    async def get_game_boxscore(
+    async def get_nba_game(
         self,
         game_id: str,
         *,
-        game_date_fallback: date | None = None,
-    ) -> GameBoxScore:
+        source_date_fallback: date | None = None,
+    ) -> NBAGame:
         self.requested_ids.append(game_id)
         if game_id.startswith("shell-fail"):
             raise LookupError(f"Boxscore unavailable: {game_id}")
         shell = next(game for game in self._games if game.game_id == game_id)
-        return _make_service_game(game_id=shell.game_id, game_date=shell.game_date)
+        return _make_service_game(game_id=shell.game_id, source_date=shell.source_date)
 
 
 def test_endless_continues_after_wrong_answer_and_persists_progress(tmp_path) -> None:
     engine = _make_engine(tmp_path)
-    service = GameplayService(engine=engine, provider=MockProvider(), rng=Random(7))
+    service = GameplayService(engine=engine, stats_source=MockStatsSource(), rng=Random(7))
 
     start_snapshot = asyncio.run(
         service.start_run(
@@ -263,8 +263,8 @@ def test_endless_continues_after_wrong_answer_and_persists_progress(tmp_path) ->
     question = start_snapshot.current_question
     assert question is not None
 
-    wrong_guess = _opposite_guess(question.answer)
-    result = asyncio.run(service.submit_answer(wrong_guess, response_time_ms=900))
+    wrong_guess = _opposite_guess(question.correct_guess)
+    result = asyncio.run(service.submit_guess(wrong_guess, response_time_ms=900))
     snapshot = service.snapshot()
 
     assert result.is_correct is False
@@ -289,13 +289,13 @@ def test_endless_continues_after_wrong_answer_and_persists_progress(tmp_path) ->
 
 def test_service_requires_active_run_for_snapshot_submit_and_end_run(tmp_path) -> None:
     engine = _make_engine(tmp_path)
-    service = GameplayService(engine=engine, provider=MockProvider(), rng=Random(1))
+    service = GameplayService(engine=engine, stats_source=MockStatsSource(), rng=Random(1))
 
     with pytest.raises(ValueError, match="No active run"):
         service.snapshot()
 
     with pytest.raises(ValueError, match="No active run"):
-        asyncio.run(service.submit_answer(GuessDirection.HIGHER))
+        asyncio.run(service.submit_guess(GuessDirection.HIGHER))
 
     with pytest.raises(ValueError, match="No active run"):
         service.end_run()
@@ -303,7 +303,7 @@ def test_service_requires_active_run_for_snapshot_submit_and_end_run(tmp_path) -
 
 def test_arcade_ends_on_first_error(tmp_path) -> None:
     engine = _make_engine(tmp_path)
-    service = GameplayService(engine=engine, provider=MockProvider(), rng=Random(3))
+    service = GameplayService(engine=engine, stats_source=MockStatsSource(), rng=Random(3))
 
     start_snapshot = asyncio.run(
         service.start_run(
@@ -315,18 +315,18 @@ def test_arcade_ends_on_first_error(tmp_path) -> None:
     question = start_snapshot.current_question
     assert question is not None
 
-    wrong_guess = _opposite_guess(question.answer)
-    asyncio.run(service.submit_answer(wrong_guess))
+    wrong_guess = _opposite_guess(question.correct_guess)
+    asyncio.run(service.submit_guess(wrong_guess))
     snapshot = service.snapshot()
 
     assert snapshot.is_finished is True
-    assert snapshot.end_reason is RunEndReason.WRONG_ANSWER
+    assert snapshot.end_reason is RunEndReason.WRONG_GUESS
     assert snapshot.score == 0
 
 
 def test_submit_answer_rejects_finished_run(tmp_path) -> None:
     engine = _make_engine(tmp_path)
-    service = GameplayService(engine=engine, provider=MockProvider(), rng=Random(3))
+    service = GameplayService(engine=engine, stats_source=MockStatsSource(), rng=Random(3))
 
     start_snapshot = asyncio.run(
         service.start_run(
@@ -338,15 +338,15 @@ def test_submit_answer_rejects_finished_run(tmp_path) -> None:
     question = start_snapshot.current_question
     assert question is not None
 
-    asyncio.run(service.submit_answer(_opposite_guess(question.answer)))
+    asyncio.run(service.submit_guess(_opposite_guess(question.correct_guess)))
 
     with pytest.raises(ValueError, match="finished run"):
-        asyncio.run(service.submit_answer(GuessDirection.HIGHER))
+        asyncio.run(service.submit_guess(GuessDirection.HIGHER))
 
 
 def test_non_historical_start_run_requires_candidate_dates_without_source_date(tmp_path) -> None:
     engine = _make_engine(tmp_path)
-    service = GameplayService(engine=engine, provider=MockProvider(), rng=Random(1))
+    service = GameplayService(engine=engine, stats_source=MockStatsSource(), rng=Random(1))
 
     with pytest.raises(ValueError, match="candidate_dates is required"):
         asyncio.run(service.start_run(GameMode.ENDLESS))
@@ -354,7 +354,7 @@ def test_non_historical_start_run_requires_candidate_dates_without_source_date(t
 
 def test_start_run_raises_when_source_date_has_no_games(tmp_path) -> None:
     engine = _make_engine(tmp_path)
-    service = GameplayService(engine=engine, provider=MockProvider(), rng=Random(1))
+    service = GameplayService(engine=engine, stats_source=MockStatsSource(), rng=Random(1))
 
     with pytest.raises(LookupError, match="No games found for source date"):
         asyncio.run(
@@ -368,7 +368,7 @@ def test_start_run_raises_when_source_date_has_no_games(tmp_path) -> None:
 
 def test_non_historical_start_run_raises_when_candidate_dates_have_no_games(tmp_path) -> None:
     engine = _make_engine(tmp_path)
-    service = GameplayService(engine=engine, provider=MockProvider(), rng=Random(1))
+    service = GameplayService(engine=engine, stats_source=MockStatsSource(), rng=Random(1))
 
     with pytest.raises(LookupError, match="No games found for provided candidate dates"):
         asyncio.run(
@@ -386,10 +386,10 @@ def test_non_historical_start_run_continues_after_candidate_date_fetch_error(tmp
     engine = _make_engine(tmp_path)
     service = GameplayService(
         engine=engine,
-        provider=_DateProvider(
+        stats_source=_DateStatsSource(
             {
                 first_date: ConnectionError("scoreboard timeout"),
-                second_date: (_make_service_game(game_id="b-playable", game_date=second_date),),
+                second_date: (_make_service_game(game_id="b-playable", source_date=second_date),),
             }
         ),
         rng=Random(1),
@@ -408,15 +408,15 @@ def test_non_historical_start_run_continues_after_candidate_date_fetch_error(tmp
 
 
 def test_non_historical_start_run_filters_unplayable_games(tmp_path) -> None:
-    game_date = date(2025, 2, 10)
+    source_date = date(2025, 2, 10)
     engine = _make_engine(tmp_path)
     service = GameplayService(
         engine=engine,
-        provider=_DateProvider(
+        stats_source=_DateStatsSource(
             {
-                game_date: (
-                    _make_service_game(game_id="a-unplayable", game_date=game_date, minutes=0),
-                    _make_service_game(game_id="b-playable", game_date=game_date),
+                source_date: (
+                    _make_service_game(game_id="a-unplayable", source_date=source_date, minutes=0),
+                    _make_service_game(game_id="b-playable", source_date=source_date),
                 )
             }
         ),
@@ -426,7 +426,7 @@ def test_non_historical_start_run_filters_unplayable_games(tmp_path) -> None:
     snapshot = asyncio.run(
         service.start_run(
             GameMode.ARCADE,
-            candidate_dates=[game_date],
+            candidate_dates=[source_date],
             total_questions=5,
         )
     )
@@ -435,37 +435,42 @@ def test_non_historical_start_run_filters_unplayable_games(tmp_path) -> None:
     assert [game.game_id for game in snapshot.games_today] == ["b-playable"]
 
 
-def test_start_run_fetches_shell_boxscores_concurrently_and_passes_game_dates(tmp_path) -> None:
-    game_date = date(2025, 2, 10)
+def test_start_run_fetches_shell_nba_games_concurrently_and_passes_source_dates(tmp_path) -> None:
+    source_date = date(2025, 2, 10)
     engine = _make_engine(tmp_path)
-    provider = _ShellBoxscoreProvider(game_count=4, game_date=game_date)
+    stats_source = _ShellNBAGameStatsSource(game_count=4, source_date=source_date)
     service = GameplayService(
         engine=engine,
-        provider=provider,
+        stats_source=stats_source,
         rng=_NoShuffleRandom(1),
     )
 
     snapshot = asyncio.run(
         service.start_run(
             GameMode.ENDLESS,
-            candidate_dates=[game_date],
+            candidate_dates=[source_date],
             total_questions=5,
         )
     )
 
-    assert snapshot.source_date == game_date
+    assert snapshot.source_date == source_date
     assert len(snapshot.games_today) == 4
-    assert provider.max_in_flight > 1
-    assert provider.requested_fallback_dates == [game_date, game_date, game_date, game_date]
+    assert stats_source.max_in_flight > 1
+    assert stats_source.requested_fallback_dates == [
+        source_date,
+        source_date,
+        source_date,
+        source_date,
+    ]
 
 
 def test_non_historical_start_run_caps_shell_boxscore_fetches_for_fast_startup(tmp_path) -> None:
-    game_date = date(2025, 2, 10)
+    source_date = date(2025, 2, 10)
     engine = _make_engine(tmp_path)
-    provider = _ShellBoxscoreProvider(game_count=8, game_date=game_date)
+    stats_source = _ShellNBAGameStatsSource(game_count=8, source_date=source_date)
     service = GameplayService(
         engine=engine,
-        provider=provider,
+        stats_source=stats_source,
         rng=_NoShuffleRandom(1),
         playable_game_fetch_concurrency=5,
     )
@@ -473,23 +478,23 @@ def test_non_historical_start_run_caps_shell_boxscore_fetches_for_fast_startup(t
     snapshot = asyncio.run(
         service.start_run(
             GameMode.ENDLESS,
-            candidate_dates=[game_date],
+            candidate_dates=[source_date],
             total_questions=5,
         )
     )
 
-    assert snapshot.source_date == game_date
+    assert snapshot.source_date == source_date
     assert len(snapshot.games_today) == 5
-    assert len(provider.requested_fallback_dates) == 5
+    assert len(stats_source.requested_fallback_dates) == 5
 
 
 def test_start_run_continues_shell_fetches_when_first_partial_batch_fails(tmp_path) -> None:
-    game_date = date(2025, 2, 10)
+    source_date = date(2025, 2, 10)
     engine = _make_engine(tmp_path)
-    provider = _MixedCachedShellProvider(game_date=game_date)
+    stats_source = _MixedCachedShellStatsSource(source_date=source_date)
     service = GameplayService(
         engine=engine,
-        provider=provider,
+        stats_source=stats_source,
         rng=_NoShuffleRandom(1),
         playable_game_fetch_concurrency=5,
         non_historical_startup_games=5,
@@ -498,7 +503,7 @@ def test_start_run_continues_shell_fetches_when_first_partial_batch_fails(tmp_pa
     snapshot = asyncio.run(
         service.start_run(
             GameMode.ENDLESS,
-            candidate_dates=[game_date],
+            candidate_dates=[source_date],
             total_questions=5,
         )
     )
@@ -510,7 +515,7 @@ def test_start_run_continues_shell_fetches_when_first_partial_batch_fails(tmp_pa
         "shell-ok-1",
         "shell-ok-2",
     ]
-    assert provider.requested_ids == [
+    assert stats_source.requested_ids == [
         "shell-fail-1",
         "shell-fail-2",
         "shell-ok-1",
@@ -519,12 +524,12 @@ def test_start_run_continues_shell_fetches_when_first_partial_batch_fails(tmp_pa
 
 
 def test_start_run_does_not_wait_for_slowest_shell_when_enough_games_load(tmp_path) -> None:
-    game_date = date(2025, 2, 10)
+    source_date = date(2025, 2, 10)
     engine = _make_engine(tmp_path)
-    provider = _SlowFirstShellProvider(game_count=4, game_date=game_date)
+    stats_source = _SlowFirstShellStatsSource(game_count=4, source_date=source_date)
     service = GameplayService(
         engine=engine,
-        provider=provider,
+        stats_source=stats_source,
         rng=_NoShuffleRandom(1),
         playable_game_fetch_concurrency=2,
         non_historical_startup_games=2,
@@ -534,7 +539,7 @@ def test_start_run_does_not_wait_for_slowest_shell_when_enough_games_load(tmp_pa
     snapshot = asyncio.run(
         service.start_run(
             GameMode.ENDLESS,
-            candidate_dates=[game_date],
+            candidate_dates=[source_date],
             total_questions=5,
         )
     )
@@ -544,14 +549,14 @@ def test_start_run_does_not_wait_for_slowest_shell_when_enough_games_load(tmp_pa
         "shell-game-2",
         "shell-game-3",
     ]
-    assert provider.requested_ids == ["shell-game-1", "shell-game-2", "shell-game-3"]
-    assert provider.slow_fetch_cancelled is True
+    assert stats_source.requested_ids == ["shell-game-1", "shell-game-2", "shell-game-3"]
+    assert stats_source.slow_fetch_cancelled is True
     assert elapsed < 0.5
 
 
 def test_historical_start_run_raises_when_no_candidate_date_has_playable_games(tmp_path) -> None:
     engine = _make_engine(tmp_path)
-    service = GameplayService(engine=engine, provider=MockProvider(), rng=Random(1))
+    service = GameplayService(engine=engine, stats_source=MockStatsSource(), rng=Random(1))
 
     with pytest.raises(LookupError, match="No games found for provided candidate dates"):
         asyncio.run(
@@ -567,19 +572,21 @@ def test_historical_candidate_dates_require_playable_games(tmp_path) -> None:
     first_date = date(2025, 2, 10)
     second_date = date(2025, 2, 9)
     engine = _make_engine(tmp_path)
-    provider = _DateProvider(
+    stats_source = _DateStatsSource(
         {
             first_date: tuple(
-                _make_service_game(game_id=f"a-unplayable-{index}", game_date=first_date, minutes=0)
+                _make_service_game(
+                    game_id=f"a-unplayable-{index}", source_date=first_date, minutes=0
+                )
                 for index in range(5)
             ),
             second_date: tuple(
-                _make_service_game(game_id=f"b-playable-{index}", game_date=second_date)
+                _make_service_game(game_id=f"b-playable-{index}", source_date=second_date)
                 for index in range(5)
             ),
         }
     )
-    service = GameplayService(engine=engine, provider=provider, rng=_NoShuffleRandom(1))
+    service = GameplayService(engine=engine, stats_source=stats_source, rng=_NoShuffleRandom(1))
 
     snapshot = asyncio.run(
         service.start_run(
@@ -591,12 +598,12 @@ def test_historical_candidate_dates_require_playable_games(tmp_path) -> None:
 
     assert snapshot.source_date == second_date
     assert len(snapshot.games_today) == 5
-    assert {game.game_date for game in snapshot.games_today} == {second_date}
+    assert {game.source_date for game in snapshot.games_today} == {second_date}
 
 
 def test_endless_starts_next_round_after_perfect_round_and_persists_rounds(tmp_path) -> None:
     engine = _make_engine(tmp_path)
-    service = GameplayService(engine=engine, provider=MockProvider(), rng=Random(1))
+    service = GameplayService(engine=engine, stats_source=MockStatsSource(), rng=Random(1))
 
     start_snapshot = asyncio.run(
         service.start_run(
@@ -609,7 +616,7 @@ def test_endless_starts_next_round_after_perfect_round_and_persists_rounds(tmp_p
     for _ in range(start_snapshot.total_questions):
         question = service.snapshot().current_question
         assert question is not None
-        asyncio.run(service.submit_answer(question.answer))
+        asyncio.run(service.submit_guess(question.correct_guess))
 
     snapshot = service.snapshot()
 
@@ -631,7 +638,7 @@ def test_endless_starts_next_round_after_perfect_round_and_persists_rounds(tmp_p
 
 def test_arcade_starts_next_round_after_perfect_round_and_persists_rounds(tmp_path) -> None:
     engine = _make_engine(tmp_path)
-    service = GameplayService(engine=engine, provider=MockProvider(), rng=Random(1))
+    service = GameplayService(engine=engine, stats_source=MockStatsSource(), rng=Random(1))
 
     start_snapshot = asyncio.run(
         service.start_run(
@@ -644,7 +651,7 @@ def test_arcade_starts_next_round_after_perfect_round_and_persists_rounds(tmp_pa
     for _ in range(start_snapshot.total_questions):
         question = service.snapshot().current_question
         assert question is not None
-        asyncio.run(service.submit_answer(question.answer))
+        asyncio.run(service.submit_guess(question.correct_guess))
 
     snapshot = service.snapshot()
 
@@ -665,15 +672,15 @@ def test_arcade_starts_next_round_after_perfect_round_and_persists_rounds(tmp_pa
 
 
 def test_non_historical_run_ends_after_each_fetched_game_is_played(tmp_path) -> None:
-    game_date = date(2025, 2, 10)
+    source_date = date(2025, 2, 10)
     engine = _make_engine(tmp_path)
     service = GameplayService(
         engine=engine,
-        provider=_DateProvider(
+        stats_source=_DateStatsSource(
             {
-                game_date: (
-                    _make_service_game(game_id="game-a", game_date=game_date),
-                    _make_service_game(game_id="game-b", game_date=game_date),
+                source_date: (
+                    _make_service_game(game_id="game-a", source_date=source_date),
+                    _make_service_game(game_id="game-b", source_date=source_date),
                 )
             }
         ),
@@ -684,7 +691,7 @@ def test_non_historical_run_ends_after_each_fetched_game_is_played(tmp_path) -> 
     start_snapshot = asyncio.run(
         service.start_run(
             GameMode.ENDLESS,
-            candidate_dates=[game_date],
+            candidate_dates=[source_date],
             total_questions=5,
         )
     )
@@ -694,7 +701,7 @@ def test_non_historical_run_ends_after_each_fetched_game_is_played(tmp_path) -> 
     for _ in range(start_snapshot.total_questions):
         question = service.snapshot().current_question
         assert question is not None
-        asyncio.run(service.submit_answer(question.answer))
+        asyncio.run(service.submit_guess(question.correct_guess))
 
     second_round_snapshot = service.snapshot()
 
@@ -705,7 +712,7 @@ def test_non_historical_run_ends_after_each_fetched_game_is_played(tmp_path) -> 
     for _ in range(second_round_snapshot.total_questions):
         question = service.snapshot().current_question
         assert question is not None
-        asyncio.run(service.submit_answer(question.answer))
+        asyncio.run(service.submit_guess(question.correct_guess))
 
     final_snapshot = service.snapshot()
 
@@ -722,7 +729,7 @@ def test_non_historical_run_ends_after_each_fetched_game_is_played(tmp_path) -> 
 
 def test_end_run_persists_user_exit_and_is_idempotent(tmp_path) -> None:
     engine = _make_engine(tmp_path)
-    service = GameplayService(engine=engine, provider=MockProvider(), rng=Random(1))
+    service = GameplayService(engine=engine, stats_source=MockStatsSource(), rng=Random(1))
 
     start_snapshot = asyncio.run(
         service.start_run(
@@ -749,7 +756,7 @@ def test_end_run_persists_user_exit_and_is_idempotent(tmp_path) -> None:
 
 def test_historical_candidate_dates_can_use_shorter_playable_dates(tmp_path) -> None:
     engine = _make_engine(tmp_path)
-    service = GameplayService(engine=engine, provider=MockProvider(), rng=Random(1))
+    service = GameplayService(engine=engine, stats_source=MockStatsSource(), rng=Random(1))
 
     snapshot = asyncio.run(
         service.start_run(
@@ -772,7 +779,7 @@ def test_generate_random_season_dates_biases_historical_probes_to_preferred_week
         months=[10, 11, 12, 1, 2, 3, 4],
         days=[1, 1, 1, 1, 1, 1, 1],
     )
-    service = GameplayService(engine=engine, provider=MockProvider(), rng=rng)
+    service = GameplayService(engine=engine, stats_source=MockStatsSource(), rng=rng)
 
     probe_dates = service._generate_random_season_dates(
         start_year=2023,
@@ -793,7 +800,7 @@ def test_generate_random_season_dates_biases_historical_probes_to_preferred_week
 
 def test_historical_can_start_without_candidate_dates_using_indexed_dates(tmp_path) -> None:
     engine = _make_engine(tmp_path)
-    provider = MockProvider()
+    stats_source = MockStatsSource()
 
     requested_window: list[tuple[int, int, int]] = []
 
@@ -803,7 +810,7 @@ def test_historical_can_start_without_candidate_dates_using_indexed_dates(tmp_pa
 
     service = GameplayService(
         engine=engine,
-        provider=provider,
+        stats_source=stats_source,
         rng=Random(1),
         historical_start_year=2010,
         historical_end_year=2020,
@@ -820,7 +827,7 @@ def test_historical_can_start_without_candidate_dates_using_indexed_dates(tmp_pa
 
 def test_historical_selected_date_belongs_to_indexed_eligible_set(tmp_path) -> None:
     engine = _make_engine(tmp_path)
-    provider = MockProvider()
+    stats_source = MockStatsSource()
     eligible_dates = (date(2025, 1, 12),)
 
     async def fake_eligible_dates_fetcher(_start_year: int, _end_year: int, _min_games: int):
@@ -828,7 +835,7 @@ def test_historical_selected_date_belongs_to_indexed_eligible_set(tmp_path) -> N
 
     service = GameplayService(
         engine=engine,
-        provider=provider,
+        stats_source=stats_source,
         rng=Random(8),
         historical_eligible_dates_fetcher=fake_eligible_dates_fetcher,
     )
@@ -838,32 +845,32 @@ def test_historical_selected_date_belongs_to_indexed_eligible_set(tmp_path) -> N
     assert snapshot.source_date in eligible_dates
 
 
-class _ManyGamesProvider:
+class _ManyGamesStatsSource:
     def __init__(self) -> None:
-        game_date = date(2018, 2, 14)
+        source_date = date(2018, 2, 14)
         self._games = tuple(
-            self._build_game(game_date=game_date, index=index) for index in range(1, 8)
+            self._build_game(source_date=source_date, index=index) for index in range(1, 8)
         )
         self._games_by_id = {game.game_id: game for game in self._games}
 
-    async def get_games_by_date(self, game_date: date) -> list[GameBoxScore]:
-        if game_date == date(2018, 2, 14):
+    async def get_games_by_date(self, source_date: date) -> list[NBAGame]:
+        if source_date == date(2018, 2, 14):
             return list(self._games)
         return []
 
-    async def get_game_boxscore(
+    async def get_nba_game(
         self,
         game_id: str,
         *,
-        game_date_fallback: date | None = None,
-    ) -> GameBoxScore:
+        source_date_fallback: date | None = None,
+    ) -> NBAGame:
         return self._games_by_id[game_id]
 
-    def _build_game(self, *, game_date: date, index: int) -> GameBoxScore:
+    def _build_game(self, *, source_date: date, index: int) -> NBAGame:
         game_id = f"2018-02-14-game-{index:02d}"
-        return GameBoxScore(
+        return NBAGame(
             game_id=game_id,
-            game_date=game_date,
+            source_date=source_date,
             home_team=TeamGameInfo(
                 team_id=f"h-{index}", name="Home", abbreviation="HOM", score=110
             ),
@@ -923,46 +930,46 @@ class _ManyGamesProvider:
         )
 
 
-class _FewGamesProvider:
+class _FewGamesStatsSource:
     def __init__(self) -> None:
         self.requested_dates: list[date] = []
-        game_date = date(2018, 2, 13)
+        source_date = date(2018, 2, 13)
         self._games = tuple(
-            _make_service_game(game_id=f"few-game-{index}", game_date=game_date)
+            _make_service_game(game_id=f"few-game-{index}", source_date=source_date)
             for index in range(1, 3)
         )
 
-    async def get_games_by_date(self, game_date: date) -> list[GameBoxScore]:
-        self.requested_dates.append(game_date)
-        if game_date == date(2018, 2, 13):
+    async def get_games_by_date(self, source_date: date) -> list[NBAGame]:
+        self.requested_dates.append(source_date)
+        if source_date == date(2018, 2, 13):
             return list(self._games)
         return [
-            _make_service_game(game_id=f"fallback-game-{index}", game_date=game_date)
+            _make_service_game(game_id=f"fallback-game-{index}", source_date=source_date)
             for index in range(1, 6)
         ]
 
-    async def get_game_boxscore(
+    async def get_nba_game(
         self,
         game_id: str,
         *,
-        game_date_fallback: date | None = None,
-    ) -> GameBoxScore:
+        source_date_fallback: date | None = None,
+    ) -> NBAGame:
         for game in self._games:
             if game.game_id == game_id:
                 return game
         raise LookupError(f"Game not found: {game_id}")
 
 
-class _IndexedFallbackProvider(_ManyGamesProvider):
+class _IndexedFallbackStatsSource(_ManyGamesStatsSource):
     def __init__(self) -> None:
         super().__init__()
         self.requested_dates: list[date] = []
 
-    async def get_games_by_date(self, game_date: date) -> list[GameBoxScore]:
-        self.requested_dates.append(game_date)
-        if game_date == date(2018, 2, 13):
+    async def get_games_by_date(self, source_date: date) -> list[NBAGame]:
+        self.requested_dates.append(source_date)
+        if source_date == date(2018, 2, 13):
             raise LookupError("indexed date no longer resolves")
-        return await super().get_games_by_date(game_date)
+        return await super().get_games_by_date(source_date)
 
 
 def test_historical_uses_exactly_configured_rounds_even_when_date_has_more_games(tmp_path) -> None:
@@ -973,7 +980,7 @@ def test_historical_uses_exactly_configured_rounds_even_when_date_has_more_games
 
     service = GameplayService(
         engine=engine,
-        provider=_ManyGamesProvider(),
+        stats_source=_ManyGamesStatsSource(),
         rng=Random(4),
         historical_rounds=5,
         historical_eligible_dates_fetcher=fake_eligible_dates_fetcher,
@@ -990,7 +997,7 @@ def test_historical_uses_exactly_configured_rounds_even_when_date_has_more_games
         for _ in range(round_snapshot.total_questions):
             question = service.snapshot().current_question
             assert question is not None
-            asyncio.run(service.submit_answer(question.answer))
+            asyncio.run(service.submit_guess(question.correct_guess))
 
     final_snapshot = service.snapshot()
 
@@ -1001,14 +1008,14 @@ def test_historical_uses_exactly_configured_rounds_even_when_date_has_more_games
 
 def test_historical_caps_rounds_to_available_games_without_refetching_dates(tmp_path) -> None:
     engine = _make_engine(tmp_path)
-    provider = _FewGamesProvider()
+    stats_source = _FewGamesStatsSource()
 
     async def fake_eligible_dates_fetcher(_start_year: int, _end_year: int, _min_games: int):
         return (date(2018, 2, 13), date(2018, 2, 14))
 
     service = GameplayService(
         engine=engine,
-        provider=provider,
+        stats_source=stats_source,
         rng=_NoShuffleRandom(),
         historical_rounds=5,
         historical_eligible_dates_fetcher=fake_eligible_dates_fetcher,
@@ -1016,7 +1023,7 @@ def test_historical_caps_rounds_to_available_games_without_refetching_dates(tmp_
 
     start_snapshot = asyncio.run(service.start_run(GameMode.HISTORICAL, total_questions=5))
 
-    assert provider.requested_dates == [date(2018, 2, 13)]
+    assert stats_source.requested_dates == [date(2018, 2, 13)]
     assert len(start_snapshot.games_today) == 2
     assert {game.game_id for game in start_snapshot.games_today} == {
         "few-game-1",
@@ -1028,7 +1035,7 @@ def test_historical_caps_rounds_to_available_games_without_refetching_dates(tmp_
         for _ in range(round_snapshot.total_questions):
             question = service.snapshot().current_question
             assert question is not None
-            asyncio.run(service.submit_answer(question.answer))
+            asyncio.run(service.submit_guess(question.correct_guess))
 
     final_snapshot = service.snapshot()
 
@@ -1047,14 +1054,14 @@ def test_historical_caps_rounds_to_available_games_without_refetching_dates(tmp_
 
 def test_historical_index_start_tries_next_date_when_first_date_fails(tmp_path) -> None:
     engine = _make_engine(tmp_path)
-    provider = _IndexedFallbackProvider()
+    stats_source = _IndexedFallbackStatsSource()
 
     async def fake_eligible_dates_fetcher(_start_year: int, _end_year: int, _min_games: int):
         return (date(2018, 2, 13), date(2018, 2, 14))
 
     service = GameplayService(
         engine=engine,
-        provider=provider,
+        stats_source=stats_source,
         rng=_NoShuffleRandom(),
         historical_rounds=5,
         historical_eligible_dates_fetcher=fake_eligible_dates_fetcher,
@@ -1062,7 +1069,7 @@ def test_historical_index_start_tries_next_date_when_first_date_fails(tmp_path) 
 
     snapshot = asyncio.run(service.start_run(GameMode.HISTORICAL, total_questions=5))
 
-    assert provider.requested_dates == [date(2018, 2, 13), date(2018, 2, 14)]
+    assert stats_source.requested_dates == [date(2018, 2, 13), date(2018, 2, 14)]
     assert snapshot.source_date == date(2018, 2, 14)
     assert len(snapshot.games_today) == 5
 
@@ -1071,7 +1078,7 @@ def test_historical_candidate_dates_samples_exactly_configured_rounds(tmp_path) 
     engine = _make_engine(tmp_path)
     service = GameplayService(
         engine=engine,
-        provider=_ManyGamesProvider(),
+        stats_source=_ManyGamesStatsSource(),
         rng=Random(4),
         historical_rounds=5,
     )
@@ -1093,7 +1100,7 @@ def test_historical_source_date_caps_rounds_to_available_games(tmp_path) -> None
     engine = _make_engine(tmp_path)
     service = GameplayService(
         engine=engine,
-        provider=_ManyGamesProvider(),
+        stats_source=_ManyGamesStatsSource(),
         rng=Random(4),
         historical_rounds=8,
     )
@@ -1112,7 +1119,7 @@ def test_historical_source_date_caps_rounds_to_available_games(tmp_path) -> None
 
 def test_historical_carries_configured_total_questions_into_next_round(tmp_path) -> None:
     engine = _make_engine(tmp_path)
-    service = GameplayService(engine=engine, provider=MockProvider(), rng=Random(1))
+    service = GameplayService(engine=engine, stats_source=MockStatsSource(), rng=Random(1))
 
     start_snapshot = asyncio.run(
         service.start_run(
@@ -1125,7 +1132,7 @@ def test_historical_carries_configured_total_questions_into_next_round(tmp_path)
     for _ in range(start_snapshot.total_questions):
         question = service.snapshot().current_question
         assert question is not None
-        asyncio.run(service.submit_answer(question.answer))
+        asyncio.run(service.submit_guess(question.correct_guess))
 
     snapshot = service.snapshot()
 
@@ -1141,7 +1148,7 @@ def test_historical_carries_configured_total_questions_into_next_round(tmp_path)
 
 def test_historical_wrong_answer_keeps_run_active_and_applies_score(tmp_path) -> None:
     engine = _make_engine(tmp_path)
-    service = GameplayService(engine=engine, provider=MockProvider(), rng=Random(5))
+    service = GameplayService(engine=engine, stats_source=MockStatsSource(), rng=Random(5))
 
     start_snapshot = asyncio.run(
         service.start_run(
@@ -1153,8 +1160,8 @@ def test_historical_wrong_answer_keeps_run_active_and_applies_score(tmp_path) ->
     question = start_snapshot.current_question
     assert question is not None
 
-    wrong_guess = _opposite_guess(question.answer)
-    result = asyncio.run(service.submit_answer(wrong_guess, response_time_ms=700))
+    wrong_guess = _opposite_guess(question.correct_guess)
+    result = asyncio.run(service.submit_guess(wrong_guess, response_time_ms=700))
     snapshot = service.snapshot()
 
     assert result.is_correct is False
@@ -1165,7 +1172,7 @@ def test_historical_wrong_answer_keeps_run_active_and_applies_score(tmp_path) ->
 
 def test_historical_advances_to_next_game_after_round_completion(tmp_path) -> None:
     engine = _make_engine(tmp_path)
-    service = GameplayService(engine=engine, provider=MockProvider(), rng=Random(1))
+    service = GameplayService(engine=engine, stats_source=MockStatsSource(), rng=Random(1))
 
     start_snapshot = asyncio.run(
         service.start_run(
@@ -1179,7 +1186,7 @@ def test_historical_advances_to_next_game_after_round_completion(tmp_path) -> No
     for _ in range(start_snapshot.total_questions):
         question = service.snapshot().current_question
         assert question is not None
-        asyncio.run(service.submit_answer(question.answer))
+        asyncio.run(service.submit_guess(question.correct_guess))
 
     snapshot = service.snapshot()
 
@@ -1190,7 +1197,7 @@ def test_historical_advances_to_next_game_after_round_completion(tmp_path) -> No
 
 def test_historical_ends_after_all_games_for_date_are_consumed(tmp_path) -> None:
     engine = _make_engine(tmp_path)
-    service = GameplayService(engine=engine, provider=MockProvider(), rng=Random(1))
+    service = GameplayService(engine=engine, stats_source=MockStatsSource(), rng=Random(1))
 
     start_snapshot = asyncio.run(
         service.start_run(
@@ -1206,7 +1213,7 @@ def test_historical_ends_after_all_games_for_date_are_consumed(tmp_path) -> None
         for _ in range(round_snapshot.total_questions):
             question = service.snapshot().current_question
             assert question is not None
-            asyncio.run(service.submit_answer(question.answer))
+            asyncio.run(service.submit_guess(question.correct_guess))
 
     snapshot = service.snapshot()
 

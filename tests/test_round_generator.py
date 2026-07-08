@@ -4,7 +4,7 @@ import pytest
 
 from hoophigher.domain import (
     Difficulty,
-    GameBoxScore,
+    NBAGame,
     PlayerLine,
     RoundDefinition,
     TeamGameInfo,
@@ -23,10 +23,10 @@ def make_player(player_id: str, points: int, minutes: int = 24) -> PlayerLine:
     )
 
 
-def make_game(players: tuple[PlayerLine, ...]) -> GameBoxScore:
-    return GameBoxScore(
+def make_game(players: tuple[PlayerLine, ...]) -> NBAGame:
+    return NBAGame(
         game_id="game-42",
-        game_date=date(2025, 2, 1),
+        source_date=date(2025, 2, 1),
         home_team=TeamGameInfo(team_id="home", name="Home", abbreviation="HOM", score=110),
         away_team=TeamGameInfo(team_id="away", name="Away", abbreviation="AWY", score=104),
         player_lines=players,

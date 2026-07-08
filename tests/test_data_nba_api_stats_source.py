@@ -6,20 +6,20 @@ from datetime import date
 
 import pytest
 
-import hoophigher.data.api.nba_api_provider as provider_module
+import hoophigher.data.stats_sources.nba_api_stats_source as stats_source_module
 from hoophigher.data import CacheRepository, create_sqlite_engine, init_db, session_scope
-from hoophigher.data.api.nba_api_provider import (
-    NBAApiProvider,
-    _default_boxscore_fetch,
+from hoophigher.data.stats_sources.nba_api_stats_source import (
+    NBAApiStatsSource,
+    _default_nba_game_fetch,
     _default_scoreboard_fetch,
 )
-from hoophigher.domain.models import GameBoxScore, PlayerLine, TeamGameInfo
+from hoophigher.domain.models import NBAGame, PlayerLine, TeamGameInfo
 
 
-def _make_game(game_id: str, game_date: date) -> GameBoxScore:
-    return GameBoxScore(
+def _make_game(game_id: str, source_date: date) -> NBAGame:
+    return NBAGame(
         game_id=game_id,
-        game_date=game_date,
+        source_date=source_date,
         home_team=TeamGameInfo(team_id="1610612737", name="Hawks", abbreviation="ATL", score=110),
         away_team=TeamGameInfo(team_id="1610612738", name="Celtics", abbreviation="BOS", score=108),
         player_lines=(
@@ -60,19 +60,19 @@ def test_get_games_by_date_uses_cache_before_fetchers(tmp_path) -> None:
         scoreboard_calls += 1
         return {}
 
-    def boxscore_fetch(_game_id: str, _timeout_seconds: int):
+    def nba_game_fetch(_game_id: str, _timeout_seconds: int):
         nonlocal boxscore_calls
         boxscore_calls += 1
         return {}
 
-    provider = NBAApiProvider(
+    stats_source = NBAApiStatsSource(
         cache_repository_factory=_make_cache_factory(engine),
         scoreboard_fetch=scoreboard_fetch,
-        boxscore_fetch=boxscore_fetch,
+        nba_game_fetch=nba_game_fetch,
         timeout_seconds=5,
     )
 
-    games = asyncio.run(provider.get_games_by_date(target_date))
+    games = asyncio.run(stats_source.get_games_by_date(target_date))
 
     assert games == [cached_game]
     assert scoreboard_calls == 0
@@ -82,13 +82,13 @@ def test_get_games_by_date_uses_cache_before_fetchers(tmp_path) -> None:
 def test_get_games_by_date_refetches_cached_unavailable_boxscore(tmp_path) -> None:
     """When the cached boxscore has no valid stats, get_games_by_date returns a shell.
 
-    The caller then uses get_game_boxscore to fetch the full data on demand.
+    The caller then uses get_nba_game to fetch the full data on demand.
     """
     target_date = date(2025, 2, 10)
     game_id = "0022500201"
-    stale_game = GameBoxScore(
+    stale_game = NBAGame(
         game_id=game_id,
-        game_date=target_date,
+        source_date=target_date,
         home_team=TeamGameInfo(team_id="1610612737", name="Hawks", abbreviation="ATL", score=None),
         away_team=TeamGameInfo(
             team_id="1610612738",
@@ -112,7 +112,7 @@ def test_get_games_by_date_refetches_cached_unavailable_boxscore(tmp_path) -> No
     with session_scope(engine) as session:
         cache_repository = CacheRepository(session)
         cache_repository.set_games_by_date(target_date, [stale_game])
-        cache_repository.set_game_boxscore(stale_game)
+        cache_repository.set_nba_game(stale_game)
 
     scoreboard_calls = 0
     boxscore_calls = 0
@@ -143,7 +143,7 @@ def test_get_games_by_date_refetches_cached_unavailable_boxscore(tmp_path) -> No
             }
         }
 
-    def boxscore_fetch(_game_id: str, _timeout_seconds: int):
+    def nba_game_fetch(_game_id: str, _timeout_seconds: int):
         nonlocal boxscore_calls
         boxscore_calls += 1
         return {
@@ -175,33 +175,33 @@ def test_get_games_by_date_refetches_cached_unavailable_boxscore(tmp_path) -> No
             }
         }
 
-    provider = NBAApiProvider(
+    stats_source = NBAApiStatsSource(
         cache_repository_factory=_make_cache_factory(engine),
         scoreboard_fetch=scoreboard_fetch,
-        boxscore_fetch=boxscore_fetch,
+        nba_game_fetch=nba_game_fetch,
         timeout_seconds=5,
         retry_delay_seconds=0,
     )
 
     # get_games_by_date returns a shell (no player lines) when cache has stale data.
-    games = asyncio.run(provider.get_games_by_date(target_date))
+    games = asyncio.run(stats_source.get_games_by_date(target_date))
     assert scoreboard_calls == 1
     assert boxscore_calls == 0
     assert games[0].player_lines == ()
 
-    # get_game_boxscore fetches the full data on demand.
-    full_game = asyncio.run(provider.get_game_boxscore(game_id))
+    # get_nba_game fetches the full data on demand.
+    full_game = asyncio.run(stats_source.get_nba_game(game_id))
     assert boxscore_calls == 1
     assert full_game.player_lines[0].minutes == 34
     assert full_game.player_lines[0].points == 31
 
 
-def test_get_game_boxscore_caches_miss_then_hits_cache(tmp_path) -> None:
+def test_get_nba_game_caches_miss_then_hits_cache(tmp_path) -> None:
     engine = create_sqlite_engine(f"sqlite:///{tmp_path / 'hoophigher.db'}")
     init_db(engine)
     calls = 0
 
-    def boxscore_fetch(game_id: str, _timeout_seconds: int):
+    def nba_game_fetch(game_id: str, _timeout_seconds: int):
         nonlocal calls
         calls += 1
         return {
@@ -233,25 +233,25 @@ def test_get_game_boxscore_caches_miss_then_hits_cache(tmp_path) -> None:
             }
         }
 
-    provider = NBAApiProvider(
+    stats_source = NBAApiStatsSource(
         cache_repository_factory=_make_cache_factory(engine),
-        boxscore_fetch=boxscore_fetch,
+        nba_game_fetch=nba_game_fetch,
         timeout_seconds=5,
     )
 
-    first = asyncio.run(provider.get_game_boxscore("0022500002"))
-    second = asyncio.run(provider.get_game_boxscore("0022500002"))
+    first = asyncio.run(stats_source.get_nba_game("0022500002"))
+    second = asyncio.run(stats_source.get_nba_game("0022500002"))
 
     assert calls == 1
     assert first == second
     assert first.player_lines[0].minutes == 12
 
 
-def test_get_game_boxscore_accepts_date_fallback_for_v3_payload_without_game_date(tmp_path) -> None:
+def test_get_nba_game_accepts_date_fallback_for_v3_payload_without_game_date(tmp_path) -> None:
     engine = create_sqlite_engine(f"sqlite:///{tmp_path / 'hoophigher.db'}")
     init_db(engine)
 
-    def boxscore_fetch(game_id: str, _timeout_seconds: int):
+    def nba_game_fetch(game_id: str, _timeout_seconds: int):
         return {
             "boxScoreTraditional": {
                 "gameId": game_id,
@@ -286,21 +286,21 @@ def test_get_game_boxscore_accepts_date_fallback_for_v3_payload_without_game_dat
             }
         }
 
-    provider = NBAApiProvider(
+    stats_source = NBAApiStatsSource(
         cache_repository_factory=_make_cache_factory(engine),
-        boxscore_fetch=boxscore_fetch,
+        nba_game_fetch=nba_game_fetch,
         timeout_seconds=5,
         retry_delay_seconds=0,
     )
 
     game = asyncio.run(
-        provider.get_game_boxscore(
+        stats_source.get_nba_game(
             "0022400539",
-            game_date_fallback=date(2025, 1, 12),
+            source_date_fallback=date(2025, 1, 12),
         )
     )
 
-    assert game.game_date == date(2025, 1, 12)
+    assert game.source_date == date(2025, 1, 12)
     assert [
         (player.player_name, player.minutes, player.points) for player in game.player_lines
     ] == [
@@ -310,7 +310,7 @@ def test_get_game_boxscore_accepts_date_fallback_for_v3_payload_without_game_dat
 
 
 def test_get_games_by_date_returns_shells_and_boxscore_caches_on_demand(tmp_path) -> None:
-    """get_games_by_date returns shells; get_game_boxscore caches individually."""
+    """get_games_by_date returns shells; get_nba_game caches individually."""
     target_date = date(2025, 2, 10)
     engine = create_sqlite_engine(f"sqlite:///{tmp_path / 'hoophigher.db'}")
     init_db(engine)
@@ -343,7 +343,7 @@ def test_get_games_by_date_returns_shells_and_boxscore_caches_on_demand(tmp_path
             }
         }
 
-    def boxscore_fetch(game_id: str, _timeout_seconds: int):
+    def nba_game_fetch(game_id: str, _timeout_seconds: int):
         nonlocal boxscore_calls
         boxscore_calls += 1
         return {
@@ -375,27 +375,27 @@ def test_get_games_by_date_returns_shells_and_boxscore_caches_on_demand(tmp_path
             }
         }
 
-    provider = NBAApiProvider(
+    stats_source = NBAApiStatsSource(
         cache_repository_factory=_make_cache_factory(engine),
         scoreboard_fetch=scoreboard_fetch,
-        boxscore_fetch=boxscore_fetch,
+        nba_game_fetch=nba_game_fetch,
         timeout_seconds=5,
         retry_delay_seconds=0,
     )
 
     # First call: scoreboard returns shell.
-    shells = asyncio.run(provider.get_games_by_date(target_date))
+    shells = asyncio.run(stats_source.get_games_by_date(target_date))
     assert len(shells) == 1
     assert shells[0].player_lines == ()
     assert scoreboard_calls == 1
     assert boxscore_calls == 0
 
     # Fetch full boxscore on demand.
-    first = asyncio.run(provider.get_game_boxscore("0022500003"))
+    first = asyncio.run(stats_source.get_nba_game("0022500003"))
     assert boxscore_calls == 1
 
     # Second fetch uses cache — no additional API call.
-    second = asyncio.run(provider.get_game_boxscore("0022500003"))
+    second = asyncio.run(stats_source.get_nba_game("0022500003"))
     assert boxscore_calls == 1
     assert first == second
 
@@ -433,23 +433,23 @@ def test_get_games_by_date_returns_shells_without_fetching_boxscores(tmp_path) -
             }
         }
 
-    def boxscore_fetch(game_id: str, _timeout_seconds: int):
+    def nba_game_fetch(game_id: str, _timeout_seconds: int):
         nonlocal boxscore_calls
         boxscore_calls += 1
         return {}
 
-    provider = NBAApiProvider(
+    stats_source = NBAApiStatsSource(
         cache_repository_factory=_make_cache_factory(engine),
         scoreboard_fetch=scoreboard_fetch,
-        boxscore_fetch=boxscore_fetch,
+        nba_game_fetch=nba_game_fetch,
         timeout_seconds=5,
         retry_delay_seconds=0,
     )
 
-    games = asyncio.run(provider.get_games_by_date(target_date))
+    games = asyncio.run(stats_source.get_games_by_date(target_date))
 
     assert [game.game_id for game in games] == sorted(game_ids)
-    # No boxscore API calls — they are deferred to get_game_boxscore.
+    # No boxscore API calls — they are deferred to get_nba_game.
     assert boxscore_calls == 0
     # All games are shells without player lines.
     assert all(game.player_lines == () for game in games)
@@ -459,7 +459,7 @@ def test_mapping_parses_minutes_and_skips_blank_player_ids(tmp_path) -> None:
     engine = create_sqlite_engine(f"sqlite:///{tmp_path / 'hoophigher.db'}")
     init_db(engine)
 
-    def boxscore_fetch(game_id: str, _timeout_seconds: int):
+    def nba_game_fetch(game_id: str, _timeout_seconds: int):
         return {
             "boxScoreTraditional": {
                 "gameId": game_id,
@@ -505,13 +505,13 @@ def test_mapping_parses_minutes_and_skips_blank_player_ids(tmp_path) -> None:
             }
         }
 
-    provider = NBAApiProvider(
+    stats_source = NBAApiStatsSource(
         cache_repository_factory=_make_cache_factory(engine),
-        boxscore_fetch=boxscore_fetch,
+        nba_game_fetch=nba_game_fetch,
         timeout_seconds=5,
     )
 
-    game = asyncio.run(provider.get_game_boxscore("0022500004"))
+    game = asyncio.run(stats_source.get_nba_game("0022500004"))
 
     assert len(game.player_lines) == 2
     assert [player.minutes for player in game.player_lines] == [12, 0]
@@ -547,7 +547,7 @@ def test_get_games_by_date_parses_nested_v3_boxscore_shape(tmp_path) -> None:
             }
         }
 
-    def boxscore_fetch(game_id: str, _timeout_seconds: int):
+    def nba_game_fetch(game_id: str, _timeout_seconds: int):
         return {
             "boxScoreTraditional": {
                 "gameId": game_id,
@@ -589,26 +589,26 @@ def test_get_games_by_date_parses_nested_v3_boxscore_shape(tmp_path) -> None:
             }
         }
 
-    provider = NBAApiProvider(
+    stats_source = NBAApiStatsSource(
         cache_repository_factory=_make_cache_factory(engine),
         scoreboard_fetch=scoreboard_fetch,
-        boxscore_fetch=boxscore_fetch,
+        nba_game_fetch=nba_game_fetch,
         timeout_seconds=5,
     )
 
-    games = asyncio.run(provider.get_games_by_date(target_date))
+    games = asyncio.run(stats_source.get_games_by_date(target_date))
 
     assert len(games) == 1
     game = games[0]
-    assert game.game_date == target_date
+    assert game.source_date == target_date
     # Shell from scoreboard has team info.
     assert game.home_team.score == 111
     assert game.away_team.score == 109
-    # No player lines — those come from on-demand get_game_boxscore.
+    # No player lines — those come from on-demand get_nba_game.
     assert game.player_lines == ()
 
     # Fetch the full boxscore on demand.
-    full_game = asyncio.run(provider.get_game_boxscore("0022500104"))
+    full_game = asyncio.run(stats_source.get_nba_game("0022500104"))
     assert [
         (player.player_name, player.team_abbreviation, player.minutes, player.points)
         for player in full_game.player_lines
@@ -647,7 +647,7 @@ def test_get_games_by_date_parses_v2_boxscore_without_game_summary(tmp_path) -> 
             }
         }
 
-    def boxscore_fetch(game_id: str, _timeout_seconds: int):
+    def nba_game_fetch(game_id: str, _timeout_seconds: int):
         return {
             "resultSets": [
                 {
@@ -684,25 +684,25 @@ def test_get_games_by_date_parses_v2_boxscore_without_game_summary(tmp_path) -> 
             ]
         }
 
-    provider = NBAApiProvider(
+    stats_source = NBAApiStatsSource(
         cache_repository_factory=_make_cache_factory(engine),
         scoreboard_fetch=scoreboard_fetch,
-        boxscore_fetch=boxscore_fetch,
+        nba_game_fetch=nba_game_fetch,
         timeout_seconds=5,
     )
 
-    games = asyncio.run(provider.get_games_by_date(target_date))
+    games = asyncio.run(stats_source.get_games_by_date(target_date))
 
     assert len(games) == 1
     game = games[0]
-    assert game.game_date == target_date
+    assert game.source_date == target_date
     assert game.home_team.abbreviation == "ATL"
     assert game.away_team.abbreviation == "BOS"
     # Shell — no player lines.
     assert game.player_lines == ()
 
     # Fetch the full boxscore on demand.
-    full_game = asyncio.run(provider.get_game_boxscore("0022500105"))
+    full_game = asyncio.run(stats_source.get_nba_game("0022500105"))
     assert [
         (player.player_name, player.team_abbreviation, player.minutes, player.points)
         for player in full_game.player_lines
@@ -716,7 +716,7 @@ def test_malformed_payload_raises_explicit_error(tmp_path) -> None:
     engine = create_sqlite_engine(f"sqlite:///{tmp_path / 'hoophigher.db'}")
     init_db(engine)
 
-    def malformed_boxscore_fetch(game_id: str, _timeout_seconds: int):
+    def malformed_nba_game_fetch(game_id: str, _timeout_seconds: int):
         return {
             "boxScoreTraditional": {
                 "gameId": game_id,
@@ -731,22 +731,22 @@ def test_malformed_payload_raises_explicit_error(tmp_path) -> None:
             }
         }
 
-    provider = NBAApiProvider(
+    stats_source = NBAApiStatsSource(
         cache_repository_factory=_make_cache_factory(engine),
-        boxscore_fetch=malformed_boxscore_fetch,
+        nba_game_fetch=malformed_nba_game_fetch,
         timeout_seconds=5,
     )
 
     with pytest.raises(ValueError, match="Malformed payload"):
-        asyncio.run(provider.get_game_boxscore("0022500005"))
+        asyncio.run(stats_source.get_nba_game("0022500005"))
 
 
-def test_get_game_boxscore_retries_transient_fetch_error_then_succeeds(tmp_path) -> None:
+def test_get_nba_game_retries_transient_fetch_error_then_succeeds(tmp_path) -> None:
     engine = create_sqlite_engine(f"sqlite:///{tmp_path / 'hoophigher.db'}")
     init_db(engine)
     calls = 0
 
-    def flaky_boxscore_fetch(game_id: str, _timeout_seconds: int):
+    def flaky_nba_game_fetch(game_id: str, _timeout_seconds: int):
         nonlocal calls
         calls += 1
         if calls < 3:
@@ -780,14 +780,14 @@ def test_get_game_boxscore_retries_transient_fetch_error_then_succeeds(tmp_path)
             }
         }
 
-    provider = NBAApiProvider(
+    stats_source = NBAApiStatsSource(
         cache_repository_factory=_make_cache_factory(engine),
-        boxscore_fetch=flaky_boxscore_fetch,
+        nba_game_fetch=flaky_nba_game_fetch,
         timeout_seconds=5,
         max_retries=2,
     )
 
-    game = asyncio.run(provider.get_game_boxscore("0022500101"))
+    game = asyncio.run(stats_source.get_nba_game("0022500101"))
 
     assert game.game_id == "0022500101"
     assert calls == 3
@@ -827,7 +827,7 @@ def test_get_games_by_date_retries_transient_scoreboard_error_then_succeeds(tmp_
             }
         }
 
-    def boxscore_fetch(game_id: str, _timeout_seconds: int):
+    def nba_game_fetch(game_id: str, _timeout_seconds: int):
         return {
             "boxScoreTraditional": {
                 "gameId": game_id,
@@ -857,15 +857,15 @@ def test_get_games_by_date_retries_transient_scoreboard_error_then_succeeds(tmp_
             }
         }
 
-    provider = NBAApiProvider(
+    stats_source = NBAApiStatsSource(
         cache_repository_factory=_make_cache_factory(engine),
         scoreboard_fetch=flaky_scoreboard_fetch,
-        boxscore_fetch=boxscore_fetch,
+        nba_game_fetch=nba_game_fetch,
         timeout_seconds=5,
         max_retries=2,
     )
 
-    games = asyncio.run(provider.get_games_by_date(target_date))
+    games = asyncio.run(stats_source.get_games_by_date(target_date))
 
     assert [game.game_id for game in games] == ["0022500102"]
     assert games[0].player_lines == ()  # Shell from scoreboard.
@@ -883,7 +883,7 @@ def test_get_games_by_date_raises_lookup_error_when_transient_errors_exhausted(t
         calls += 1
         raise ConnectionError("upstream unavailable")
 
-    provider = NBAApiProvider(
+    stats_source = NBAApiStatsSource(
         cache_repository_factory=_make_cache_factory(engine),
         scoreboard_fetch=always_failing_scoreboard_fetch,
         timeout_seconds=5,
@@ -891,30 +891,30 @@ def test_get_games_by_date_raises_lookup_error_when_transient_errors_exhausted(t
     )
 
     with pytest.raises(LookupError, match="Failed to fetch scoreboard"):
-        asyncio.run(provider.get_games_by_date(target_date))
+        asyncio.run(stats_source.get_games_by_date(target_date))
 
     assert calls == 3
 
 
-def test_get_game_boxscore_raises_lookup_error_when_transient_errors_exhausted(tmp_path) -> None:
+def test_get_nba_game_raises_lookup_error_when_transient_errors_exhausted(tmp_path) -> None:
     engine = create_sqlite_engine(f"sqlite:///{tmp_path / 'hoophigher.db'}")
     init_db(engine)
     calls = 0
 
-    def always_failing_boxscore_fetch(_game_id: str, _timeout_seconds: int):
+    def always_failing_nba_game_fetch(_game_id: str, _timeout_seconds: int):
         nonlocal calls
         calls += 1
         raise TimeoutError("boxscore timeout")
 
-    provider = NBAApiProvider(
+    stats_source = NBAApiStatsSource(
         cache_repository_factory=_make_cache_factory(engine),
-        boxscore_fetch=always_failing_boxscore_fetch,
+        nba_game_fetch=always_failing_nba_game_fetch,
         timeout_seconds=5,
         max_retries=2,
     )
 
     with pytest.raises(LookupError, match="Failed to fetch boxscore"):
-        asyncio.run(provider.get_game_boxscore("0022500103"))
+        asyncio.run(stats_source.get_nba_game("0022500103"))
 
     assert calls == 3
 
@@ -924,7 +924,7 @@ def test_timeout_seconds_below_one_raises_value_error(tmp_path) -> None:
     init_db(engine)
 
     with pytest.raises(ValueError, match="at least 1"):
-        NBAApiProvider(
+        NBAApiStatsSource(
             cache_repository_factory=_make_cache_factory(engine),
             timeout_seconds=0,
         )
@@ -935,7 +935,7 @@ def test_max_retries_below_zero_raises_value_error(tmp_path) -> None:
     init_db(engine)
 
     with pytest.raises(ValueError, match="max_retries"):
-        NBAApiProvider(
+        NBAApiStatsSource(
             cache_repository_factory=_make_cache_factory(engine),
             max_retries=-1,
         )
@@ -946,17 +946,17 @@ def test_retry_delay_seconds_below_zero_raises_value_error(tmp_path) -> None:
     init_db(engine)
 
     with pytest.raises(ValueError, match="retry_delay_seconds"):
-        NBAApiProvider(
+        NBAApiStatsSource(
             cache_repository_factory=_make_cache_factory(engine),
             retry_delay_seconds=-0.1,
         )
 
 
-def test_get_game_boxscore_raises_lookup_error_for_missing_expected_game_id(tmp_path) -> None:
+def test_get_nba_game_raises_lookup_error_for_missing_expected_game_id(tmp_path) -> None:
     engine = create_sqlite_engine(f"sqlite:///{tmp_path / 'hoophigher.db'}")
     init_db(engine)
 
-    def boxscore_fetch(_game_id: str, _timeout_seconds: int):
+    def nba_game_fetch(_game_id: str, _timeout_seconds: int):
         return {
             "boxScoreTraditional": {
                 "gameId": "0022509999",
@@ -977,14 +977,14 @@ def test_get_game_boxscore_raises_lookup_error_for_missing_expected_game_id(tmp_
             }
         }
 
-    provider = NBAApiProvider(
+    stats_source = NBAApiStatsSource(
         cache_repository_factory=_make_cache_factory(engine),
-        boxscore_fetch=boxscore_fetch,
+        nba_game_fetch=nba_game_fetch,
         timeout_seconds=5,
     )
 
     with pytest.raises(LookupError, match="not found"):
-        asyncio.run(provider.get_game_boxscore("0022500006"))
+        asyncio.run(stats_source.get_nba_game("0022500006"))
 
 
 def test_get_games_by_date_returns_games_sorted_by_game_id(tmp_path) -> None:
@@ -1032,7 +1032,7 @@ def test_get_games_by_date_returns_games_sorted_by_game_id(tmp_path) -> None:
             }
         }
 
-    def boxscore_fetch(game_id: str, _timeout_seconds: int):
+    def nba_game_fetch(game_id: str, _timeout_seconds: int):
         if game_id == "0022500001":
             home_team = {
                 "teamId": "1610612739",
@@ -1079,14 +1079,14 @@ def test_get_games_by_date_returns_games_sorted_by_game_id(tmp_path) -> None:
             }
         }
 
-    provider = NBAApiProvider(
+    stats_source = NBAApiStatsSource(
         cache_repository_factory=_make_cache_factory(engine),
         scoreboard_fetch=scoreboard_fetch,
-        boxscore_fetch=boxscore_fetch,
+        nba_game_fetch=nba_game_fetch,
         timeout_seconds=5,
     )
 
-    games = asyncio.run(provider.get_games_by_date(target_date))
+    games = asyncio.run(stats_source.get_games_by_date(target_date))
 
     assert [game.game_id for game in games] == ["0022500001", "0022500009"]
 
@@ -1173,7 +1173,7 @@ def test_default_scoreboard_fetch_falls_back_to_v2_when_v3_raises(monkeypatch) -
     assert calls == ["v3", "v2"]
 
 
-def test_default_boxscore_fetch_falls_back_to_v2_when_v3_returns_invalid_payload(
+def test_default_nba_game_fetch_falls_back_to_v2_when_v3_returns_invalid_payload(
     monkeypatch,
 ) -> None:
     calls: list[str] = []
@@ -1212,7 +1212,7 @@ def test_default_boxscore_fetch_falls_back_to_v2_when_v3_returns_invalid_payload
     monkeypatch.setitem(sys.modules, "nba_api.stats", fake_stats)
     monkeypatch.setitem(sys.modules, "nba_api.stats.endpoints", fake_endpoints)
 
-    payload = _default_boxscore_fetch("0022500106", 7)
+    payload = _default_nba_game_fetch("0022500106", 7)
 
     assert payload == {"resultSets": []}
     assert calls == ["v3", "v2"]
@@ -1251,7 +1251,7 @@ def test_default_scoreboard_fetch_skips_v2_when_v3_exhausts_timeout_budget(monke
     monkeypatch.setitem(sys.modules, "nba_api.stats", fake_stats)
     monkeypatch.setitem(sys.modules, "nba_api.stats.endpoints", fake_endpoints)
     monotonic_values = iter((100.0, 107.1))
-    monkeypatch.setattr(provider_module.time, "monotonic", lambda: next(monotonic_values))
+    monkeypatch.setattr(stats_source_module.time, "monotonic", lambda: next(monotonic_values))
 
     with pytest.raises(TimeoutError, match="scoreboard fallback request"):
         _default_scoreboard_fetch(date(2025, 2, 10), 7)
@@ -1259,7 +1259,7 @@ def test_default_scoreboard_fetch_skips_v2_when_v3_exhausts_timeout_budget(monke
     assert calls == ["v3"]
 
 
-def test_default_boxscore_fetch_skips_v2_when_v3_exhausts_timeout_budget(monkeypatch) -> None:
+def test_default_nba_game_fetch_skips_v2_when_v3_exhausts_timeout_budget(monkeypatch) -> None:
     calls: list[str] = []
 
     class FakeBoxScoreTraditionalV3:
@@ -1296,9 +1296,9 @@ def test_default_boxscore_fetch_skips_v2_when_v3_exhausts_timeout_budget(monkeyp
     monkeypatch.setitem(sys.modules, "nba_api.stats", fake_stats)
     monkeypatch.setitem(sys.modules, "nba_api.stats.endpoints", fake_endpoints)
     monotonic_values = iter((200.0, 207.1))
-    monkeypatch.setattr(provider_module.time, "monotonic", lambda: next(monotonic_values))
+    monkeypatch.setattr(stats_source_module.time, "monotonic", lambda: next(monotonic_values))
 
     with pytest.raises(TimeoutError, match="boxscore fallback request"):
-        _default_boxscore_fetch("0022500106", 7)
+        _default_nba_game_fetch("0022500106", 7)
 
     assert calls == ["v3"]

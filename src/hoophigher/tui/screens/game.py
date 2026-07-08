@@ -24,7 +24,7 @@ _FEEDBACK_DURATION_SECONDS = 1.2
 
 
 @dataclass(frozen=True, slots=True)
-class AnswerHistoryItem:
+class GuessHistoryItem:
     index: int
     is_correct: bool
     score_delta: int
@@ -170,8 +170,8 @@ class GameScreen(Screen[None]):
     def __init__(self, snapshot: GameplaySnapshot) -> None:
         super().__init__()
         self._snapshot = snapshot
-        self._history: list[AnswerHistoryItem] = []
-        self._round_history: list[AnswerHistoryItem] = []
+        self._history: list[GuessHistoryItem] = []
+        self._round_history: list[GuessHistoryItem] = []
         self._awaiting_feedback = False
         self._game_over_screen_visible = False
         self._status_strip = GameStatusStrip(id="status-bar")
@@ -266,10 +266,10 @@ class GameScreen(Screen[None]):
             previous_snapshot.question_index == previous_snapshot.total_questions - 1
         )
 
-        result = await self.app.gameplay_service.submit_answer(guess)
+        result = await self.app.gameplay_service.submit_guess(guess)
 
         # Build history item
-        history_item = AnswerHistoryItem(
+        history_item = GuessHistoryItem(
             index=previous_snapshot.question_index + 1,
             is_correct=result.is_correct,
             score_delta=result.score_delta,
@@ -316,7 +316,7 @@ class GameScreen(Screen[None]):
             summary = RoundSummary(
                 round_index=self._snapshot.round_index - 1,
                 game_id=previous_snapshot.game_id,
-                game_date=previous_snapshot.current_game.game_date,
+                source_date=previous_snapshot.current_game.source_date,
                 questions=len(self._round_history),
                 correct_answers=sum(1 for item in self._round_history if item.is_correct),
                 wrong_answers=sum(1 for item in self._round_history if not item.is_correct),
