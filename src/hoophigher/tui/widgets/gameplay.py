@@ -265,8 +265,11 @@ class PlayerCard(Vertical):
     def update_content(self, *, name: str, team: str, points: str, minutes: str) -> None:
         self.query_one(f"#{self._prefix}-name", Label).update(name)
         self.query_one(f"#{self._prefix}-team", Label).update(team)
-        self.query_one(f"#{self._points_id}", Label).update(points)
+        self.update_points(points)
         self.query_one(f"#{self._prefix}-minutes", Label).update(minutes)
+
+    def update_points(self, points: str) -> None:
+        self.query_one(f"#{self._points_id}", Label).update(points)
 
 
 class MatchupPanel(Vertical):
@@ -360,12 +363,7 @@ class MatchupPanel(Vertical):
         )
 
     def reveal_points(self, points: int) -> None:
-        self._player_b_card.update_content(
-            name=self.query_one("#pb-name", Label).visual.plain,
-            team=self.query_one("#pb-team", Label).visual.plain,
-            points=f"{points} PTS",
-            minutes=self.query_one("#pb-minutes", Label).visual.plain,
-        )
+        self._player_b_card.update_points(f"{points} PTS")
 
 
 class GuessButton(Button, inherit_bindings=False):
