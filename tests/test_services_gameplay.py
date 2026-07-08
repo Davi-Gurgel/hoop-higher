@@ -41,9 +41,7 @@ def _make_service_game(
             player_name=f"Player {index}",
             team_id=away_team.team_id if index <= split_index else home_team.team_id,
             team_abbreviation=(
-                away_team.abbreviation
-                if index <= split_index
-                else home_team.abbreviation
+                away_team.abbreviation if index <= split_index else home_team.abbreviation
             ),
             points=player_points,
             minutes=minutes,
@@ -126,8 +124,12 @@ class _ShellNBAGameStatsSource:
             NBAGame(
                 game_id=f"shell-game-{index}",
                 source_date=source_date,
-                home_team=TeamGameInfo(team_id=f"h-{index}", name="Home", abbreviation="HOM", score=110),
-                away_team=TeamGameInfo(team_id=f"a-{index}", name="Away", abbreviation="AWY", score=103),
+                home_team=TeamGameInfo(
+                    team_id=f"h-{index}", name="Home", abbreviation="HOM", score=110
+                ),
+                away_team=TeamGameInfo(
+                    team_id=f"a-{index}", name="Away", abbreviation="AWY", score=103
+                ),
                 player_lines=(),
             )
             for index in range(1, game_count + 1)
@@ -161,8 +163,12 @@ class _SlowFirstShellStatsSource:
             NBAGame(
                 game_id=f"shell-game-{index}",
                 source_date=source_date,
-                home_team=TeamGameInfo(team_id=f"h-{index}", name="Home", abbreviation="HOM", score=110),
-                away_team=TeamGameInfo(team_id=f"a-{index}", name="Away", abbreviation="AWY", score=103),
+                home_team=TeamGameInfo(
+                    team_id=f"h-{index}", name="Home", abbreviation="HOM", score=110
+                ),
+                away_team=TeamGameInfo(
+                    team_id=f"a-{index}", name="Away", abbreviation="AWY", score=103
+                ),
                 player_lines=(),
             )
             for index in range(1, game_count + 1)
@@ -450,7 +456,12 @@ def test_start_run_fetches_shell_nba_games_concurrently_and_passes_source_dates(
     assert snapshot.source_date == source_date
     assert len(snapshot.games_today) == 4
     assert stats_source.max_in_flight > 1
-    assert stats_source.requested_fallback_dates == [source_date, source_date, source_date, source_date]
+    assert stats_source.requested_fallback_dates == [
+        source_date,
+        source_date,
+        source_date,
+        source_date,
+    ]
 
 
 def test_non_historical_start_run_caps_shell_boxscore_fetches_for_fast_startup(tmp_path) -> None:
@@ -564,7 +575,9 @@ def test_historical_candidate_dates_require_playable_games(tmp_path) -> None:
     stats_source = _DateStatsSource(
         {
             first_date: tuple(
-                _make_service_game(game_id=f"a-unplayable-{index}", source_date=first_date, minutes=0)
+                _make_service_game(
+                    game_id=f"a-unplayable-{index}", source_date=first_date, minutes=0
+                )
                 for index in range(5)
             ),
             second_date: tuple(
@@ -835,7 +848,9 @@ def test_historical_selected_date_belongs_to_indexed_eligible_set(tmp_path) -> N
 class _ManyGamesStatsSource:
     def __init__(self) -> None:
         source_date = date(2018, 2, 14)
-        self._games = tuple(self._build_game(source_date=source_date, index=index) for index in range(1, 8))
+        self._games = tuple(
+            self._build_game(source_date=source_date, index=index) for index in range(1, 8)
+        )
         self._games_by_id = {game.game_id: game for game in self._games}
 
     async def get_games_by_date(self, source_date: date) -> list[NBAGame]:
@@ -856,8 +871,12 @@ class _ManyGamesStatsSource:
         return NBAGame(
             game_id=game_id,
             source_date=source_date,
-            home_team=TeamGameInfo(team_id=f"h-{index}", name="Home", abbreviation="HOM", score=110),
-            away_team=TeamGameInfo(team_id=f"a-{index}", name="Away", abbreviation="AWY", score=103),
+            home_team=TeamGameInfo(
+                team_id=f"h-{index}", name="Home", abbreviation="HOM", score=110
+            ),
+            away_team=TeamGameInfo(
+                team_id=f"a-{index}", name="Away", abbreviation="AWY", score=103
+            ),
             player_lines=(
                 PlayerLine(
                     player_id=f"{game_id}-p1",

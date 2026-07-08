@@ -126,7 +126,9 @@ def test_mode_select_shows_loading_state_while_starting_game(monkeypatch) -> Non
             release.set()
             await pilot.pause()
 
-            assert app.screen.query_one("#mode-loading-status", Label).has_class("-visible") is False
+            assert (
+                app.screen.query_one("#mode-loading-status", Label).has_class("-visible") is False
+            )
             assert app.screen.query_one("#mode-endless", Button).disabled is False
 
     asyncio.run(scenario())
@@ -252,22 +254,24 @@ def test_game_screen_surfaces_active_game_context() -> None:
             player_b_name = app.screen.query_one("#pb-name", Label)
 
             assert "@" in active_game.visual.plain
-            assert snapshot.current_game.game_id in {
-                game.game_id for game in snapshot.games_today
-            }
+            assert snapshot.current_game.game_id in {game.game_id for game in snapshot.games_today}
             current_game_index = next(
                 i
                 for i, g in enumerate(snapshot.games_today)
                 if g.game_id == snapshot.current_game.game_id
             )
-            assert app.screen.query_one(f"#game-tab-{current_game_index}", Label).has_class("browser-tab-active")
+            assert app.screen.query_one(f"#game-tab-{current_game_index}", Label).has_class(
+                "browser-tab-active"
+            )
             assert player_a_name.visual.plain != ""
             assert player_b_name.visual.plain != ""
 
     asyncio.run(scenario())
 
 
-def test_game_screen_renders_provider_strings_as_plain_text(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_game_screen_renders_provider_strings_as_plain_text(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     game = NBAGame(
         game_id="markup-game-[red]1[/red]",
         source_date=date(2025, 1, 12),

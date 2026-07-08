@@ -48,9 +48,7 @@ def create_stats_source(
             max_retries=max_retries,
             retry_delay_seconds=retry_delay_seconds,
         )
-    raise ValueError(
-        f"Unknown stats source '{source_kind}'. Expected one of: 'mock', 'nba_api'."
-    )
+    raise ValueError(f"Unknown stats source '{source_kind}'. Expected one of: 'mock', 'nba_api'.")
 
 
 def recent_candidate_dates(
@@ -117,9 +115,7 @@ class HoopHigherApp(App[None]):
             "playable_game_fetch_concurrency": settings.nba_api_fetch_concurrency,
         }
         if not self._uses_mock_stats_source:
-            gameplay_service_kwargs["non_historical_startup_games"] = (
-                settings.nba_api_startup_games
-            )
+            gameplay_service_kwargs["non_historical_startup_games"] = settings.nba_api_startup_games
         self.gameplay_service = GameplayService(**gameplay_service_kwargs)
         self.leaderboard_service = LeaderboardService(engine=engine)
         self.stats_service = StatsService(engine=engine)

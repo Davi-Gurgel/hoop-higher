@@ -29,7 +29,9 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_historical_settings(self) -> "Settings":
         if self.historical_start_year > self.historical_end_year:
-            raise ValueError("historical_start_year must be less than or equal to historical_end_year")
+            raise ValueError(
+                "historical_start_year must be less than or equal to historical_end_year"
+            )
         if self.historical_rounds < 1:
             raise ValueError("historical_rounds must be greater than or equal to 1")
         if self.nba_api_timeout_seconds < 1:
