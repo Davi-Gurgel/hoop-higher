@@ -9,7 +9,7 @@ HISTORICAL_WRONG_POINTS = -60
 
 
 def is_guess_correct(question: Question, guess: GuessDirection) -> bool:
-    return guess == question.answer
+    return guess == question.correct_guess
 
 
 def calculate_score_delta(mode: GameMode, *, is_correct: bool) -> int:
@@ -25,7 +25,7 @@ def calculate_score_delta(mode: GameMode, *, is_correct: bool) -> int:
     raise ValueError(f"Scoring is not configured for mode: {mode.value}")
 
 
-def get_run_end_reason_for_answer(mode: GameMode, *, is_correct: bool) -> RunEndReason | None:
+def get_run_end_reason_for_guess(mode: GameMode, *, is_correct: bool) -> RunEndReason | None:
     if mode is GameMode.ARCADE and not is_correct:
         return RunEndReason.WRONG_ANSWER
 

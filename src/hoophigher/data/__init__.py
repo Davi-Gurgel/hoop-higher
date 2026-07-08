@@ -1,4 +1,4 @@
-"""Data layer for repositories, persistence, and providers."""
+"""Data layer for repositories, persistence, and stats sources."""
 
 from hoophigher.data.cache_repository import CacheRepository
 from hoophigher.data.db import DEFAULT_SQLITE_URL, create_sqlite_engine, init_db, session_scope

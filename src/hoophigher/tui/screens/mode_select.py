@@ -195,7 +195,7 @@ class ModeSelectScreen(Screen[None]):
         if elapsed_seconds < 5:
             message = f"Loading {mode.value} game data..."
         elif elapsed_seconds < 15:
-            message = f"Still fetching NBA boxscores ({elapsed_seconds}s)..."
+            message = f"Still fetching NBA games ({elapsed_seconds}s)..."
         else:
             message = f"stats.nba.com is slow; press Esc to cancel ({elapsed_seconds}s)."
         status.update(message)

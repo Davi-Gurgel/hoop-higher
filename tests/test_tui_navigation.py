@@ -10,7 +10,7 @@ from textual.widgets import Button, Label
 import hoophigher.tui.screens.game as game_screen_module
 from hoophigher.data import RunRepository, create_sqlite_engine
 from hoophigher.domain.enums import RunEndReason
-from hoophigher.domain.models import GameBoxScore, PlayerLine, TeamGameInfo
+from hoophigher.domain.models import NBAGame, PlayerLine, TeamGameInfo
 from hoophigher.app import HoopHigherApp
 
 
@@ -22,13 +22,13 @@ def _use_mock_provider(monkeypatch: pytest.MonkeyPatch) -> None:
 def _correct_guess_key(app: HoopHigherApp) -> str:
     question = app.gameplay_service.snapshot().current_question
     assert question is not None
-    return "h" if question.answer.value == "higher" else "l"
+    return "h" if question.correct_guess.value == "higher" else "l"
 
 
 def _wrong_guess_key(app: HoopHigherApp) -> str:
     question = app.gameplay_service.snapshot().current_question
     assert question is not None
-    return "l" if question.answer.value == "higher" else "h"
+    return "l" if question.correct_guess.value == "higher" else "h"
 
 
 def _label_texts(app: HoopHigherApp) -> list[str]:
@@ -268,9 +268,9 @@ def test_game_screen_surfaces_active_game_context() -> None:
 
 
 def test_game_screen_renders_provider_strings_as_plain_text(monkeypatch: pytest.MonkeyPatch) -> None:
-    game = GameBoxScore(
+    game = NBAGame(
         game_id="markup-game-[red]1[/red]",
-        game_date=date(2025, 1, 12),
+        source_date=date(2025, 1, 12),
         home_team=TeamGameInfo(
             team_id="home",
             name="Home [red]Team[/red]",
@@ -296,19 +296,19 @@ def test_game_screen_renders_provider_strings_as_plain_text(monkeypatch: pytest.
         ),
     )
 
-    class MarkupProvider:
-        async def get_games_by_date(self, _game_date: date) -> list[GameBoxScore]:
+    class MarkupStatsSource:
+        async def get_games_by_date(self, _game_date: date) -> list[NBAGame]:
             return [game]
 
-        async def get_game_boxscore(
+        async def get_nba_game(
             self,
             _game_id: str,
             *,
-            game_date_fallback: date | None = None,
-        ) -> GameBoxScore:
+            source_date_fallback: date | None = None,
+        ) -> NBAGame:
             return game
 
-    monkeypatch.setattr("hoophigher.app.MockProvider", MarkupProvider)
+    monkeypatch.setattr("hoophigher.app.MockStatsSource", MarkupStatsSource)
 
     async def scenario() -> None:
         app = HoopHigherApp(database_url="sqlite://")
@@ -408,7 +408,7 @@ def test_game_screen_active_tab_moves_after_round_end() -> None:
             for _ in range(initial_snapshot.total_questions):
                 question = app.gameplay_service.snapshot().current_question
                 assert question is not None
-                guess_key = "h" if question.answer.value == "higher" else "l"
+                guess_key = "h" if question.correct_guess.value == "higher" else "l"
                 await pilot.press(guess_key)
                 await pilot.pause(1.4)
 

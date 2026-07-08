@@ -4,7 +4,7 @@ from textual.app import ComposeResult
 from textual.containers import CenterMiddle, Horizontal, Vertical
 from textual.widgets import Button, Label
 
-from hoophigher.domain.models import GameBoxScore, Question
+from hoophigher.domain.models import NBAGame, Question
 from hoophigher.services import GameplaySnapshot
 
 
@@ -172,9 +172,9 @@ class GameContextStrip(Vertical):
     def update_history(self, text: str) -> None:
         self.query_one("#history-text", Label).update(text)
 
-    def _update_header(self, game: GameBoxScore) -> None:
+    def _update_header(self, game: NBAGame) -> None:
         self.query_one("#active-game-title", Label).update(
-            f"{game.game_date:%d-%m-%Y} • {game.away_team.abbreviation} @ {game.home_team.abbreviation}"
+            f"{game.source_date:%d-%m-%Y} • {game.away_team.abbreviation} @ {game.home_team.abbreviation}"
         )
         away_score = game.away_team.score if game.away_team.score is not None else "?"
         home_score = game.home_team.score if game.home_team.score is not None else "?"
@@ -182,7 +182,7 @@ class GameContextStrip(Vertical):
             f"{game.away_team.abbreviation} {away_score}  •  {game.home_team.abbreviation} {home_score}"
         )
 
-    def _update_tabs(self, current_game_id: str, games_today: tuple[GameBoxScore, ...]) -> None:
+    def _update_tabs(self, current_game_id: str, games_today: tuple[NBAGame, ...]) -> None:
         for index, game in enumerate(games_today):
             tab = self.query_one(f"#game-tab-{index}", Label)
             away_score = game.away_team.score if game.away_team.score is not None else "?"

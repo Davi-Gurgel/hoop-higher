@@ -14,9 +14,9 @@ from hoophigher.data import (
     create_sqlite_engine,
     session_scope,
 )
-from hoophigher.data.api import MockProvider, NBAApiProvider
+from hoophigher.data.api import MockStatsSource, NBAApiStatsSource
 from hoophigher.domain.enums import GameMode
-from hoophigher.domain.models import GameBoxScore, PlayerLine, TeamGameInfo
+from hoophigher.domain.models import NBAGame, PlayerLine, TeamGameInfo
 from hoophigher.services import GameplaySnapshot
 
 
@@ -105,9 +105,9 @@ def test_settings_rejects_game_start_timeout_below_one(monkeypatch) -> None:
         config_module.Settings()
 
 
-def test_create_stats_provider_rejects_unknown_provider() -> None:
-    with pytest.raises(ValueError, match="Unknown stats provider"):
-        app_module.create_stats_provider("invalid")
+def test_create_stats_source_rejects_unknown_source_kind() -> None:
+    with pytest.raises(ValueError, match="Unknown stats source"):
+        app_module.create_stats_source("invalid")
 
 
 def test_recent_candidate_dates_returns_today_first() -> None:
@@ -125,7 +125,7 @@ def test_app_selects_nba_api_provider_by_default(monkeypatch) -> None:
     async def scenario() -> None:
         app = app_module.HoopHigherApp(database_url="sqlite://")
         async with app.run_test():
-            assert isinstance(app.gameplay_service._provider, NBAApiProvider)
+            assert isinstance(app.gameplay_service._stats_source, NBAApiStatsSource)
 
     asyncio.run(scenario())
 
@@ -137,7 +137,7 @@ def test_app_selects_nba_api_provider_when_env_is_set(monkeypatch) -> None:
     async def scenario() -> None:
         app = app_module.HoopHigherApp(database_url="sqlite://")
         async with app.run_test():
-            assert isinstance(app.gameplay_service._provider, NBAApiProvider)
+            assert isinstance(app.gameplay_service._stats_source, NBAApiStatsSource)
 
     asyncio.run(scenario())
 
@@ -149,7 +149,7 @@ def test_app_selects_mock_provider_when_env_is_set(monkeypatch) -> None:
     async def scenario() -> None:
         app = app_module.HoopHigherApp(database_url="sqlite://")
         async with app.run_test():
-            assert isinstance(app.gameplay_service._provider, MockProvider)
+            assert isinstance(app.gameplay_service._stats_source, MockStatsSource)
 
     asyncio.run(scenario())
 
@@ -165,10 +165,10 @@ def test_app_wires_nba_api_timeout_from_settings(monkeypatch) -> None:
     async def scenario() -> None:
         app = app_module.HoopHigherApp(database_url="sqlite://")
         async with app.run_test():
-            provider = app.gameplay_service._provider
-            assert isinstance(provider, NBAApiProvider)
-            assert provider._timeout_seconds == 37
-            assert provider._max_retries == 4
+            stats_source = app.gameplay_service._stats_source
+            assert isinstance(stats_source, NBAApiStatsSource)
+            assert stats_source._timeout_seconds == 37
+            assert stats_source._max_retries == 4
             assert app.gameplay_service._non_historical_startup_games == 3
             assert app._game_start_timeout_seconds == 55
 
@@ -180,9 +180,9 @@ def test_app_wires_nba_api_cache_to_configured_database(monkeypatch, tmp_path) -
     monkeypatch.setenv("HOOPHIGHER_STATS_PROVIDER", "nba_api")
     _reload_app_module()
 
-    cached_game = GameBoxScore(
+    cached_game = NBAGame(
         game_id="0022500999",
-        game_date=date(2025, 2, 10),
+        source_date=date(2025, 2, 10),
         home_team=TeamGameInfo(team_id="1610612737", name="Hawks", abbreviation="ATL", score=110),
         away_team=TeamGameInfo(team_id="1610612738", name="Celtics", abbreviation="BOS", score=108),
         player_lines=(
@@ -200,16 +200,16 @@ def test_app_wires_nba_api_cache_to_configured_database(monkeypatch, tmp_path) -
     async def scenario() -> None:
         app = app_module.HoopHigherApp(database_url=database_url)
         async with app.run_test():
-            provider = app.gameplay_service._provider
-            assert isinstance(provider, NBAApiProvider)
-            with provider._cache_repository_factory() as cache_repository:
-                cache_repository.set_game_boxscore(cached_game)
+            stats_source = app.gameplay_service._stats_source
+            assert isinstance(stats_source, NBAApiStatsSource)
+            with stats_source._cache_repository_factory() as cache_repository:
+                cache_repository.set_nba_game(cached_game)
 
     asyncio.run(scenario())
 
     engine = create_sqlite_engine(database_url)
     with session_scope(engine) as session:
-        assert CacheRepository(session).get_game_boxscore("0022500999") == cached_game
+        assert CacheRepository(session).get_nba_game("0022500999") == cached_game
 
 
 def test_app_uses_bounded_historical_probes_for_nba_api_provider(monkeypatch) -> None:
@@ -239,7 +239,7 @@ def test_app_keeps_mock_provider_startup_game_count_for_snapshots(monkeypatch) -
 
 def test_start_game_passes_recent_candidate_dates_for_real_non_historical_provider(monkeypatch) -> None:
     app = app_module.HoopHigherApp(database_url="sqlite://")
-    app._uses_mock_provider = False
+    app._uses_mock_stats_source = False
     app._recent_candidate_dates = (date(2025, 2, 10), date(2025, 2, 9))
     pushed_screens: list[object] = []
 
@@ -273,7 +273,7 @@ def test_start_game_omits_recent_candidate_dates_for_real_historical_provider(
     monkeypatch,
 ) -> None:
     app = app_module.HoopHigherApp(database_url="sqlite://")
-    app._uses_mock_provider = False
+    app._uses_mock_stats_source = False
     app._recent_candidate_dates = (date(2025, 2, 10),)
     pushed_screens: list[object] = []
 
@@ -299,7 +299,7 @@ def test_start_game_reuses_successful_real_date_for_other_non_historical_modes(
     monkeypatch,
 ) -> None:
     app = app_module.HoopHigherApp(database_url="sqlite://")
-    app._uses_mock_provider = False
+    app._uses_mock_stats_source = False
     app._recent_candidate_dates = (date(2025, 2, 10), date(2025, 2, 9))
     pushed_screens: list[object] = []
 
@@ -341,7 +341,7 @@ def test_start_game_reuses_successful_real_historical_date_for_session(
     monkeypatch,
 ) -> None:
     app = app_module.HoopHigherApp(database_url="sqlite://")
-    app._uses_mock_provider = False
+    app._uses_mock_stats_source = False
     app._recent_candidate_dates = (date(2025, 2, 10),)
     pushed_screens: list[object] = []
 
@@ -375,7 +375,7 @@ def test_start_game_reuses_successful_real_historical_date_for_session(
 
 def test_start_game_does_not_show_loading_notice_during_slow_success(monkeypatch) -> None:
     app = app_module.HoopHigherApp(database_url="sqlite://")
-    app._uses_mock_provider = False
+    app._uses_mock_stats_source = False
     app._recent_candidate_dates = (date(2025, 2, 10),)
     app._game_start_timeout_seconds = 1
     pushed_screens: list[object] = []
@@ -409,7 +409,7 @@ def test_start_game_does_not_show_loading_notice_during_slow_success(monkeypatch
 
 def test_start_game_times_out_slow_real_data_provider(monkeypatch) -> None:
     app = app_module.HoopHigherApp(database_url="sqlite://")
-    app._uses_mock_provider = False
+    app._uses_mock_stats_source = False
     app._recent_candidate_dates = (date(2025, 2, 10),)
     app._game_start_timeout_seconds = 0.01
     pushed_screens: list[object] = []
@@ -452,7 +452,7 @@ def test_start_game_times_out_slow_real_data_provider(monkeypatch) -> None:
 
 def test_start_game_notifies_when_real_data_cannot_start(monkeypatch) -> None:
     app = app_module.HoopHigherApp(database_url="sqlite://")
-    app._uses_mock_provider = False
+    app._uses_mock_stats_source = False
     app._recent_candidate_dates = (date(2025, 2, 10),)
     pushed_screens: list[object] = []
     notifications: list[tuple[str, dict[str, object]]] = []
@@ -485,9 +485,9 @@ def _make_snapshot(
     *,
     source_date: date = date(2025, 2, 10),
 ) -> GameplaySnapshot:
-    game = GameBoxScore(
+    game = NBAGame(
         game_id="0022500999",
-        game_date=source_date,
+        source_date=source_date,
         home_team=TeamGameInfo(team_id="1610612737", name="Hawks", abbreviation="ATL", score=110),
         away_team=TeamGameInfo(team_id="1610612738", name="Celtics", abbreviation="BOS", score=108),
         player_lines=(

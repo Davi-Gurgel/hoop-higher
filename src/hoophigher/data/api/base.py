@@ -3,18 +3,18 @@ from __future__ import annotations
 from datetime import date
 from typing import Protocol, runtime_checkable
 
-from hoophigher.domain.models import GameBoxScore
+from hoophigher.domain.models import NBAGame
 
 
 @runtime_checkable
-class StatsProvider(Protocol):
-    async def get_games_by_date(self, game_date: date) -> list[GameBoxScore]:
-        """Return all games available for a given date."""
+class StatsSource(Protocol):
+    async def get_games_by_date(self, source_date: date) -> list[NBAGame]:
+        """Return all games available for a given source date."""
 
-    async def get_game_boxscore(
+    async def get_nba_game(
         self,
         game_id: str,
         *,
-        game_date_fallback: date | None = None,
-    ) -> GameBoxScore:
-        """Return a single game box score by id."""
+        source_date_fallback: date | None = None,
+    ) -> NBAGame:
+        """Return a single NBA game by id."""

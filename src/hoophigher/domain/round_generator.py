@@ -8,7 +8,7 @@ from hoophigher.domain.difficulty import (
     pick_target_difficulty,
 )
 from hoophigher.domain.enums import Difficulty
-from hoophigher.domain.models import GameBoxScore, PlayerLine, Question, RoundDefinition
+from hoophigher.domain.models import NBAGame, PlayerLine, Question, RoundDefinition
 
 
 @dataclass(frozen=True, slots=True)
@@ -46,13 +46,13 @@ _DIFFICULTY_IDEAL_DIFF = {
 }
 
 
-def generate_round(game: GameBoxScore, *, total_questions: int = 5) -> RoundDefinition:
+def generate_round(nba_game: NBAGame, *, total_questions: int = 5) -> RoundDefinition:
     if total_questions < 5 or total_questions > 10:
         raise ValueError("Rounds must request between 5 and 10 questions.")
 
     eligible_players = tuple(
         sorted(
-            game.eligible_player_lines,
+            nba_game.eligible_player_lines,
             key=lambda player: (-player.minutes, player.player_id),
         )
     )
@@ -71,7 +71,7 @@ def generate_round(game: GameBoxScore, *, total_questions: int = 5) -> RoundDefi
     if questions is None:
         raise ValueError("Unable to generate a valid round with the available players.")
 
-    return RoundDefinition(game=game, questions=questions)
+    return RoundDefinition(nba_game=nba_game, questions=questions)
 
 
 def _build_question_candidates(players: tuple[PlayerLine, ...]) -> tuple[QuestionCandidate, ...]:

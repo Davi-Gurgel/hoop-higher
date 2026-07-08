@@ -4,8 +4,8 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Sequence
 
-from hoophigher.data.api.base import StatsProvider
-from hoophigher.domain.models import GameBoxScore, PlayerLine, TeamGameInfo
+from hoophigher.data.api.base import StatsSource
+from hoophigher.domain.models import NBAGame, PlayerLine, TeamGameInfo
 
 _MOCK_PLAYER_NAMES = (
     "Jalen Hart",
@@ -25,8 +25,8 @@ _MOCK_PLAYER_NAMES = (
 
 @dataclass(frozen=True, slots=True)
 class _MockDataset:
-    games_by_date: dict[date, tuple[GameBoxScore, ...]]
-    games_by_id: dict[str, GameBoxScore]
+    games_by_date: dict[date, tuple[NBAGame, ...]]
+    games_by_id: dict[str, NBAGame]
 
 
 def _player_name_for(game_id: str, index: int) -> str:
@@ -56,13 +56,13 @@ def _make_player(
 def _make_game(
     *,
     game_id: str,
-    game_date: date,
+    source_date: date,
     home_abbreviation: str,
     away_abbreviation: str,
     home_score: int,
     away_score: int,
     player_points: Sequence[int],
-) -> GameBoxScore:
+) -> NBAGame:
     home_team_id = f"{game_id}-home"
     away_team_id = f"{game_id}-away"
     split_index = len(player_points) // 2
@@ -81,9 +81,9 @@ def _make_game(
                 minutes=max(18, 36 - (index * 2)),
             )
         )
-    return GameBoxScore(
+    return NBAGame(
         game_id=game_id,
-        game_date=game_date,
+        source_date=source_date,
         home_team=TeamGameInfo(
             team_id=home_team_id,
             name=f"{home_abbreviation} Home",
@@ -107,7 +107,7 @@ def _build_default_dataset() -> _MockDataset:
     games = (
         _make_game(
             game_id="2025-01-12-lal-bos",
-            game_date=january_12,
+            source_date=january_12,
             home_abbreviation="LAL",
             away_abbreviation="BOS",
             home_score=118,
@@ -116,7 +116,7 @@ def _build_default_dataset() -> _MockDataset:
         ),
         _make_game(
             game_id="2025-01-12-den-dal",
-            game_date=january_12,
+            source_date=january_12,
             home_abbreviation="DEN",
             away_abbreviation="DAL",
             home_score=109,
@@ -125,7 +125,7 @@ def _build_default_dataset() -> _MockDataset:
         ),
         _make_game(
             game_id="2025-01-12-nyk-mia",
-            game_date=january_12,
+            source_date=january_12,
             home_abbreviation="NYK",
             away_abbreviation="MIA",
             home_score=103,
@@ -134,7 +134,7 @@ def _build_default_dataset() -> _MockDataset:
         ),
         _make_game(
             game_id="2025-01-12-sas-phi",
-            game_date=january_12,
+            source_date=january_12,
             home_abbreviation="SAS",
             away_abbreviation="PHI",
             home_score=121,
@@ -143,7 +143,7 @@ def _build_default_dataset() -> _MockDataset:
         ),
         _make_game(
             game_id="2025-01-12-phx-gsw",
-            game_date=january_12,
+            source_date=january_12,
             home_abbreviation="PHX",
             away_abbreviation="GSW",
             home_score=115,
@@ -152,7 +152,7 @@ def _build_default_dataset() -> _MockDataset:
         ),
         _make_game(
             game_id="2025-01-13-min-okc",
-            game_date=january_13,
+            source_date=january_13,
             home_abbreviation="MIN",
             away_abbreviation="OKC",
             home_score=107,
@@ -161,7 +161,7 @@ def _build_default_dataset() -> _MockDataset:
         ),
         _make_game(
             game_id="2025-01-13-hou-sac",
-            game_date=january_13,
+            source_date=january_13,
             home_abbreviation="HOU",
             away_abbreviation="SAC",
             home_score=111,
@@ -170,22 +170,22 @@ def _build_default_dataset() -> _MockDataset:
         ),
     )
 
-    games_by_date: dict[date, list[GameBoxScore]] = {}
-    games_by_id: dict[str, GameBoxScore] = {}
+    games_by_date: dict[date, list[NBAGame]] = {}
+    games_by_id: dict[str, NBAGame] = {}
     for game in games:
-        games_by_date.setdefault(game.game_date, []).append(game)
+        games_by_date.setdefault(game.source_date, []).append(game)
         games_by_id[game.game_id] = game
 
     return _MockDataset(
         games_by_date={
-            game_date: tuple(sorted(games_for_date, key=lambda game: game.game_id))
-            for game_date, games_for_date in games_by_date.items()
+            source_date: tuple(sorted(games_for_date, key=lambda game: game.game_id))
+            for source_date, games_for_date in games_by_date.items()
         },
         games_by_id=games_by_id,
     )
 
 
-class MockProvider(StatsProvider):
+class MockStatsSource(StatsSource):
     def __init__(
         self,
         *,
@@ -193,15 +193,15 @@ class MockProvider(StatsProvider):
     ) -> None:
         self._dataset = dataset or _build_default_dataset()
 
-    async def get_games_by_date(self, game_date: date) -> list[GameBoxScore]:
-        return list(self._dataset.games_by_date.get(game_date, ()))
+    async def get_games_by_date(self, source_date: date) -> list[NBAGame]:
+        return list(self._dataset.games_by_date.get(source_date, ()))
 
-    async def get_game_boxscore(
+    async def get_nba_game(
         self,
         game_id: str,
         *,
-        game_date_fallback: date | None = None,
-    ) -> GameBoxScore:
+        source_date_fallback: date | None = None,
+    ) -> NBAGame:
         try:
             return self._dataset.games_by_id[game_id]
         except KeyError as exc:

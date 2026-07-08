@@ -29,9 +29,9 @@ class PlayerLine:
 
 
 @dataclass(frozen=True, slots=True)
-class GameBoxScore:
+class NBAGame:
     game_id: str
-    game_date: date
+    source_date: date
     home_team: TeamGameInfo
     away_team: TeamGameInfo
     player_lines: tuple[PlayerLine, ...]
@@ -54,7 +54,7 @@ class Question:
             raise ValueError("Question players must not have tied points.")
 
     @property
-    def answer(self) -> GuessDirection:
+    def correct_guess(self) -> GuessDirection:
         if self.player_b.points > self.player_a.points:
             return GuessDirection.HIGHER
 
@@ -77,7 +77,7 @@ class QuestionResult:
 
 @dataclass(frozen=True, slots=True)
 class RoundDefinition:
-    game: GameBoxScore
+    nba_game: NBAGame
     questions: tuple[Question, ...]
 
     def __post_init__(self) -> None:

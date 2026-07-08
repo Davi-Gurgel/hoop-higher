@@ -10,14 +10,14 @@ from typing import Sequence
 
 from sqlalchemy.engine import Engine
 
-from hoophigher.data.api import StatsProvider
+from hoophigher.data.api import StatsSource
 from hoophigher.data.db import session_scope
 from hoophigher.data.repositories import QuestionRepository, RoundRepository, RunRepository
 from hoophigher.data.schema import QuestionRecord, RoundRecord, RunRecord
 from hoophigher.domain.enums import GameMode, GuessDirection, RunEndReason
-from hoophigher.domain.models import GameBoxScore, Question, QuestionResult, RoundProgress, RunState
+from hoophigher.domain.models import NBAGame, Question, QuestionResult, RoundProgress, RunState
 from hoophigher.domain.round_generator import generate_round
-from hoophigher.domain.scoring import calculate_score_delta, get_run_end_reason_for_answer, is_guess_correct
+from hoophigher.domain.scoring import calculate_score_delta, get_run_end_reason_for_guess, is_guess_correct
 
 MIN_HISTORICAL_GAMES = 5
 DEFAULT_HISTORICAL_START_YEAR = 2010
@@ -66,8 +66,8 @@ class GameplaySnapshot:
     wrong_answers: int
     end_reason: RunEndReason | None
     game_id: str
-    current_game: GameBoxScore
-    games_today: tuple[GameBoxScore, ...]
+    current_game: NBAGame
+    games_today: tuple[NBAGame, ...]
     round_index: int
     question_index: int
     total_questions: int
@@ -83,7 +83,7 @@ class _ActiveRun:
     run_state: RunState
     run_id: int
     round_id: int
-    games: tuple[GameBoxScore, ...]
+    games: tuple[NBAGame, ...]
     next_game_index: int
     total_questions: int
     rounds_started: int
@@ -94,7 +94,7 @@ class GameplayService:
         self,
         *,
         engine: Engine,
-        provider: StatsProvider,
+        stats_source: StatsSource,
         rng: Random | None = None,
         historical_start_year: int = DEFAULT_HISTORICAL_START_YEAR,
         historical_end_year: int = DEFAULT_HISTORICAL_END_YEAR,
@@ -115,7 +115,7 @@ class GameplayService:
         if non_historical_startup_games < 1:
             raise ValueError("non_historical_startup_games must be at least 1.")
         self._engine = engine
-        self._provider = provider
+        self._stats_source = stats_source
         self._rng = rng or Random()
         self._historical_start_year = historical_start_year
         self._historical_end_year = historical_end_year
@@ -168,7 +168,7 @@ class GameplayService:
                     run_id=run_record.id or 0,
                     round_index=0,
                     game_id=selected_game.game_id,
-                    game_date=selected_game.game_date,
+                    game_date=selected_game.source_date,
                     total_questions=len(round_definition.questions),
                     correct_answers=0,
                     wrong_answers=0,
@@ -192,7 +192,7 @@ class GameplayService:
         )
         return self.snapshot()
 
-    async def submit_answer(
+    async def submit_guess(
         self,
         guess: GuessDirection,
         *,
@@ -200,7 +200,7 @@ class GameplayService:
     ) -> QuestionResult:
         active_run = self._require_active_run()
         if active_run.run_state.is_finished:
-            raise ValueError("Cannot answer a finished run.")
+            raise ValueError("Cannot submit a guess for a finished run.")
 
         round_progress = active_run.run_state.current_round
         if round_progress is None:
@@ -213,7 +213,7 @@ class GameplayService:
 
         is_correct = is_guess_correct(question, guess)
         score_delta = calculate_score_delta(active_run.run_state.mode, is_correct=is_correct)
-        end_reason = get_run_end_reason_for_answer(active_run.run_state.mode, is_correct=is_correct)
+        end_reason = get_run_end_reason_for_guess(active_run.run_state.mode, is_correct=is_correct)
         result = QuestionResult(
             question=question,
             guess=guess,
@@ -223,7 +223,7 @@ class GameplayService:
             response_time_ms=response_time_ms,
         )
         active_run.run_state.apply_result(result, end_reason=end_reason)
-        self._persist_answer(
+        self._persist_guess(
             active_run=active_run,
             result=result,
             question_index=question_index,
@@ -245,7 +245,7 @@ class GameplayService:
         if round_progress is None:
             raise ValueError("No active round in current run.")
         current_question = round_progress.current_question
-        game = round_progress.round_definition.game
+        game = round_progress.round_definition.nba_game
 
         return GameplaySnapshot(
             run_id=active_run.run_id,
@@ -274,7 +274,7 @@ class GameplayService:
             self._persist_run_state(active_run)
         return self.snapshot()
 
-    def _persist_answer(
+    def _persist_guess(
         self,
         *,
         active_run: _ActiveRun,
@@ -356,7 +356,7 @@ class GameplayService:
                     run_id=active_run.run_id,
                     round_index=round_index,
                     game_id=game.game_id,
-                    game_date=game.game_date,
+                    game_date=game.source_date,
                     total_questions=len(round_definition.questions),
                     correct_answers=0,
                     wrong_answers=0,
@@ -375,7 +375,7 @@ class GameplayService:
         source_date: date | None,
         candidate_dates: Sequence[date] | None,
         total_questions: int,
-    ) -> tuple[date, tuple[GameBoxScore, ...]]:
+    ) -> tuple[date, tuple[NBAGame, ...]]:
         if source_date is not None:
             return await self._resolve_games_for_date(
                 mode=mode,
@@ -402,11 +402,11 @@ class GameplayService:
         mode: GameMode,
         source_date: date,
         total_questions: int,
-    ) -> tuple[date, tuple[GameBoxScore, ...]]:
-        """Resolve games for a specific date, fetching boxscores on demand."""
+    ) -> tuple[date, tuple[NBAGame, ...]]:
+        """Resolve games for a specific date, fetching full NBA game data on demand."""
         game_shells = tuple(
             sorted(
-                await self._provider.get_games_by_date(source_date),
+                await self._stats_source.get_games_by_date(source_date),
                 key=lambda g: g.game_id,
             )
         )
@@ -436,7 +436,7 @@ class GameplayService:
         mode: GameMode,
         candidate_dates: Sequence[date],
         total_questions: int,
-    ) -> tuple[date, tuple[GameBoxScore, ...]]:
+    ) -> tuple[date, tuple[NBAGame, ...]]:
         """Iterate candidate dates, stop at the first one with playable games."""
         last_error: Exception | None = None
         saw_games = False
@@ -448,7 +448,7 @@ class GameplayService:
 
         for current_date in candidate_dates:
             try:
-                game_shells = tuple(await self._provider.get_games_by_date(current_date))
+                game_shells = tuple(await self._stats_source.get_games_by_date(current_date))
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
@@ -477,7 +477,7 @@ class GameplayService:
         self,
         *,
         total_questions: int,
-    ) -> tuple[date, tuple[GameBoxScore, ...]]:
+    ) -> tuple[date, tuple[NBAGame, ...]]:
         """Resolve historical games from an indexed date source or bounded random probes."""
         if self._historical_eligible_dates_fetcher is not None:
             eligible_dates = tuple(
@@ -508,7 +508,7 @@ class GameplayService:
             try:
                 game_shells = tuple(
                     sorted(
-                        await self._provider.get_games_by_date(candidate_date),
+                        await self._stats_source.get_games_by_date(candidate_date),
                         key=lambda g: g.game_id,
                     )
                 )
@@ -538,18 +538,18 @@ class GameplayService:
 
     async def _fetch_playable_games(
         self,
-        game_shells: Sequence[GameBoxScore],
+        game_shells: Sequence[NBAGame],
         *,
         total_questions: int,
         max_games: int | None = None,
-    ) -> tuple[GameBoxScore, ...]:
-        """Fetch full boxscores on demand, stopping once enough playable games are found.
+    ) -> tuple[NBAGame, ...]:
+        """Fetch full NBA game data on demand, stopping once enough playable games are found.
 
         Games that already have player lines (from cache) are checked first.
         Shells without player lines are fetched in small concurrent batches.
         """
-        playable: list[GameBoxScore] = []
-        needs_fetch: list[GameBoxScore] = []
+        playable: list[NBAGame] = []
+        needs_fetch: list[NBAGame] = []
 
         # First pass: check games that already have full data.
         for game in game_shells:
@@ -561,13 +561,13 @@ class GameplayService:
             else:
                 needs_fetch.append(game)
 
-        # Second pass: fetch boxscores on demand for shells without data.
+        # Second pass: fetch full NBA game data on demand for shells without data.
         # Shuffle so we don't always probe the same games first.
         self._rng.shuffle(needs_fetch)
         step = self._playable_game_fetch_concurrency
         next_fetch_index = 0
-        pending: set[asyncio.Task[GameBoxScore | None]] = set()
-        task_order: dict[asyncio.Task[GameBoxScore | None], int] = {}
+        pending: set[asyncio.Task[NBAGame | None]] = set()
+        task_order: dict[asyncio.Task[NBAGame | None], int] = {}
 
         try:
             while next_fetch_index < len(needs_fetch) or pending:
@@ -611,14 +611,14 @@ class GameplayService:
 
     async def _fetch_playable_game(
         self,
-        game_shell: GameBoxScore,
+        game_shell: NBAGame,
         *,
         total_questions: int,
-    ) -> GameBoxScore | None:
+    ) -> NBAGame | None:
         try:
-            full_game = await self._provider.get_game_boxscore(
+            full_game = await self._stats_source.get_nba_game(
                 game_shell.game_id,
-                game_date_fallback=game_shell.game_date,
+                source_date_fallback=game_shell.source_date,
             )
         except asyncio.CancelledError:
             raise
@@ -670,7 +670,7 @@ class GameplayService:
 
     def _require_active_run(self) -> _ActiveRun:
         if self._active_run is None:
-            raise ValueError("No active run. Start a run before answering.")
+            raise ValueError("No active run. Start a run before guessing.")
         return self._active_run
 
     @property
@@ -680,8 +680,8 @@ class GameplayService:
     def _sample_historical_games(
         self,
         selected_date: date,
-        games_for_date: tuple[GameBoxScore, ...],
-    ) -> tuple[GameBoxScore, ...]:
+        games_for_date: tuple[NBAGame, ...],
+    ) -> tuple[NBAGame, ...]:
         total_games = len(games_for_date)
         if total_games < 1:
             raise LookupError(
@@ -694,7 +694,7 @@ class GameplayService:
         )
         return tuple(sorted(sampled_games, key=lambda g: g.game_id))
 
-    def _can_generate_round(self, game: GameBoxScore, *, total_questions: int) -> bool:
+    def _can_generate_round(self, game: NBAGame, *, total_questions: int) -> bool:
         try:
             generate_round(game, total_questions=total_questions)
         except ValueError:

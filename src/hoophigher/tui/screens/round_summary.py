@@ -14,7 +14,7 @@ from hoophigher.tui.widgets import DialogShell
 class RoundSummary:
     round_index: int
     game_id: str
-    game_date: date
+    source_date: date
     questions: int
     correct_answers: int
     wrong_answers: int
@@ -72,7 +72,7 @@ class RoundSummaryScreen(ModalScreen[None]):
         with DialogShell(id="summary-overlay"):
             yield Label(f"ROUND {s.round_index + 1} COMPLETE", id="summary-title")
             yield Label(f"Game: {s.game_id}", classes="summary-stat", markup=False)
-            yield Label(f"Date: {s.game_date:%d-%m-%Y}", classes="summary-stat")
+            yield Label(f"Date: {s.source_date:%d-%m-%Y}", classes="summary-stat")
             yield Label(
                 f"✓ {s.correct_answers}   ✕ {s.wrong_answers}   ({s.questions} questions)",
                 classes="summary-stat",
