@@ -785,9 +785,11 @@ def _parse_game_status(*, status_code: object, status_text: str | None) -> GameS
     other non-empty text is classified conservatively as live (excluded from
     Playable NBA Games either way).
 
-    Returns ``None`` when the payload carries no recognizable status
-    information at all, so that historical behavior (treat as final) can be
-    preserved by the caller.
+    Returns ``None`` only when the payload carries no status information at
+    all, so that historical behavior (treat as final) can be preserved by
+    the caller. A status code or text that is present but unrecognized is
+    classified conservatively as live, so games with statuses this parser
+    does not understand are never treated as playable.
     """
     if status_code is not None:
         try:
@@ -799,14 +801,10 @@ def _parse_game_status(*, status_code: object, status_text: str | None) -> GameS
             if mapped_status is not None:
                 return mapped_status
 
-    if not status_text:
-        return None
-    lowered = status_text.strip().lower()
-    if not lowered:
-        return None
-    if "final" in lowered:
-        return GameStatus.FINAL
-    return GameStatus.LIVE
+    lowered = (status_text or "").strip().lower()
+    if lowered:
+        return GameStatus.FINAL if "final" in lowered else GameStatus.LIVE
+    return None if status_code is None else GameStatus.LIVE
 
 
 def _is_game_shell(game: NBAGame) -> bool:

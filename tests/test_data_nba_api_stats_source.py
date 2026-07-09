@@ -1,4 +1,5 @@
 import asyncio
+import json
 import sys
 import types
 from contextlib import contextmanager
@@ -1323,6 +1324,12 @@ def test_default_nba_game_fetch_skips_v2_when_v3_exhausts_timeout_budget(monkeyp
         (None, "Halftime", GameStatus.LIVE),
         (None, None, None),
         (None, "", None),
+        # A present but unrecognized status code is status information we do
+        # not understand — classified conservatively as live, never final.
+        (4, None, GameStatus.LIVE),
+        (0, "", GameStatus.LIVE),
+        ("garbage", None, GameStatus.LIVE),
+        (4, "Final", GameStatus.FINAL),
     ],
 )
 def test_parse_game_status_classifies_numeric_and_text_signals(
@@ -1587,4 +1594,82 @@ def test_get_games_by_date_treats_missing_status_fields_as_final(tmp_path) -> No
     assert [game.game_id for game in games] == ["0022500040"]
     # The day was cached as complete since no status information excluded
     # any games, so the second call used the cache instead of refetching.
+    assert scoreboard_calls == 1
+
+
+def test_get_games_by_date_refetches_legacy_cache_rows_written_before_status_filtering(
+    tmp_path,
+) -> None:
+    """Date rows cached before final-game filtering may contain live or
+    scheduled game shells, so they must not satisfy the cache read."""
+    target_date = date(2025, 2, 10)
+    engine = create_sqlite_engine(f"sqlite:///{tmp_path / 'hoophigher.db'}")
+    init_db(engine)
+
+    # A pre-status-filtering install cached a scheduled game as a plain
+    # shell. Recreate that legacy row by stripping the version envelope.
+    scheduled_shell = NBAGame(
+        game_id="0022500051",
+        source_date=target_date,
+        home_team=TeamGameInfo(team_id="1610612739", name="Bulls", abbreviation="CHI", score=None),
+        away_team=TeamGameInfo(team_id="1610612740", name="Knicks", abbreviation="NYK", score=None),
+        player_lines=(),
+    )
+    with session_scope(engine) as session:
+        record = CacheRepository(session).set_games_by_date(target_date, [scheduled_shell])
+        legacy_payload = json.loads(record.payload_json)["games"]
+        record.payload_json = json.dumps(legacy_payload)
+        session.add(record)
+
+    scoreboard_calls = 0
+
+    def scoreboard_fetch(game_date: date, _timeout_seconds: int):
+        nonlocal scoreboard_calls
+        scoreboard_calls += 1
+        return {
+            "scoreboard": {
+                "games": [
+                    {
+                        "gameId": "0022500050",
+                        "gameDate": game_date.isoformat(),
+                        "gameStatus": 3,
+                        "gameStatusText": "Final",
+                        "homeTeam": {
+                            "teamId": "1610612737",
+                            "teamName": "Hawks",
+                            "teamTricode": "ATL",
+                            "score": "115",
+                        },
+                        "awayTeam": {
+                            "teamId": "1610612738",
+                            "teamName": "Celtics",
+                            "teamTricode": "BOS",
+                            "score": "114",
+                        },
+                    },
+                ]
+            }
+        }
+
+    def boxscore_fetch(game_id: str, _timeout_seconds: int):
+        return {}
+
+    stats_source = NBAApiStatsSource(
+        cache_repository_factory=_make_cache_factory(engine),
+        scoreboard_fetch=scoreboard_fetch,
+        nba_game_fetch=boxscore_fetch,
+        timeout_seconds=5,
+        retry_delay_seconds=0,
+    )
+
+    games = asyncio.run(stats_source.get_games_by_date(target_date))
+
+    # The legacy row was ignored: the scoreboard was fetched and the stale
+    # scheduled shell is gone from the results.
+    assert scoreboard_calls == 1
+    assert [game.game_id for game in games] == ["0022500050"]
+
+    # The refetch overwrote the legacy row with a versioned all-final day,
+    # so subsequent calls use the cache again.
+    asyncio.run(stats_source.get_games_by_date(target_date))
     assert scoreboard_calls == 1

@@ -1,9 +1,11 @@
+import json
 from datetime import date
 
 import pytest
 from sqlalchemy import text
 from sqlmodel import Session, select
 from hoophigher.data import (
+    CachedGameRecord,
     CacheRepository,
     QuestionRecord,
     QuestionRepository,
@@ -302,6 +304,23 @@ def test_cache_repository_overwrites_existing_payloads(tmp_path) -> None:
 
     assert cache_repo.get_games_by_date(date(2025, 2, 1)) == updated_games_for_date
     assert cache_repo.get_nba_game("game-1") == updated_game
+
+
+def test_cache_repository_ignores_legacy_unversioned_game_list(tmp_path) -> None:
+    """Bare-list date payloads predate final-game filtering and may contain
+    live or scheduled games, so they are treated as absent and refetched."""
+    session = make_session(tmp_path)
+    cache_repo = CacheRepository(session)
+    target_date = date(2025, 2, 1)
+    cache_repo.set_games_by_date(target_date, [make_game("game-1", target_date, 110, 104)])
+
+    record = session.get(CachedGameRecord, target_date)
+    versioned_payload = json.loads(record.payload_json)
+    record.payload_json = json.dumps(versioned_payload["games"])
+    session.add(record)
+    session.flush()
+
+    assert cache_repo.get_games_by_date(target_date) is None
 
 
 def test_session_scope_commits_on_success(tmp_path) -> None:
