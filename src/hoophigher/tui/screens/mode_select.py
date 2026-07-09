@@ -1,11 +1,11 @@
 from __future__ import annotations
 
-import asyncio
 import time
 
 from textual import work
 from textual.app import ComposeResult
 from textual.screen import Screen
+from textual.timer import Timer
 from textual.widgets import Button, Footer, Header, Label
 
 from hoophigher.domain.enums import GameMode
@@ -73,6 +73,7 @@ class ModeSelectScreen(Screen[None]):
         super().__init__()
         self._loading_mode: GameMode | None = None
         self._loading_started_at = 0.0
+        self._loading_status_timer: Timer | None = None
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=False)
@@ -145,16 +146,8 @@ class ModeSelectScreen(Screen[None]):
 
     @work(exclusive=True, group=_START_GAME_WORKER_GROUP)
     async def _start_game_worker(self, mode: GameMode) -> None:
-        start_game = asyncio.ensure_future(self.app.start_game(mode))
         try:
-            while not start_game.done():
-                await asyncio.wait({start_game}, timeout=_LOADING_STATUS_INTERVAL_SECONDS)
-                if not start_game.done():
-                    self._refresh_loading_status()
-            start_game.result()
-        except asyncio.CancelledError:
-            start_game.cancel()
-            raise
+            await self.app.start_game(mode)
         except Exception as exc:  # noqa: BLE001
             self.app.notify(str(exc), title="Unable to start game", severity="error")
         finally:
@@ -163,6 +156,9 @@ class ModeSelectScreen(Screen[None]):
     def _set_loading(self, mode: GameMode) -> None:
         self._loading_mode = mode
         self._loading_started_at = time.monotonic()
+        self._loading_status_timer = self.set_interval(
+            _LOADING_STATUS_INTERVAL_SECONDS, self._refresh_loading_status
+        )
         self._set_mode_buttons_disabled(True)
         self.query_one("#mode-back", Button).label = "Cancel  [Esc]"
         self._refresh_loading_status()
@@ -171,6 +167,9 @@ class ModeSelectScreen(Screen[None]):
         if self._loading_mode is None:
             return
         self._loading_mode = None
+        if self._loading_status_timer is not None:
+            self._loading_status_timer.stop()
+            self._loading_status_timer = None
         self._set_mode_buttons_disabled(False)
         self.query_one("#mode-back", Button).label = "←  Back  [Esc]"
         status = self.query_one("#mode-loading-status", Label)
