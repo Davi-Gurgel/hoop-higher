@@ -152,7 +152,11 @@ class GameplayService:
         selected_index = 0
         selected_game = games[selected_index]
         run_state = RunState(mode=mode, source_date=selected_date)
-        round_definition = generate_round(selected_game, total_questions=total_questions)
+        round_definition = generate_round(
+            selected_game,
+            total_questions=total_questions,
+            rng=self._rng,
+        )
         run_state.start_round(round_definition)
 
         with session_scope(self._engine) as session:
@@ -350,7 +354,11 @@ class GameplayService:
     async def _start_next_round(self, active_run: _ActiveRun) -> None:
         game = active_run.games[active_run.next_game_index]
         active_run.next_game_index = (active_run.next_game_index + 1) % len(active_run.games)
-        round_definition = generate_round(game, total_questions=active_run.total_questions)
+        round_definition = generate_round(
+            game,
+            total_questions=active_run.total_questions,
+            rng=self._rng,
+        )
         active_run.run_state.start_round(round_definition)
         active_run.rounds_started += 1
         round_index = len(active_run.run_state.rounds) - 1
