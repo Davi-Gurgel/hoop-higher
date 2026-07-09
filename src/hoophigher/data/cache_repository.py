@@ -44,13 +44,25 @@ class CacheRepository:
         return record
 
 
+# Version 2 payloads mark the cached day as complete with final games only.
+# Version 1 payloads (a bare JSON list) predate final-game filtering and may
+# contain live or scheduled games, so they cannot be trusted as complete.
+_GAME_LIST_PAYLOAD_VERSION = 2
+
+
 def _serialize_game_list(games: Sequence[NBAGame]) -> str:
-    return json.dumps([_nba_game_to_dict(game) for game in games], separators=(",", ":"))
+    payload = {
+        "version": _GAME_LIST_PAYLOAD_VERSION,
+        "games": [_nba_game_to_dict(game) for game in games],
+    }
+    return json.dumps(payload, separators=(",", ":"))
 
 
-def _deserialize_game_list(payload_json: str) -> list[NBAGame]:
+def _deserialize_game_list(payload_json: str) -> list[NBAGame] | None:
     payload = json.loads(payload_json)
-    return [_nba_game_from_dict(item) for item in payload]
+    if not isinstance(payload, dict) or payload.get("version") != _GAME_LIST_PAYLOAD_VERSION:
+        return None
+    return [_nba_game_from_dict(item) for item in payload["games"]]
 
 
 def _serialize_nba_game(game: NBAGame) -> str:
