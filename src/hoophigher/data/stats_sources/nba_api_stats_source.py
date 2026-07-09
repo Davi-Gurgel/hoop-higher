@@ -7,6 +7,7 @@ from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime
+from enum import StrEnum
 from pathlib import Path
 from typing import ContextManager
 
@@ -21,19 +22,26 @@ ScoreboardFetch = Callable[[date, float], Mapping[str, object]]
 NBAGameFetch = Callable[[str, float], Mapping[str, object]]
 CacheRepositoryContextFactory = Callable[[], ContextManager[CacheRepository]]
 
-# Game status values recognized when the scoreboard source reports them.
-# ``None`` means the payload carried no status information at all, in which
-# case historical behavior is preserved: the game is treated as final.
-STATUS_FINAL = "final"
-STATUS_LIVE = "live"
-STATUS_SCHEDULED = "scheduled"
 
-_NON_FINAL_STATUSES = (STATUS_LIVE, STATUS_SCHEDULED)
+class GameStatus(StrEnum):
+    """Scoreboard game status values recognized when the source reports them.
 
-_STATUS_BY_NUMERIC_CODE = {
-    1: STATUS_SCHEDULED,
-    2: STATUS_LIVE,
-    3: STATUS_FINAL,
+    A seed's status is ``None`` when the payload carried no status
+    information at all, in which case historical behavior is preserved: the
+    game is treated as final.
+    """
+
+    FINAL = "final"
+    LIVE = "live"
+    SCHEDULED = "scheduled"
+
+
+_NON_FINAL_STATUSES = (GameStatus.LIVE, GameStatus.SCHEDULED)
+
+_STATUS_BY_NUMERIC_CODE: dict[int, GameStatus] = {
+    1: GameStatus.SCHEDULED,
+    2: GameStatus.LIVE,
+    3: GameStatus.FINAL,
 }
 
 
@@ -43,7 +51,7 @@ class _ScoreboardSeed:
     source_date: date
     home_team: TeamGameInfo
     away_team: TeamGameInfo
-    status: str | None = None
+    status: GameStatus | None = None
 
 
 class NBAApiStatsSource(StatsSource):
@@ -766,7 +774,7 @@ def _has_available_player_stats(players: Sequence[PlayerLine]) -> bool:
     return any(player.minutes > 0 for player in players)
 
 
-def _parse_game_status(*, status_code: object, status_text: str | None) -> str | None:
+def _parse_game_status(*, status_code: object, status_text: str | None) -> GameStatus | None:
     """Classify a scoreboard game's status as final, live, or scheduled.
 
     Both supported scoreboard payload shapes (V3's ``gameStatus`` and V2's
@@ -797,8 +805,8 @@ def _parse_game_status(*, status_code: object, status_text: str | None) -> str |
     if not lowered:
         return None
     if "final" in lowered:
-        return STATUS_FINAL
-    return STATUS_LIVE
+        return GameStatus.FINAL
+    return GameStatus.LIVE
 
 
 def _is_game_shell(game: NBAGame) -> bool:
