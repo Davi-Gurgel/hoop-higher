@@ -184,6 +184,11 @@ def test_generate_round_is_deterministic_without_rng() -> None:
     second = generate_round(game, total_questions=5)
 
     assert _matchup_sequence(first) == _matchup_sequence(second)
+    # Pin the exact default sequence so refactors cannot silently change
+    # what existing rng-less callers get for the same game.
+    assert [
+        (question.player_a.player_id, question.player_b.player_id) for question in first.questions
+    ] == [("0", "9"), ("9", "1"), ("1", "2"), ("2", "4"), ("4", "5")]
 
 
 def test_generate_round_with_same_seed_is_reproducible() -> None:

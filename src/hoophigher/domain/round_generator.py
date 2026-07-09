@@ -47,19 +47,6 @@ _DIFFICULTY_IDEAL_DIFF = {
 }
 
 
-class _DeterministicRandom(Random):
-    """Null-object `Random` used internally when no rng is supplied.
-
-    Candidate lists are already built in a stable order (sorted by minutes,
-    then player id); a no-op `shuffle` leaves that order untouched, so the
-    search below can always shuffle-then-sort without branching on whether an
-    rng was supplied, while still producing fully deterministic output.
-    """
-
-    def shuffle(self, x: list) -> None:
-        return None
-
-
 def generate_round(
     nba_game: NBAGame,
     *,
@@ -95,7 +82,7 @@ def generate_round(
     questions = _search_question_path(
         by_source=by_source,
         total_questions=total_questions,
-        rng=rng if rng is not None else _DeterministicRandom(),
+        rng=rng,
     )
     if questions is None:
         raise ValueError("Unable to generate a valid round with the available players.")
@@ -143,7 +130,7 @@ def _search_question_path(
     *,
     by_source: dict[str, tuple[QuestionCandidate, ...]],
     total_questions: int,
-    rng: Random,
+    rng: Random | None,
 ) -> tuple[Question, ...] | None:
     all_candidates = tuple(
         candidate for candidates in by_source.values() for candidate in candidates
@@ -178,7 +165,7 @@ def _search_from_candidate(
     used_matchups: set[frozenset[str]],
     seen_player_ids: set[str],
     selected_questions: list[Question],
-    rng: Random,
+    rng: Random | None,
 ) -> list[Question] | None:
     if len(selected_questions) == total_questions:
         return selected_questions.copy()
@@ -225,7 +212,7 @@ def _sort_candidates_for_target(
     *,
     target: Difficulty,
     seen_player_ids: set[str],
-    rng: Random,
+    rng: Random | None,
 ) -> tuple[QuestionCandidate, ...]:
     target_rank = _DIFFICULTY_ORDER[target]
     ideal_diff = _DIFFICULTY_IDEAL_DIFF[target]
@@ -245,12 +232,13 @@ def _sort_candidates_for_target(
             abs(candidate.question.point_difference - ideal_diff),
         )
 
-    # `rng.shuffle` perturbs the pre-sort order so that candidates tied on
+    # Shuffling perturbs the pre-sort order so that candidates tied on
     # preference_key fall back to a seed-dependent order instead of always
     # favouring the lowest player id. `sorted` is stable, so untied candidates
-    # are unaffected. With the deterministic default rng, shuffle is a no-op,
-    # so ties fall back to the candidates' natural (already id-ordered) build
-    # order, keeping default generation fully deterministic.
-    shuffled = list(candidates)
-    rng.shuffle(shuffled)
-    return tuple(sorted(shuffled, key=preference_key))
+    # are unaffected. Without an rng, ties fall back to the candidates'
+    # natural (already id-ordered) build order, keeping default generation
+    # fully deterministic.
+    ordered = list(candidates)
+    if rng is not None:
+        rng.shuffle(ordered)
+    return tuple(sorted(ordered, key=preference_key))
