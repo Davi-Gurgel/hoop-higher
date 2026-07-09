@@ -134,6 +134,86 @@ def test_mode_select_shows_loading_state_while_starting_game(monkeypatch) -> Non
     asyncio.run(scenario())
 
 
+def test_mode_select_back_cancels_loading_worker(monkeypatch) -> None:
+    started = asyncio.Event()
+    cancelled = asyncio.Event()
+
+    async def fake_start_game(self, mode) -> bool:
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+        return False
+
+    monkeypatch.setattr(HoopHigherApp, "start_game", fake_start_game)
+
+    async def scenario() -> None:
+        app = HoopHigherApp(database_url="sqlite://")
+
+        async with app.run_test() as pilot:
+            await pilot.press("enter")
+            await pilot.press("1")
+            await asyncio.wait_for(started.wait(), timeout=1)
+            await pilot.pause()
+
+            assert app.screen.query_one("#mode-endless", Button).disabled is True
+
+            await pilot.press("escape")
+            await asyncio.wait_for(cancelled.wait(), timeout=1)
+            await pilot.pause()
+
+            assert type(app.screen).__name__ == "ModeSelectScreen"
+            assert app.screen.query_one("#mode-endless", Button).disabled is False
+            assert (
+                app.screen.query_one("#mode-loading-status", Label).has_class("-visible") is False
+            )
+            assert "Cancel" not in app.screen.query_one("#mode-back", Button).label.plain
+
+    asyncio.run(scenario())
+
+
+def test_mode_select_quit_cancels_loading_worker_and_exits(monkeypatch) -> None:
+    started = asyncio.Event()
+    cancelled = asyncio.Event()
+
+    async def fake_start_game(self, mode) -> bool:
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            cancelled.set()
+            raise
+        return False
+
+    monkeypatch.setattr(HoopHigherApp, "start_game", fake_start_game)
+
+    async def scenario() -> None:
+        app = HoopHigherApp(database_url="sqlite://")
+        exit_called = False
+
+        def fake_exit(*args, **kwargs) -> None:
+            nonlocal exit_called
+            exit_called = True
+
+        app.exit = fake_exit  # type: ignore[method-assign]
+
+        async with app.run_test() as pilot:
+            await pilot.press("enter")
+            await pilot.press("1")
+            await asyncio.wait_for(started.wait(), timeout=1)
+            await pilot.pause()
+
+            await pilot.press("q")
+            await asyncio.wait_for(cancelled.wait(), timeout=1)
+            await pilot.pause()
+
+            assert exit_called is True
+
+    asyncio.run(scenario())
+
+
 def test_home_screen_can_open_stats_and_return_home() -> None:
     async def scenario() -> None:
         app = HoopHigherApp(database_url="sqlite://")
