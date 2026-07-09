@@ -34,6 +34,33 @@ def make_game(players: tuple[PlayerLine, ...]) -> NBAGame:
     )
 
 
+def _matchup_sequence(round_definition: RoundDefinition) -> tuple[frozenset[str], ...]:
+    return tuple(
+        frozenset((question.player_a.player_id, question.player_b.player_id))
+        for question in round_definition.questions
+    )
+
+
+def _assert_round_is_valid(round_definition: RoundDefinition, total_questions: int) -> None:
+    assert isinstance(round_definition, RoundDefinition)
+    assert len(round_definition.questions) == total_questions
+    seen_matchups: set[frozenset[str]] = set()
+    seen_players: set[str] = set()
+    for index, question in enumerate(round_definition.questions):
+        assert question.player_a.player_id != question.player_b.player_id
+        assert question.player_a.points != question.player_b.points
+        assert question.player_b.player_id not in seen_players
+        matchup_key = frozenset((question.player_a.player_id, question.player_b.player_id))
+        assert matchup_key not in seen_matchups
+        seen_matchups.add(matchup_key)
+        if index > 0:
+            assert (
+                question.player_a.player_id
+                == round_definition.questions[index - 1].player_b.player_id
+            )
+        seen_players.update((question.player_a.player_id, question.player_b.player_id))
+
+
 def test_generate_round_keeps_previous_hidden_player_on_left_without_reusing_hidden_targets() -> (
     None
 ):
@@ -50,24 +77,7 @@ def test_generate_round_keeps_previous_hidden_player_on_left_without_reusing_hid
 
     round_definition = generate_round(game, total_questions=5)
 
-    assert isinstance(round_definition, RoundDefinition)
-    assert len(round_definition.questions) == 5
-    seen_matchups: set[frozenset[str]] = set()
-    seen_players: set[str] = set()
-
-    for index, question in enumerate(round_definition.questions):
-        assert question.player_a.player_id != question.player_b.player_id
-        assert question.player_a.points != question.player_b.points
-        assert question.player_b.player_id not in seen_players
-        matchup_key = frozenset((question.player_a.player_id, question.player_b.player_id))
-        assert matchup_key not in seen_matchups
-        seen_matchups.add(matchup_key)
-        if index > 0:
-            assert (
-                question.player_a.player_id
-                == round_definition.questions[index - 1].player_b.player_id
-            )
-        seen_players.update((question.player_a.player_id, question.player_b.player_id))
+    _assert_round_is_valid(round_definition, total_questions=5)
 
 
 def test_generate_round_prefers_high_minute_players() -> None:
@@ -167,32 +177,6 @@ def _make_variety_game() -> NBAGame:
     return make_game(players)
 
 
-def _matchup_sequence(round_definition: RoundDefinition) -> tuple[frozenset[str], ...]:
-    return tuple(
-        frozenset((question.player_a.player_id, question.player_b.player_id))
-        for question in round_definition.questions
-    )
-
-
-def _assert_round_is_valid(round_definition: RoundDefinition, total_questions: int) -> None:
-    assert len(round_definition.questions) == total_questions
-    seen_matchups: set[frozenset[str]] = set()
-    seen_players: set[str] = set()
-    for index, question in enumerate(round_definition.questions):
-        assert question.player_a.player_id != question.player_b.player_id
-        assert question.player_a.points != question.player_b.points
-        assert question.player_b.player_id not in seen_players
-        matchup_key = frozenset((question.player_a.player_id, question.player_b.player_id))
-        assert matchup_key not in seen_matchups
-        seen_matchups.add(matchup_key)
-        if index > 0:
-            assert (
-                question.player_a.player_id
-                == round_definition.questions[index - 1].player_b.player_id
-            )
-        seen_players.update((question.player_a.player_id, question.player_b.player_id))
-
-
 def test_generate_round_is_deterministic_without_rng() -> None:
     game = _make_variety_game()
 
@@ -211,24 +195,13 @@ def test_generate_round_with_same_seed_is_reproducible() -> None:
     assert _matchup_sequence(first) == _matchup_sequence(second)
 
 
-def test_generate_round_with_different_seeds_can_vary_while_staying_valid() -> None:
+def test_generate_round_with_different_seeds_vary_while_respecting_constraints() -> None:
     game = _make_variety_game()
 
-    outcomes = {
-        _matchup_sequence(generate_round(game, total_questions=5, rng=Random(seed)))
-        for seed in range(20)
-    }
-    for round_definition in (
-        generate_round(game, total_questions=5, rng=Random(seed)) for seed in range(20)
-    ):
-        _assert_round_is_valid(round_definition, total_questions=5)
-
-    assert len(outcomes) > 1
-
-
-def test_generate_round_with_rng_still_respects_matchup_and_repeat_constraints() -> None:
-    game = _make_variety_game()
-
+    outcomes: set[tuple[frozenset[str], ...]] = set()
     for seed in range(20):
         round_definition = generate_round(game, total_questions=5, rng=Random(seed))
         _assert_round_is_valid(round_definition, total_questions=5)
+        outcomes.add(_matchup_sequence(round_definition))
+
+    assert len(outcomes) > 1

@@ -1229,12 +1229,11 @@ def test_historical_ends_after_all_games_for_date_are_consumed(tmp_path) -> None
     assert run_record.end_reason == RunEndReason.NO_MORE_GAMES.value
 
 
-def test_start_run_generates_round_using_service_owned_rng(tmp_path, monkeypatch) -> None:
+def _spy_on_generate_round(monkeypatch) -> list[object]:
+    """Record the `rng` kwarg passed to every `generate_round` call made by the
+    gameplay service module, while still delegating to the real function.
+    """
     import hoophigher.services.gameplay_service as gameplay_service_module
-
-    engine = _make_engine(tmp_path)
-    service_rng = Random(11)
-    service = GameplayService(engine=engine, stats_source=MockStatsSource(), rng=service_rng)
 
     recorded_rngs: list[object] = []
     original_generate_round = gameplay_service_module.generate_round
@@ -1244,6 +1243,14 @@ def test_start_run_generates_round_using_service_owned_rng(tmp_path, monkeypatch
         return original_generate_round(*args, **kwargs)
 
     monkeypatch.setattr(gameplay_service_module, "generate_round", _spy_generate_round)
+    return recorded_rngs
+
+
+def test_start_run_generates_round_using_service_owned_rng(tmp_path, monkeypatch) -> None:
+    engine = _make_engine(tmp_path)
+    service_rng = Random(11)
+    service = GameplayService(engine=engine, stats_source=MockStatsSource(), rng=service_rng)
+    recorded_rngs = _spy_on_generate_round(monkeypatch)
 
     asyncio.run(
         service.start_run(
@@ -1260,8 +1267,6 @@ def test_start_run_generates_round_using_service_owned_rng(tmp_path, monkeypatch
 
 
 def test_start_next_round_generates_round_using_service_owned_rng(tmp_path, monkeypatch) -> None:
-    import hoophigher.services.gameplay_service as gameplay_service_module
-
     engine = _make_engine(tmp_path)
     service_rng = Random(11)
     service = GameplayService(engine=engine, stats_source=MockStatsSource(), rng=service_rng)
@@ -1275,14 +1280,7 @@ def test_start_next_round_generates_round_using_service_owned_rng(tmp_path, monk
     )
     assert len(start_snapshot.games_today) > 1
 
-    recorded_rngs: list[object] = []
-    original_generate_round = gameplay_service_module.generate_round
-
-    def _spy_generate_round(*args, **kwargs):
-        recorded_rngs.append(kwargs.get("rng"))
-        return original_generate_round(*args, **kwargs)
-
-    monkeypatch.setattr(gameplay_service_module, "generate_round", _spy_generate_round)
+    recorded_rngs = _spy_on_generate_round(monkeypatch)
 
     for _ in range(start_snapshot.total_questions):
         question = service.snapshot().current_question
@@ -1294,20 +1292,10 @@ def test_start_next_round_generates_round_using_service_owned_rng(tmp_path, monk
 
 
 def test_probe_only_round_generation_does_not_consume_rng_state(tmp_path, monkeypatch) -> None:
-    import hoophigher.services.gameplay_service as gameplay_service_module
-
     engine = _make_engine(tmp_path)
     service_rng = Random(11)
     service = GameplayService(engine=engine, stats_source=MockStatsSource(), rng=service_rng)
-
-    recorded_rngs: list[object] = []
-    original_generate_round = gameplay_service_module.generate_round
-
-    def _spy_generate_round(*args, **kwargs):
-        recorded_rngs.append(kwargs.get("rng"))
-        return original_generate_round(*args, **kwargs)
-
-    monkeypatch.setattr(gameplay_service_module, "generate_round", _spy_generate_round)
+    recorded_rngs = _spy_on_generate_round(monkeypatch)
 
     game = _make_service_game(game_id="probe-game", source_date=date(2025, 1, 12))
     can_generate = service._can_generate_round(game, total_questions=5)
