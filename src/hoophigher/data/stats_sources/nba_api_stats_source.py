@@ -769,6 +769,14 @@ def _has_available_player_stats(players: Sequence[PlayerLine]) -> bool:
 def _parse_game_status(*, status_code: object, status_text: str | None) -> str | None:
     """Classify a scoreboard game's status as final, live, or scheduled.
 
+    Both supported scoreboard payload shapes (V3's ``gameStatus`` and V2's
+    ``GAME_STATUS_ID``) reliably provide a numeric status code, so that code
+    is authoritative whenever it is present. Status text is only consulted
+    as a fallback for detecting "final" when no numeric code is given —
+    text alone cannot reliably distinguish "live" from "scheduled", so any
+    other non-empty text is classified conservatively as live (excluded from
+    Playable NBA Games either way).
+
     Returns ``None`` when the payload carries no recognizable status
     information at all, so that historical behavior (treat as final) can be
     preserved by the caller.
@@ -778,21 +786,18 @@ def _parse_game_status(*, status_code: object, status_text: str | None) -> str |
             numeric_code = int(status_code)
         except (TypeError, ValueError):
             numeric_code = None
-        if numeric_code is not None and numeric_code in _STATUS_BY_NUMERIC_CODE:
-            return _STATUS_BY_NUMERIC_CODE[numeric_code]
+        else:
+            mapped_status = _STATUS_BY_NUMERIC_CODE.get(numeric_code)
+            if mapped_status is not None:
+                return mapped_status
 
     if not status_text:
         return None
-
     lowered = status_text.strip().lower()
     if not lowered:
         return None
     if "final" in lowered:
         return STATUS_FINAL
-    if any(marker in lowered for marker in ("am", "pm", "et", "pt", "ct", "mt")):
-        return STATUS_SCHEDULED
-    # Anything else with recognizable text (e.g. "Qtr 3 - 5:23", "Halftime")
-    # describes an in-progress game.
     return STATUS_LIVE
 
 

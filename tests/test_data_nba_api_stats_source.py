@@ -1318,7 +1318,10 @@ def test_default_nba_game_fetch_skips_v2_when_v3_exhausts_timeout_budget(monkeyp
         (2, "Q3 5:23", STATUS_LIVE),
         (3, "Final", STATUS_FINAL),
         (None, "Final/OT", STATUS_FINAL),
-        (None, "7:00 pm ET", STATUS_SCHEDULED),
+        # Without a numeric code, text alone can't distinguish live from
+        # scheduled, so it is classified conservatively as live (still
+        # excluded from Playable NBA Games either way).
+        (None, "7:00 pm ET", STATUS_LIVE),
         (None, "Halftime", STATUS_LIVE),
         (None, None, None),
         (None, "", None),
