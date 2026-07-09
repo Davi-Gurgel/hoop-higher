@@ -12,7 +12,7 @@ from hoophigher.domain.enums import GameMode
 from hoophigher.tui.widgets import DialogShell
 
 _START_GAME_WORKER_GROUP = "start-game"
-_LOADING_STATUS_WORKER_GROUP = "loading-status"
+_LOADING_STATUS_INTERVAL_SECONDS = 1
 
 
 class ModeSelectScreen(Screen[None]):
@@ -71,7 +71,6 @@ class ModeSelectScreen(Screen[None]):
 
     def __init__(self) -> None:
         super().__init__()
-        self._is_loading = False
         self._loading_mode: GameMode | None = None
         self._loading_started_at = 0.0
 
@@ -123,7 +122,7 @@ class ModeSelectScreen(Screen[None]):
         self._begin_start_game(GameMode.HISTORICAL)
 
     def action_back(self) -> None:
-        if self._is_loading:
+        if self._loading_mode is not None:
             self._cancel_start_game()
             return
         self.app.pop_screen()
@@ -139,33 +138,39 @@ class ModeSelectScreen(Screen[None]):
         self.app.exit()
 
     def _begin_start_game(self, mode: GameMode) -> None:
-        if self._is_loading:
+        if self._loading_mode is not None:
             return
         self._set_loading(mode)
         self._start_game_worker(mode)
 
     @work(exclusive=True, group=_START_GAME_WORKER_GROUP)
     async def _start_game_worker(self, mode: GameMode) -> None:
+        start_game = asyncio.ensure_future(self.app.start_game(mode))
         try:
-            await self.app.start_game(mode)
+            while not start_game.done():
+                await asyncio.wait({start_game}, timeout=_LOADING_STATUS_INTERVAL_SECONDS)
+                if not start_game.done():
+                    self._refresh_loading_status()
+            start_game.result()
+        except asyncio.CancelledError:
+            start_game.cancel()
+            raise
         except Exception as exc:  # noqa: BLE001
             self.app.notify(str(exc), title="Unable to start game", severity="error")
         finally:
             self._reset_loading()
 
     def _set_loading(self, mode: GameMode) -> None:
-        self._is_loading = True
         self._loading_mode = mode
         self._loading_started_at = time.monotonic()
         self._set_mode_buttons_disabled(True)
         self.query_one("#mode-back", Button).label = "Cancel  [Esc]"
         self._refresh_loading_status()
-        self._pulse_loading_status_worker()
 
     def _reset_loading(self) -> None:
-        self._is_loading = False
+        if self._loading_mode is None:
+            return
         self._loading_mode = None
-        self.workers.cancel_group(self, _LOADING_STATUS_WORKER_GROUP)
         self._set_mode_buttons_disabled(False)
         self.query_one("#mode-back", Button).label = "←  Back  [Esc]"
         status = self.query_one("#mode-loading-status", Label)
@@ -175,12 +180,6 @@ class ModeSelectScreen(Screen[None]):
     def _cancel_start_game(self) -> None:
         self.workers.cancel_group(self, _START_GAME_WORKER_GROUP)
         self._reset_loading()
-
-    @work(exclusive=True, group=_LOADING_STATUS_WORKER_GROUP)
-    async def _pulse_loading_status_worker(self) -> None:
-        while True:
-            await asyncio.sleep(1)
-            self._refresh_loading_status()
 
     def _refresh_loading_status(self) -> None:
         status = self.query_one("#mode-loading-status", Label)
