@@ -21,6 +21,21 @@ ScoreboardFetch = Callable[[date, float], Mapping[str, object]]
 NBAGameFetch = Callable[[str, float], Mapping[str, object]]
 CacheRepositoryContextFactory = Callable[[], ContextManager[CacheRepository]]
 
+# Game status values recognized when the scoreboard source reports them.
+# ``None`` means the payload carried no status information at all, in which
+# case historical behavior is preserved: the game is treated as final.
+STATUS_FINAL = "final"
+STATUS_LIVE = "live"
+STATUS_SCHEDULED = "scheduled"
+
+_NON_FINAL_STATUSES = (STATUS_LIVE, STATUS_SCHEDULED)
+
+_STATUS_BY_NUMERIC_CODE = {
+    1: STATUS_SCHEDULED,
+    2: STATUS_LIVE,
+    3: STATUS_FINAL,
+}
+
 
 @dataclass(frozen=True, slots=True)
 class _ScoreboardSeed:
@@ -28,6 +43,7 @@ class _ScoreboardSeed:
     source_date: date
     home_team: TeamGameInfo
     away_team: TeamGameInfo
+    status: str | None = None
 
 
 class NBAApiStatsSource(StatsSource):
@@ -84,11 +100,18 @@ class NBAApiStatsSource(StatsSource):
         )
         seeds = _parse_scoreboard_payload(payload, expected_date=source_date)
 
+        # Only final games are Playable NBA Games. Live and scheduled games
+        # are excluded before shells are built. A payload with no status
+        # information at all preserves historical behavior (treated as
+        # final).
+        final_seeds = [seed for seed in seeds if seed.status not in _NON_FINAL_STATUSES]
+        all_games_final = len(final_seeds) == len(seeds)
+
         # Build lightweight game shells from scoreboard data.
         # No NBA game API calls are made here — those happen on demand
         # via get_nba_game when the gameplay service needs them.
         games: list[NBAGame] = []
-        for seed in seeds:
+        for seed in final_seeds:
             # Check if this individual game is already cached with stats.
             with self._cache_repository_factory() as cache_repository:
                 cached_game = cache_repository.get_nba_game(seed.game_id)
@@ -107,8 +130,12 @@ class NBAApiStatsSource(StatsSource):
                 )
 
         games.sort(key=lambda game: game.game_id)
-        with self._cache_repository_factory() as cache_repository:
-            cache_repository.set_games_by_date(source_date, games)
+        # A source date containing non-final games is not permanently
+        # cached as complete — the next call re-fetches to pick up games
+        # that have since gone final.
+        if all_games_final:
+            with self._cache_repository_factory() as cache_repository:
+                cache_repository.set_games_by_date(source_date, games)
         return games
 
     async def get_nba_game(
@@ -315,6 +342,10 @@ def _parse_scoreboard_v3_payload(
         )
         home_raw = _require_mapping(raw_game.get("homeTeam"), field="scoreboard.games[].homeTeam")
         away_raw = _require_mapping(raw_game.get("awayTeam"), field="scoreboard.games[].awayTeam")
+        status = _parse_game_status(
+            status_code=raw_game.get("gameStatus"),
+            status_text=_optional_str(raw_game.get("gameStatusText")),
+        )
 
         seeds.append(
             _ScoreboardSeed(
@@ -336,6 +367,7 @@ def _parse_scoreboard_v3_payload(
                     name_keys=("teamName",),
                     score_keys=("score",),
                 ),
+                status=status,
             )
         )
     return seeds
@@ -375,6 +407,10 @@ def _parse_scoreboard_v2_payload(
         )
         home_abbrev = tricode_by_game_and_team.get((game_id, home_team_id), "UNK")
         away_abbrev = tricode_by_game_and_team.get((game_id, away_team_id), "UNK")
+        status = _parse_game_status(
+            status_code=row.get("GAME_STATUS_ID"),
+            status_text=_optional_str(row.get("GAME_STATUS_TEXT")),
+        )
 
         seeds.append(
             _ScoreboardSeed(
@@ -392,6 +428,7 @@ def _parse_scoreboard_v2_payload(
                     abbreviation=away_abbrev,
                     score=_optional_int(row.get("PTS_AWAY")),
                 ),
+                status=status,
             )
         )
     return seeds
@@ -727,6 +764,36 @@ def _require_available_player_stats(players: Sequence[PlayerLine], *, field: str
 
 def _has_available_player_stats(players: Sequence[PlayerLine]) -> bool:
     return any(player.minutes > 0 for player in players)
+
+
+def _parse_game_status(*, status_code: object, status_text: str | None) -> str | None:
+    """Classify a scoreboard game's status as final, live, or scheduled.
+
+    Returns ``None`` when the payload carries no recognizable status
+    information at all, so that historical behavior (treat as final) can be
+    preserved by the caller.
+    """
+    if status_code is not None:
+        try:
+            numeric_code = int(status_code)
+        except (TypeError, ValueError):
+            numeric_code = None
+        if numeric_code is not None and numeric_code in _STATUS_BY_NUMERIC_CODE:
+            return _STATUS_BY_NUMERIC_CODE[numeric_code]
+
+    if not status_text:
+        return None
+
+    lowered = status_text.strip().lower()
+    if not lowered:
+        return None
+    if "final" in lowered:
+        return STATUS_FINAL
+    if any(marker in lowered for marker in ("am", "pm", "et", "pt", "ct", "mt")):
+        return STATUS_SCHEDULED
+    # Anything else with recognizable text (e.g. "Qtr 3 - 5:23", "Halftime")
+    # describes an in-progress game.
+    return STATUS_LIVE
 
 
 def _is_game_shell(game: NBAGame) -> bool:
