@@ -1227,3 +1227,80 @@ def test_historical_ends_after_all_games_for_date_are_consumed(tmp_path) -> None
 
     assert run_record is not None
     assert run_record.end_reason == RunEndReason.NO_MORE_GAMES.value
+
+
+def _spy_on_generate_round(monkeypatch) -> list[object]:
+    """Record the `rng` kwarg passed to every `generate_round` call made by the
+    gameplay service module, while still delegating to the real function.
+    """
+    import hoophigher.services.gameplay_service as gameplay_service_module
+
+    recorded_rngs: list[object] = []
+    original_generate_round = gameplay_service_module.generate_round
+
+    def _spy_generate_round(*args, **kwargs):
+        recorded_rngs.append(kwargs.get("rng"))
+        return original_generate_round(*args, **kwargs)
+
+    monkeypatch.setattr(gameplay_service_module, "generate_round", _spy_generate_round)
+    return recorded_rngs
+
+
+def test_start_run_generates_round_using_service_owned_rng(tmp_path, monkeypatch) -> None:
+    engine = _make_engine(tmp_path)
+    service_rng = Random(11)
+    service = GameplayService(engine=engine, stats_source=MockStatsSource(), rng=service_rng)
+    recorded_rngs = _spy_on_generate_round(monkeypatch)
+
+    asyncio.run(
+        service.start_run(
+            GameMode.ENDLESS,
+            source_date=date(2025, 1, 12),
+            total_questions=5,
+        )
+    )
+
+    # start_run should generate its Round using the service-owned rng, not the
+    # deterministic default.
+    assert recorded_rngs
+    assert recorded_rngs[-1] is service_rng
+
+
+def test_start_next_round_generates_round_using_service_owned_rng(tmp_path, monkeypatch) -> None:
+    engine = _make_engine(tmp_path)
+    service_rng = Random(11)
+    service = GameplayService(engine=engine, stats_source=MockStatsSource(), rng=service_rng)
+
+    start_snapshot = asyncio.run(
+        service.start_run(
+            GameMode.HISTORICAL,
+            source_date=date(2025, 1, 12),
+            total_questions=5,
+        )
+    )
+    assert len(start_snapshot.games_today) > 1
+
+    recorded_rngs = _spy_on_generate_round(monkeypatch)
+
+    for _ in range(start_snapshot.total_questions):
+        question = service.snapshot().current_question
+        assert question is not None
+        asyncio.run(service.submit_guess(question.correct_guess))
+
+    assert recorded_rngs
+    assert recorded_rngs[-1] is service_rng
+
+
+def test_probe_only_round_generation_does_not_consume_rng_state(tmp_path, monkeypatch) -> None:
+    engine = _make_engine(tmp_path)
+    service_rng = Random(11)
+    service = GameplayService(engine=engine, stats_source=MockStatsSource(), rng=service_rng)
+    recorded_rngs = _spy_on_generate_round(monkeypatch)
+
+    game = _make_service_game(game_id="probe-game", source_date=date(2025, 1, 12))
+    can_generate = service._can_generate_round(game, total_questions=5)
+
+    assert can_generate is True
+    # Probe-only generation must not pass the service rng: it should not
+    # perturb the seeded variety a later real Round generation would produce.
+    assert recorded_rngs == [None]

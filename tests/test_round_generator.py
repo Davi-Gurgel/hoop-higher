@@ -1,4 +1,5 @@
 from datetime import date
+from random import Random
 
 import pytest
 
@@ -33,6 +34,33 @@ def make_game(players: tuple[PlayerLine, ...]) -> NBAGame:
     )
 
 
+def _matchup_sequence(round_definition: RoundDefinition) -> tuple[frozenset[str], ...]:
+    return tuple(
+        frozenset((question.player_a.player_id, question.player_b.player_id))
+        for question in round_definition.questions
+    )
+
+
+def _assert_round_is_valid(round_definition: RoundDefinition, total_questions: int) -> None:
+    assert isinstance(round_definition, RoundDefinition)
+    assert len(round_definition.questions) == total_questions
+    seen_matchups: set[frozenset[str]] = set()
+    seen_players: set[str] = set()
+    for index, question in enumerate(round_definition.questions):
+        assert question.player_a.player_id != question.player_b.player_id
+        assert question.player_a.points != question.player_b.points
+        assert question.player_b.player_id not in seen_players
+        matchup_key = frozenset((question.player_a.player_id, question.player_b.player_id))
+        assert matchup_key not in seen_matchups
+        seen_matchups.add(matchup_key)
+        if index > 0:
+            assert (
+                question.player_a.player_id
+                == round_definition.questions[index - 1].player_b.player_id
+            )
+        seen_players.update((question.player_a.player_id, question.player_b.player_id))
+
+
 def test_generate_round_keeps_previous_hidden_player_on_left_without_reusing_hidden_targets() -> (
     None
 ):
@@ -49,24 +77,7 @@ def test_generate_round_keeps_previous_hidden_player_on_left_without_reusing_hid
 
     round_definition = generate_round(game, total_questions=5)
 
-    assert isinstance(round_definition, RoundDefinition)
-    assert len(round_definition.questions) == 5
-    seen_matchups: set[frozenset[str]] = set()
-    seen_players: set[str] = set()
-
-    for index, question in enumerate(round_definition.questions):
-        assert question.player_a.player_id != question.player_b.player_id
-        assert question.player_a.points != question.player_b.points
-        assert question.player_b.player_id not in seen_players
-        matchup_key = frozenset((question.player_a.player_id, question.player_b.player_id))
-        assert matchup_key not in seen_matchups
-        seen_matchups.add(matchup_key)
-        if index > 0:
-            assert (
-                question.player_a.player_id
-                == round_definition.questions[index - 1].player_b.player_id
-            )
-        seen_players.update((question.player_a.player_id, question.player_b.player_id))
+    _assert_round_is_valid(round_definition, total_questions=5)
 
 
 def test_generate_round_prefers_high_minute_players() -> None:
@@ -152,3 +163,50 @@ def test_generate_round_ignores_tied_pairs_and_can_fail_when_only_ties_remain() 
 
     with pytest.raises(ValueError, match="Not enough valid player pairs|Unable to generate"):
         generate_round(game, total_questions=5)
+
+
+def _make_variety_game() -> NBAGame:
+    # Equal minutes across all players removes the high-minute tiebreaker's
+    # influence, leaving plenty of equally-preferable candidates whose
+    # ordering can vary between seeds.
+    points = (40, 35, 30, 26, 22, 19, 16, 13, 10, 7)
+    players = tuple(
+        make_player(str(index), player_points, minutes=24)
+        for index, player_points in enumerate(points)
+    )
+    return make_game(players)
+
+
+def test_generate_round_is_deterministic_without_rng() -> None:
+    game = _make_variety_game()
+
+    first = generate_round(game, total_questions=5)
+    second = generate_round(game, total_questions=5)
+
+    assert _matchup_sequence(first) == _matchup_sequence(second)
+    # Pin the exact default sequence so refactors cannot silently change
+    # what existing rng-less callers get for the same game.
+    assert [
+        (question.player_a.player_id, question.player_b.player_id) for question in first.questions
+    ] == [("0", "9"), ("9", "1"), ("1", "2"), ("2", "4"), ("4", "5")]
+
+
+def test_generate_round_with_same_seed_is_reproducible() -> None:
+    game = _make_variety_game()
+
+    first = generate_round(game, total_questions=5, rng=Random(1234))
+    second = generate_round(game, total_questions=5, rng=Random(1234))
+
+    assert _matchup_sequence(first) == _matchup_sequence(second)
+
+
+def test_generate_round_with_different_seeds_vary_while_respecting_constraints() -> None:
+    game = _make_variety_game()
+
+    outcomes: set[tuple[frozenset[str], ...]] = set()
+    for seed in range(20):
+        round_definition = generate_round(game, total_questions=5, rng=Random(seed))
+        _assert_round_is_valid(round_definition, total_questions=5)
+        outcomes.add(_matchup_sequence(round_definition))
+
+    assert len(outcomes) > 1

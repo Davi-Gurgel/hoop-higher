@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
+from random import Random
 
 from hoophigher.domain.difficulty import (
     classify_question_difficulty,
@@ -46,7 +47,21 @@ _DIFFICULTY_IDEAL_DIFF = {
 }
 
 
-def generate_round(nba_game: NBAGame, *, total_questions: int = 5) -> RoundDefinition:
+def generate_round(
+    nba_game: NBAGame,
+    *,
+    total_questions: int = 5,
+    rng: Random | None = None,
+) -> RoundDefinition:
+    """Generate a Round's Comparison Chain of Questions for the given NBA game.
+
+    When `rng` is omitted, generation is fully deterministic: the same game and
+    `total_questions` always yield the same Comparison Chain. When `rng` is
+    supplied, ties between equally-preferable candidates are broken using the
+    given Random instance instead of a fixed player-id ordering, so different
+    seeds can produce different (but still valid) Comparison Chains from the
+    same game. The same seed always reproduces the same Comparison Chain.
+    """
     if total_questions < 5 or total_questions > 10:
         raise ValueError("Rounds must request between 5 and 10 questions.")
 
@@ -67,6 +82,7 @@ def generate_round(nba_game: NBAGame, *, total_questions: int = 5) -> RoundDefin
     questions = _search_question_path(
         by_source=by_source,
         total_questions=total_questions,
+        rng=rng,
     )
     if questions is None:
         raise ValueError("Unable to generate a valid round with the available players.")
@@ -114,6 +130,7 @@ def _search_question_path(
     *,
     by_source: dict[str, tuple[QuestionCandidate, ...]],
     total_questions: int,
+    rng: Random | None,
 ) -> tuple[Question, ...] | None:
     all_candidates = tuple(
         candidate for candidates in by_source.values() for candidate in candidates
@@ -123,6 +140,7 @@ def _search_question_path(
         all_candidates,
         target=pick_target_difficulty(0, total_questions),
         seen_player_ids=set(),
+        rng=rng,
     ):
         result = _search_from_candidate(
             current_candidate=starting_candidate,
@@ -131,6 +149,7 @@ def _search_question_path(
             used_matchups={starting_candidate.matchup_key},
             seen_player_ids={starting_candidate.source_id, starting_candidate.target_id},
             selected_questions=[starting_candidate.question],
+            rng=rng,
         )
         if result is not None:
             return tuple(result)
@@ -146,6 +165,7 @@ def _search_from_candidate(
     used_matchups: set[frozenset[str]],
     seen_player_ids: set[str],
     selected_questions: list[Question],
+    rng: Random | None,
 ) -> list[Question] | None:
     if len(selected_questions) == total_questions:
         return selected_questions.copy()
@@ -162,6 +182,7 @@ def _search_from_candidate(
         next_candidates,
         target=next_target_difficulty,
         seen_player_ids=seen_player_ids,
+        rng=rng,
     ):
         used_matchups.add(candidate.matchup_key)
         seen_player_ids.add(candidate.target_id)
@@ -174,6 +195,7 @@ def _search_from_candidate(
             used_matchups=used_matchups,
             seen_player_ids=seen_player_ids,
             selected_questions=selected_questions,
+            rng=rng,
         )
         if result is not None:
             return result
@@ -190,27 +212,33 @@ def _sort_candidates_for_target(
     *,
     target: Difficulty,
     seen_player_ids: set[str],
+    rng: Random | None,
 ) -> tuple[QuestionCandidate, ...]:
     target_rank = _DIFFICULTY_ORDER[target]
     ideal_diff = _DIFFICULTY_IDEAL_DIFF[target]
 
-    return tuple(
-        sorted(
-            candidates,
-            key=lambda candidate: (
-                # The source is usually the previously revealed player; for the first
-                # question this still prefers a fresh high-minute source.
-                candidate.source_id in seen_player_ids,
-                # Prefer players who had the biggest role in the game.
-                -candidate.target_minutes,
-                -candidate.source_minutes,
-                # Then prefer candidates whose bucket matches the target.
-                abs(_DIFFICULTY_ORDER[candidate.question.difficulty] - target_rank),
-                # Tie-breaker: prefer candidates closest to the ideal diff for the target bucket,
-                # so EASY favours large gaps and HARD favours small ones.
-                abs(candidate.question.point_difference - ideal_diff),
-                candidate.source_id,
-                candidate.target_id,
-            ),
+    def preference_key(candidate: QuestionCandidate) -> tuple[bool, int, int, int, int]:
+        return (
+            # The source is usually the previously revealed player; for the first
+            # question this still prefers a fresh high-minute source.
+            candidate.source_id in seen_player_ids,
+            # Prefer players who had the biggest role in the game.
+            -candidate.target_minutes,
+            -candidate.source_minutes,
+            # Then prefer candidates whose bucket matches the target.
+            abs(_DIFFICULTY_ORDER[candidate.question.difficulty] - target_rank),
+            # Tie-breaker: prefer candidates closest to the ideal diff for the target bucket,
+            # so EASY favours large gaps and HARD favours small ones.
+            abs(candidate.question.point_difference - ideal_diff),
         )
-    )
+
+    # Shuffling perturbs the pre-sort order so that candidates tied on
+    # preference_key fall back to a seed-dependent order instead of always
+    # favouring the lowest player id. `sorted` is stable, so untied candidates
+    # are unaffected. Without an rng, ties fall back to the candidates'
+    # natural (already id-ordered) build order, keeping default generation
+    # fully deterministic.
+    ordered = list(candidates)
+    if rng is not None:
+        rng.shuffle(ordered)
+    return tuple(sorted(ordered, key=preference_key))
