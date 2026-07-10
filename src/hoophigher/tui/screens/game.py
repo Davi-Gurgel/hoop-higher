@@ -202,13 +202,17 @@ class GameScreen(Screen[None]):
     # ── Lifecycle ──────────────────────────────────────────────
 
     def on_mount(self) -> None:
-        self._refresh_view()
         self.query_one("#guess-higher", Button).focus()
 
     def on_screen_resume(self, _event: events.ScreenResume) -> None:
-        """Refresh and begin timing when a question becomes answerable again."""
+        """Present the current Question whenever this screen becomes active.
+
+        Textual sends ScreenResume on the initial push and again when a
+        covering screen (the Round Summary) pops, so time spent reading the
+        summary never counts toward a response time.
+        """
         if not self._awaiting_feedback and not self._snapshot.is_finished:
-            self._refresh_view()
+            self._present_question()
 
     def on_resize(self, event: events.Resize) -> None:
         self._sync_responsive_copy(event.size.width, event.size.height)
@@ -338,9 +342,15 @@ class GameScreen(Screen[None]):
             self.app.push_screen(RoundSummaryScreen(summary))
             return
 
-        self._refresh_view()
+        self._present_question()
 
     # ── View helpers ──────────────────────────────────────────
+
+    def _present_question(self) -> None:
+        """Repaint the screen and start timing the answerable Question, if any."""
+        self._refresh_view()
+        question = self._snapshot.current_question
+        self._question_started_at = None if question is None else monotonic()
 
     def _refresh_view(self) -> None:
         s = self._snapshot
@@ -356,7 +366,6 @@ class GameScreen(Screen[None]):
 
         question = s.current_question
         if question is None:
-            self._question_started_at = None
             self._matchup_panel.clear()
             self._guess_bar.set_prompt("")
             self._guess_bar.set_controls_hint("Use H/L or ←/→ + Enter")
@@ -367,7 +376,6 @@ class GameScreen(Screen[None]):
         self._matchup_panel.set_question(question)
         self._set_buttons_disabled(False)
         self._sync_responsive_copy(self.size.width, self.size.height)
-        self._question_started_at = monotonic()
         self.query_one("#guess-higher", Button).focus()
 
     def _sync_responsive_copy(self, width: int, height: int) -> None:
@@ -433,10 +441,11 @@ class GameScreen(Screen[None]):
     def _set_buttons_disabled(self, disabled: bool) -> None:
         self._guess_bar.set_buttons_disabled(disabled)
 
-    def _response_time_ms(self) -> int:
+    def _response_time_ms(self) -> int | None:
+        """Elapsed answer time, or None when no Question timing was running."""
         if self._question_started_at is None:
-            return 0
-        return max(0, int((monotonic() - self._question_started_at) * 1000))
+            return None
+        return int((monotonic() - self._question_started_at) * 1000)
 
     def _leave_run(self) -> None:
         self._snapshot = self.app.gameplay_service.end_run()
