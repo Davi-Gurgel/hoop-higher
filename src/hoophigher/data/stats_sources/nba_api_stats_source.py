@@ -8,13 +8,12 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime
 from enum import StrEnum
-from pathlib import Path
 from typing import ContextManager
 
 from sqlalchemy.engine import Engine
 from hoophigher.data.stats_sources.base import StatsSource
 from hoophigher.data.cache_repository import CacheRepository
-from hoophigher.data.db import create_sqlite_engine, init_db, session_scope
+from hoophigher.data.db import create_sqlite_engine, default_sqlite_url, init_db, session_scope
 from hoophigher.domain.models import NBAGame
 from hoophigher.domain.models import PlayerLine, TeamGameInfo
 
@@ -214,8 +213,7 @@ class NBAApiStatsSource(StatsSource):
         ) from last_error
 
     def _create_default_engine(self) -> Engine:
-        database_path = Path("var/hoophigher.db").resolve()
-        engine = create_sqlite_engine(f"sqlite:///{database_path}")
+        engine = create_sqlite_engine(default_sqlite_url())
         init_db(engine)
         return engine
 

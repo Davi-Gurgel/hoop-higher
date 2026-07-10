@@ -1,7 +1,7 @@
 """Data layer for repositories, persistence, and stats sources."""
 
 from hoophigher.data.cache_repository import CacheRepository
-from hoophigher.data.db import DEFAULT_SQLITE_URL, create_sqlite_engine, init_db, session_scope
+from hoophigher.data.db import create_sqlite_engine, default_sqlite_url, init_db, session_scope
 from hoophigher.data.repositories import (
     QuestionRepository,
     RoundRepository,
@@ -20,7 +20,6 @@ __all__ = [
     "CacheRepository",
     "CachedGameRecord",
     "CachedGameStatsRecord",
-    "DEFAULT_SQLITE_URL",
     "QuestionRecord",
     "QuestionRepository",
     "RoundRecord",
@@ -29,6 +28,7 @@ __all__ = [
     "RunRepository",
     "StatsRepository",
     "create_sqlite_engine",
+    "default_sqlite_url",
     "init_db",
     "session_scope",
 ]

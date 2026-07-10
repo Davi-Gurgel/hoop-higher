@@ -9,6 +9,7 @@ from pydantic import ValidationError
 
 import hoophigher.app as app_module
 import hoophigher.config as config_module
+import hoophigher.data.db as db_module
 from hoophigher.data import (
     CacheRepository,
     create_sqlite_engine,
@@ -31,6 +32,51 @@ def test_settings_defaults_to_nba_api_provider(monkeypatch) -> None:
     values = config_module.Settings()
 
     assert values.stats_provider == "nba_api"
+
+
+def test_settings_uses_per_user_database_path_by_default(monkeypatch, tmp_path) -> None:
+    launch_directory = tmp_path / "empty-launch-directory"
+    launch_directory.mkdir()
+    data_directory = tmp_path / "user-data" / "hoop-higher"
+    monkeypatch.chdir(launch_directory)
+    monkeypatch.setattr(db_module, "user_data_path", lambda *_args, **_kwargs: data_directory)
+
+    values = config_module.Settings()
+
+    assert values.database_url == f"sqlite:///{data_directory / 'hoophigher.db'}"
+
+
+def test_settings_uses_existing_legacy_database(monkeypatch, tmp_path) -> None:
+    launch_directory = tmp_path / "legacy-launch-directory"
+    legacy_database_path = launch_directory / "var" / "hoophigher.db"
+    legacy_database_path.parent.mkdir(parents=True)
+    legacy_database_path.touch()
+    monkeypatch.chdir(launch_directory)
+    monkeypatch.setattr(
+        db_module,
+        "user_data_path",
+        lambda *_args, **_kwargs: tmp_path / "user-data" / "hoop-higher",
+    )
+
+    values = config_module.Settings()
+
+    assert values.database_url == f"sqlite:///{legacy_database_path}"
+
+
+def test_database_url_environment_override_takes_precedence_over_legacy_database(
+    monkeypatch, tmp_path
+) -> None:
+    launch_directory = tmp_path / "legacy-launch-directory"
+    legacy_database_path = launch_directory / "var" / "hoophigher.db"
+    legacy_database_path.parent.mkdir(parents=True)
+    legacy_database_path.touch()
+    configured_database_url = f"sqlite:///{tmp_path / 'custom' / 'hoophigher.db'}"
+    monkeypatch.chdir(launch_directory)
+    monkeypatch.setenv("HOOPHIGHER_DATABASE_URL", configured_database_url)
+
+    values = config_module.Settings()
+
+    assert values.database_url == configured_database_url
 
 
 def test_settings_accepts_mock_provider_and_historical_env_values(monkeypatch) -> None:

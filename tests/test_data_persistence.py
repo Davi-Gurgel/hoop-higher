@@ -15,6 +15,7 @@ from hoophigher.data import (
     RunRepository,
     StatsRepository,
     create_sqlite_engine,
+    default_sqlite_url,
     init_db,
     session_scope,
 )
@@ -387,6 +388,22 @@ def test_create_sqlite_engine_creates_parent_directory_for_file_db(tmp_path) -> 
     create_sqlite_engine(f"sqlite:///{database_path}")
 
     assert database_path.parent == tmp_path / "nested"
+    assert database_path.parent.exists()
+    assert database_path.parent.is_dir()
+
+
+def test_create_sqlite_engine_creates_parent_directory_for_default_database(
+    monkeypatch, tmp_path
+) -> None:
+    database_path = tmp_path / "user-data" / "hoop-higher" / "hoophigher.db"
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "hoophigher.data.db.user_data_path",
+        lambda *_args, **_kwargs: database_path.parent,
+    )
+
+    create_sqlite_engine(default_sqlite_url())
+
     assert database_path.parent.exists()
     assert database_path.parent.is_dir()
 

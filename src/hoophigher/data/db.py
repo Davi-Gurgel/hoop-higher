@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Final
 
+from platformdirs import user_data_path
 from sqlalchemy import event
 from sqlalchemy.engine import Engine, make_url
 from sqlmodel import Session, SQLModel, create_engine
@@ -13,15 +14,31 @@ from hoophigher.data import (  # noqa: F401 - ensure tables are registered
     schema as _schema,
 )
 
-DEFAULT_SQLITE_URL = f"sqlite:///{Path('var/hoophigher.db').resolve()}"
+APP_NAME = "hoop-higher"
+DATABASE_FILENAME = "hoophigher.db"
 _ALLOWED_SQLITE_JOURNAL_MODES: Final[frozenset[str]] = frozenset(
     {"DELETE", "TRUNCATE", "PERSIST", "MEMORY", "WAL", "OFF"}
 )
 _ALLOWED_SQLITE_SYNCHRONOUS: Final[frozenset[str]] = frozenset({"OFF", "NORMAL", "FULL", "EXTRA"})
 
 
+def default_sqlite_url() -> str:
+    """Return the configured-by-convention database URL for a local launch.
+
+    Keep using the former working-directory database when it exists so an
+    upgrade preserves existing Run history, Leaderboard data, Player Stats,
+    and cached NBA data.
+    """
+    legacy_database_path = Path.cwd() / "var" / DATABASE_FILENAME
+    if legacy_database_path.is_file():
+        database_path = legacy_database_path
+    else:
+        database_path = user_data_path(APP_NAME, appauthor=False) / DATABASE_FILENAME
+    return f"sqlite:///{database_path.resolve()}"
+
+
 def create_sqlite_engine(
-    database_url: str = DEFAULT_SQLITE_URL,
+    database_url: str,
     *,
     echo: bool = False,
     sqlite_journal_mode: str | None = "WAL",
