@@ -2,12 +2,32 @@ from __future__ import annotations
 
 from textual import events
 from textual.app import ComposeResult
+from textual.binding import Binding
 from textual.containers import VerticalScroll
 from textual.screen import Screen
 from textual.widgets import Button, Footer, Header, Label
 
 from hoophigher.services import QuestionHistory, RoundHistory, RunHistoryDetail, RunHistoryRow
 from hoophigher.tui.widgets import DialogShell
+
+
+class _RunHistoryList(VerticalScroll):
+    """Scrolling run list that yields up/down to button focus instead of pixel scrolling.
+
+    VerticalScroll normally binds up/down to scroll_up/scroll_down, which would
+    otherwise swallow arrow keys before they reach the screen's button navigation.
+    """
+
+    BINDINGS = [
+        Binding("up", "focus_previous_button", show=False),
+        Binding("down", "focus_next_button", show=False),
+    ]
+
+    def action_focus_previous_button(self) -> None:
+        self.screen.focus_previous(Button)
+
+    def action_focus_next_button(self) -> None:
+        self.screen.focus_next(Button)
 
 
 def _format_run_summary(run: RunHistoryRow) -> str:
@@ -47,13 +67,14 @@ class RunHistoryScreen(Screen[None]):
     }
 
     RunHistoryScreen #run-history-panel {
-        width: 100;
-        height: 24;
+        width: 90%;
+        max-width: 76;
+        height: 80%;
+        max-height: 24;
         border: heavy #f0883e;
     }
 
-    RunHistoryScreen #run-history-title,
-    RunHistoryDetailScreen #run-detail-title {
+    RunHistoryScreen #run-history-title {
         text-align: center;
         text-style: bold;
         color: #f0883e;
@@ -61,8 +82,7 @@ class RunHistoryScreen(Screen[None]):
         margin-bottom: 1;
     }
 
-    RunHistoryScreen #run-history-subtitle,
-    RunHistoryDetailScreen #run-detail-subtitle {
+    RunHistoryScreen #run-history-subtitle {
         text-align: center;
         color: #8b949e;
         width: 100%;
@@ -80,49 +100,22 @@ class RunHistoryScreen(Screen[None]):
         text-align: left;
     }
 
-    RunHistoryScreen #run-history-empty,
-    RunHistoryDetailScreen #run-detail-empty {
+    RunHistoryScreen #run-history-empty {
         color: #8b949e;
         text-align: center;
         width: 100%;
         margin-top: 2;
     }
 
-    RunHistoryScreen #run-history-back,
-    RunHistoryDetailScreen #run-detail-back {
+    RunHistoryScreen #run-history-back {
         width: 100%;
         margin-top: 1;
-    }
-
-    RunHistoryDetailScreen {
-        align: center middle;
-    }
-
-    RunHistoryDetailScreen #run-detail-panel {
-        width: 100;
-        height: 28;
-        border: heavy #f0883e;
-    }
-
-    RunHistoryDetailScreen #run-detail-content {
-        height: 1fr;
-        width: 100%;
-    }
-
-    RunHistoryDetailScreen .round-history-heading {
-        color: #58a6ff;
-        text-style: bold;
-        width: 100%;
-        margin-top: 1;
-    }
-
-    RunHistoryDetailScreen .question-history-row {
-        width: 100%;
-        color: #c9d1d9;
     }
     """
 
     BINDINGS = [
+        ("up", "focus_previous_button", "Prev"),
+        ("down", "focus_next_button", "Next"),
         ("escape", "back", "Back"),
         ("q", "quit", "Quit"),
     ]
@@ -135,7 +128,7 @@ class RunHistoryScreen(Screen[None]):
                 "Review saved runs and open one to inspect its rounds.",
                 id="run-history-subtitle",
             )
-            yield VerticalScroll(id="run-history-list")
+            yield _RunHistoryList(id="run-history-list")
             yield Button("←  Back  [Esc]", id="run-history-back", variant="default")
         yield Footer()
 
@@ -159,8 +152,17 @@ class RunHistoryScreen(Screen[None]):
     def action_back(self) -> None:
         self.app.pop_screen()
 
+    def action_focus_previous_button(self) -> None:
+        self.focus_previous(Button)
+
+    def action_focus_next_button(self) -> None:
+        self.focus_next(Button)
+
+    def action_quit(self) -> None:
+        self.app.exit()
+
     async def _refresh_runs(self) -> None:
-        run_list = self.query_one("#run-history-list", VerticalScroll)
+        run_list = self.query_one("#run-history-list", _RunHistoryList)
         await run_list.remove_children()
         runs = self.app.run_history_service.list_runs()
         if runs:
@@ -183,6 +185,64 @@ class RunHistoryScreen(Screen[None]):
 
 
 class RunHistoryDetailScreen(Screen[None]):
+    DEFAULT_CSS = """
+    RunHistoryDetailScreen {
+        align: center middle;
+    }
+
+    RunHistoryDetailScreen #run-detail-panel {
+        width: 90%;
+        max-width: 96;
+        height: 80%;
+        max-height: 28;
+        border: heavy #f0883e;
+    }
+
+    RunHistoryDetailScreen #run-detail-title {
+        text-align: center;
+        text-style: bold;
+        color: #f0883e;
+        width: 100%;
+        margin-bottom: 1;
+    }
+
+    RunHistoryDetailScreen #run-detail-subtitle {
+        text-align: center;
+        color: #8b949e;
+        width: 100%;
+        margin-bottom: 1;
+    }
+
+    RunHistoryDetailScreen #run-detail-content {
+        height: 1fr;
+        width: 100%;
+    }
+
+    RunHistoryDetailScreen #run-detail-empty {
+        color: #8b949e;
+        text-align: center;
+        width: 100%;
+        margin-top: 2;
+    }
+
+    RunHistoryDetailScreen #run-detail-back {
+        width: 100%;
+        margin-top: 1;
+    }
+
+    RunHistoryDetailScreen .round-history-heading {
+        color: #58a6ff;
+        text-style: bold;
+        width: 100%;
+        margin-top: 1;
+    }
+
+    RunHistoryDetailScreen .question-history-row {
+        width: 100%;
+        color: #c9d1d9;
+    }
+    """
+
     BINDINGS = [
         ("escape", "back", "Back"),
         ("q", "quit", "Quit"),
@@ -215,6 +275,9 @@ class RunHistoryDetailScreen(Screen[None]):
 
     def action_back(self) -> None:
         self.app.pop_screen()
+
+    def action_quit(self) -> None:
+        self.app.exit()
 
     @staticmethod
     def _detail_widgets(detail: RunHistoryDetail) -> list[Label]:
