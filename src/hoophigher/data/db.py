@@ -5,10 +5,10 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Final
 
+from platformdirs import user_data_path
 from sqlalchemy import event
 from sqlalchemy.engine import Engine, make_url
 from sqlmodel import Session, SQLModel, create_engine
-from platformdirs import user_data_path
 
 from hoophigher.data import (  # noqa: F401 - ensure tables are registered
     schema as _schema,
@@ -38,14 +38,13 @@ def default_sqlite_url() -> str:
 
 
 def create_sqlite_engine(
-    database_url: str | None = None,
+    database_url: str,
     *,
     echo: bool = False,
     sqlite_journal_mode: str | None = "WAL",
     sqlite_synchronous: str | None = "NORMAL",
     sqlite_busy_timeout_ms: int | None = 5000,
 ) -> Engine:
-    database_url = database_url or default_sqlite_url()
     connect_args = {"check_same_thread": False} if database_url.startswith("sqlite") else {}
     _ensure_sqlite_parent_directory(database_url)
     engine = create_engine(database_url, echo=echo, connect_args=connect_args)
