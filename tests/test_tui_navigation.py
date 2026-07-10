@@ -8,7 +8,15 @@ from sqlmodel import Session
 from textual.widgets import Button, Label
 
 import hoophigher.tui.screens.game as game_screen_module
-from hoophigher.data import QuestionRepository, RunRepository, create_sqlite_engine
+from hoophigher.data import (
+    QuestionRecord,
+    QuestionRepository,
+    RoundRecord,
+    RunRecord,
+    RunRepository,
+    create_sqlite_engine,
+    init_db,
+)
 from hoophigher.domain.enums import RunEndReason
 from hoophigher.domain.models import NBAGame, PlayerLine, TeamGameInfo
 from hoophigher.app import HoopHigherApp
@@ -57,7 +65,15 @@ def test_home_screen_supports_arrow_navigation() -> None:
 
             await pilot.press("down")
             await pilot.pause()
+            assert getattr(app.screen.focused, "id", None) == "open-run-history"
+
+            await pilot.press("down")
+            await pilot.pause()
             assert getattr(app.screen.focused, "id", None) == "quit-game"
+
+            await pilot.press("up")
+            await pilot.pause()
+            assert getattr(app.screen.focused, "id", None) == "open-run-history"
 
             await pilot.press("up")
             await pilot.pause()
@@ -246,6 +262,98 @@ def test_home_screen_can_open_stats_from_focused_button() -> None:
             await pilot.press("enter")
             await pilot.pause()
             assert type(app.screen).__name__ == "StatsScreen"
+
+    asyncio.run(scenario())
+
+
+def test_home_screen_can_open_empty_run_history_and_return_home() -> None:
+    async def scenario() -> None:
+        app = HoopHigherApp(database_url="sqlite://")
+
+        async with app.run_test() as pilot:
+            await pilot.press("h")
+            await pilot.pause()
+
+            assert type(app.screen).__name__ == "RunHistoryScreen"
+            assert "No saved runs yet. Play a run to see it here." in _label_texts(app)
+
+            await pilot.press("escape")
+            await pilot.pause()
+            assert type(app.screen).__name__ == "HomeScreen"
+
+    asyncio.run(scenario())
+
+
+def test_run_history_opens_selected_run_details(tmp_path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'hoophigher.db'}"
+    engine = create_sqlite_engine(database_url)
+    init_db(engine)
+    with Session(engine) as session:
+        run = RunRecord(
+            mode="endless",
+            source_date=date(2025, 1, 12),
+            final_score=100,
+            correct_answers=1,
+            wrong_answers=0,
+            best_streak=1,
+        )
+        session.add(run)
+        session.flush()
+        run_id = run.id or 0
+        round_record = RoundRecord(
+            run_id=run_id,
+            round_index=0,
+            game_id="history-game",
+            game_date=date(2025, 1, 12),
+            total_questions=1,
+            correct_answers=1,
+            wrong_answers=0,
+            score_delta=100,
+        )
+        session.add(round_record)
+        session.flush()
+        session.add(
+            QuestionRecord(
+                run_id=run_id,
+                round_id=round_record.id or 0,
+                question_index=0,
+                player_a_id="a",
+                player_a_name="Known Player",
+                player_a_team_id="home",
+                player_a_team_abbreviation="HOM",
+                player_a_points=20,
+                player_a_minutes=30,
+                player_b_id="b",
+                player_b_name="Revealed Player",
+                player_b_team_id="away",
+                player_b_team_abbreviation="AWY",
+                player_b_points=25,
+                player_b_minutes=31,
+                difficulty="medium",
+                guess="higher",
+                is_correct=True,
+                score_delta=100,
+                revealed_points=25,
+            )
+        )
+        session.commit()
+
+    async def scenario() -> None:
+        app = HoopHigherApp(database_url=database_url)
+
+        async with app.run_test() as pilot:
+            await pilot.press("h")
+            await pilot.pause()
+            await pilot.press("enter")
+            await pilot.pause()
+
+            assert type(app.screen).__name__ == "RunHistoryDetailScreen"
+            assert any("Known Player (HOM) 20 pts" in text for text in _label_texts(app))
+            assert any("Revealed Player (AWY) 25 pts" in text for text in _label_texts(app))
+
+            await pilot.press("escape")
+            await pilot.pause()
+            assert type(app.screen).__name__ == "RunHistoryScreen"
 
     asyncio.run(scenario())
 

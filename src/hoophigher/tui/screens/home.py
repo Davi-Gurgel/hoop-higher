@@ -45,6 +45,7 @@ class HomeScreen(Screen[None]):
         ("enter", "press_focused_button", "Select"),
         ("l", "open_leaderboard", "Leaderboard"),
         ("s", "open_stats", "Stats"),
+        ("h", "open_run_history", "History"),
         ("q", "quit", "Quit"),
     ]
 
@@ -58,6 +59,7 @@ class HomeScreen(Screen[None]):
                 "🏆  Leaderboard  [L]", id="open-leaderboard", variant="primary", classes="home-btn"
             )
             yield Button("📊  Stats  [S]", id="open-stats", variant="default", classes="home-btn")
+            yield Button("🕘  Run History  [H]", id="open-run-history", classes="home-btn")
             yield Button("✕  Quit  [Q]", id="quit-game", variant="error", classes="home-btn")
         yield Footer()
 
@@ -71,6 +73,8 @@ class HomeScreen(Screen[None]):
             self.app.push_screen("leaderboard")
         elif event.button.id == "open-stats":
             self.app.push_screen("stats")
+        elif event.button.id == "open-run-history":
+            self.app.push_screen("run-history")
         elif event.button.id == "quit-game":
             self.app.exit()
 
@@ -86,6 +90,9 @@ class HomeScreen(Screen[None]):
 
     def action_open_stats(self) -> None:
         self.app.push_screen("stats")
+
+    def action_open_run_history(self) -> None:
+        self.app.push_screen("run-history")
 
     def action_quit(self) -> None:
         self.app.exit()
