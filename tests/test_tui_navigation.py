@@ -299,6 +299,53 @@ def test_stats_screen_refreshes_after_a_run_is_played(tmp_path, monkeypatch) -> 
     asyncio.run(scenario())
 
 
+def test_leaderboard_refreshes_after_a_run_is_played(tmp_path, monkeypatch) -> None:
+    database_url = f"sqlite:///{tmp_path / 'hoophigher.db'}"
+    monkeypatch.setattr(game_screen_module, "_FEEDBACK_DURATION_SECONDS", 0.01)
+
+    async def scenario() -> None:
+        app = HoopHigherApp(database_url=database_url)
+
+        async with app.run_test() as pilot:
+            await pilot.press("down")
+            await pilot.pause()
+            assert getattr(app.screen.focused, "id", None) == "open-leaderboard"
+
+            await pilot.press("enter")
+            await pilot.pause()
+            assert type(app.screen).__name__ == "LeaderboardScreen"
+            assert "No runs recorded yet." in _label_texts(app)
+
+            await pilot.press("escape")
+            await pilot.pause()
+            assert type(app.screen).__name__ == "HomeScreen"
+
+            await pilot.press("up")
+            await pilot.pause()
+            assert getattr(app.screen.focused, "id", None) == "start-game"
+
+            await pilot.press("enter")
+            await pilot.press("1")
+            await pilot.pause()
+
+            await pilot.press(_correct_guess_key(app))
+            await pilot.pause(0.05)
+            await pilot.press("escape")
+            await pilot.pause()
+            assert type(app.screen).__name__ == "HomeScreen"
+
+            await pilot.press("l")
+            await pilot.pause()
+            assert type(app.screen).__name__ == "LeaderboardScreen"
+            assert "No runs recorded yet." not in _label_texts(app)
+            assert any(
+                "RK  MODE         SCORE  STRK  CORR  DATE" in text for text in _label_texts(app)
+            )
+            assert any("Endless" in text for text in _label_texts(app))
+
+    asyncio.run(scenario())
+
+
 def test_home_screen_q_exits_app() -> None:
     async def scenario() -> None:
         app = HoopHigherApp(database_url="sqlite://")
