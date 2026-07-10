@@ -8,6 +8,7 @@ from sqlalchemy.engine import Engine
 from hoophigher.data.db import session_scope
 from hoophigher.data.repositories import StatsRepository
 from hoophigher.domain.enums import GameMode
+from hoophigher.domain.formatting import format_source_date
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,7 +23,7 @@ class LeaderboardRow:
 
     @property
     def source_date_label(self) -> str:
-        return f"{self.source_date:%d-%m-%Y}" if self.source_date is not None else "--"
+        return format_source_date(self.source_date)
 
 
 @dataclass(frozen=True, slots=True)

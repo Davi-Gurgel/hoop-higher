@@ -7,8 +7,17 @@ from textual.containers import VerticalScroll
 from textual.screen import Screen
 from textual.widgets import Button, Footer, Header, Label
 
+from hoophigher.domain.formatting import format_source_date
 from hoophigher.services import QuestionHistory, RoundHistory, RunHistoryDetail, RunHistoryRow
 from hoophigher.tui.widgets import DialogShell
+
+
+class _RunRow(Button):
+    """A saved-Run entry; pressing it opens that Run's details."""
+
+    def __init__(self, run: RunHistoryRow) -> None:
+        super().__init__(_format_run_summary(run), classes="run-history-row")
+        self.run_id = run.run_id
 
 
 class _RunHistoryList(VerticalScroll):
@@ -32,8 +41,8 @@ class _RunHistoryList(VerticalScroll):
 
 def _format_run_summary(run: RunHistoryRow) -> str:
     return (
-        f"{run.mode_label}  Score {run.score}  Streak {run.best_streak}  "
-        f"{run.correct_answers}✓/{run.wrong_answers}✕  {run.source_date_label}"
+        f"{run.mode.label}  Score {run.score}  Streak {run.best_streak}  "
+        f"{run.correct_answers}✓/{run.wrong_answers}✕  {format_source_date(run.source_date)}"
     )
 
 
@@ -132,22 +141,20 @@ class RunHistoryScreen(Screen[None]):
             yield Button("←  Back  [Esc]", id="run-history-back", variant="default")
         yield Footer()
 
-    def on_mount(self) -> None:
-        self.call_after_refresh(self._refresh_runs)
+    async def on_screen_resume(self, _: events.ScreenResume) -> None:
+        """Reload saved runs whenever this screen becomes active.
 
-    def on_show(self, _: events.Show) -> None:
-        self.call_after_refresh(self._refresh_runs)
-
-    def on_screen_resume(self, _: events.ScreenResume) -> None:
-        self.call_after_refresh(self._refresh_runs)
+        Textual sends ScreenResume both on the initial push and every time
+        this installed screen is pushed again, so runs saved since the last
+        visit always appear.
+        """
+        await self._refresh_runs()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "run-history-back":
+        if isinstance(event.button, _RunRow):
+            self.app.push_screen(RunHistoryDetailScreen(event.button.run_id))
+        elif event.button.id == "run-history-back":
             self.app.pop_screen()
-            return
-        run_id = event.button.id.removeprefix("history-run-") if event.button.id else ""
-        if run_id.isdigit():
-            self.app.push_screen(RunHistoryDetailScreen(int(run_id)))
 
     def action_back(self) -> None:
         self.app.pop_screen()
@@ -166,17 +173,9 @@ class RunHistoryScreen(Screen[None]):
         await run_list.remove_children()
         runs = self.app.run_history_service.list_runs()
         if runs:
-            await run_list.mount(
-                *[
-                    Button(
-                        _format_run_summary(run),
-                        id=f"history-run-{run.run_id}",
-                        classes="run-history-row",
-                    )
-                    for run in runs
-                ]
-            )
-            self.query_one(f"#history-run-{runs[0].run_id}", Button).focus()
+            rows = [_RunRow(run) for run in runs]
+            await run_list.mount(*rows)
+            rows[0].focus()
         else:
             await run_list.mount(
                 Label("No saved runs yet. Play a run to see it here.", id="run-history-empty")
@@ -244,6 +243,8 @@ class RunHistoryDetailScreen(Screen[None]):
     """
 
     BINDINGS = [
+        Binding("up", "scroll_questions_up", "Scroll", show=False),
+        Binding("down", "scroll_questions_down", "Scroll", show=False),
         ("escape", "back", "Back"),
         ("q", "quit", "Quit"),
     ]
@@ -258,11 +259,9 @@ class RunHistoryDetailScreen(Screen[None]):
         yield Header(show_clock=False)
         with DialogShell(id="run-detail-panel"):
             yield Label("RUN DETAILS", id="run-detail-title")
-            if detail is None:
-                yield Label("This saved run is no longer available.", id="run-detail-empty")
-            else:
+            if detail is not None:
                 yield Label(_format_run_summary(detail.run), id="run-detail-subtitle")
-                yield VerticalScroll(*self._detail_widgets(detail), id="run-detail-content")
+            yield VerticalScroll(*self._detail_widgets(detail), id="run-detail-content")
             yield Button("←  Back  [Esc]", id="run-detail-back", variant="default")
         yield Footer()
 
@@ -279,8 +278,16 @@ class RunHistoryDetailScreen(Screen[None]):
     def action_quit(self) -> None:
         self.app.exit()
 
+    def action_scroll_questions_up(self) -> None:
+        self.query_one("#run-detail-content", VerticalScroll).scroll_up()
+
+    def action_scroll_questions_down(self) -> None:
+        self.query_one("#run-detail-content", VerticalScroll).scroll_down()
+
     @staticmethod
-    def _detail_widgets(detail: RunHistoryDetail) -> list[Label]:
+    def _detail_widgets(detail: RunHistoryDetail | None) -> list[Label]:
+        if detail is None:
+            return [Label("This saved run is no longer available.", id="run-detail-empty")]
         if not detail.rounds:
             return [Label("No rounds were recorded for this run.", id="run-detail-empty")]
 

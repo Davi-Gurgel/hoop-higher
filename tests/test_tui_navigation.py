@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import date
+from datetime import date, datetime, timezone
 
 import pytest
 from sqlmodel import Session
@@ -354,6 +354,56 @@ def test_run_history_opens_selected_run_details(tmp_path) -> None:
             await pilot.press("escape")
             await pilot.pause()
             assert type(app.screen).__name__ == "RunHistoryScreen"
+
+    asyncio.run(scenario())
+
+
+def test_run_history_arrow_keys_move_between_runs(tmp_path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'hoophigher.db'}"
+    engine = create_sqlite_engine(database_url)
+    init_db(engine)
+    with Session(engine) as session:
+        session.add_all(
+            [
+                RunRecord(
+                    mode="endless",
+                    source_date=date(2025, 1, 12),
+                    final_score=100,
+                    correct_answers=1,
+                    wrong_answers=0,
+                    best_streak=1,
+                    created_at=datetime(2025, 1, 12, 9, 0, tzinfo=timezone.utc),
+                ),
+                RunRecord(
+                    mode="arcade",
+                    source_date=date(2025, 1, 13),
+                    final_score=200,
+                    correct_answers=2,
+                    wrong_answers=0,
+                    best_streak=2,
+                    created_at=datetime(2025, 1, 13, 9, 0, tzinfo=timezone.utc),
+                ),
+            ]
+        )
+        session.commit()
+
+    async def scenario() -> None:
+        app = HoopHigherApp(database_url=database_url)
+
+        async with app.run_test() as pilot:
+            await pilot.press("h")
+            await pilot.pause()
+            assert "Score 200" in str(getattr(app.screen.focused, "label", ""))
+
+            await pilot.press("down")
+            await pilot.pause()
+            assert "Score 100" in str(getattr(app.screen.focused, "label", ""))
+
+            await pilot.press("enter")
+            await pilot.pause()
+            assert type(app.screen).__name__ == "RunHistoryDetailScreen"
+            assert any("Score 100" in text for text in _label_texts(app))
+            assert "No rounds were recorded for this run." in _label_texts(app)
 
     asyncio.run(scenario())
 

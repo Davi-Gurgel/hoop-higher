@@ -11,10 +11,6 @@ from hoophigher.data.schema import QuestionRecord, RoundRecord, RunRecord
 from hoophigher.domain.enums import GameMode
 
 
-def _format_date(value: date | None) -> str:
-    return "--" if value is None else value.strftime("%d-%m-%Y")
-
-
 @dataclass(frozen=True, slots=True)
 class RunHistoryRow:
     run_id: int
@@ -24,14 +20,6 @@ class RunHistoryRow:
     correct_answers: int
     wrong_answers: int
     source_date: date | None
-
-    @property
-    def mode_label(self) -> str:
-        return self.mode.value.replace("_", " ").title()
-
-    @property
-    def source_date_label(self) -> str:
-        return _format_date(self.source_date)
 
 
 @dataclass(frozen=True, slots=True)
@@ -78,18 +66,17 @@ class RunHistoryService:
 
     def get_run(self, run_id: int) -> RunHistoryDetail | None:
         with session_scope(self._engine) as session:
-            run_repository = RunRepository(session)
-            run = run_repository.get(run_id)
-            if run is None or run.id is None:
+            run = RunRepository(session).get(run_id)
+            if run is None:
                 return None
 
-            round_repository = RoundRepository(session)
+            run_row = self._to_run_row(run)
             question_repository = QuestionRepository(session)
             rounds = tuple(
                 self._to_round_history(round_record, question_repository)
-                for round_record in round_repository.list_by_run(run.id)
+                for round_record in RoundRepository(session).list_by_run(run_row.run_id)
             )
-            return RunHistoryDetail(run=self._to_run_row(run), rounds=rounds)
+            return RunHistoryDetail(run=run_row, rounds=rounds)
 
     @staticmethod
     def _to_run_row(run: RunRecord) -> RunHistoryRow:

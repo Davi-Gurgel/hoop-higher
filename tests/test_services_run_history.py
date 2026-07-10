@@ -119,7 +119,7 @@ def test_run_history_service_lists_runs_newest_first_and_loads_nested_details(tm
         (GameMode.ARCADE, 420),
         (GameMode.ENDLESS, 340),
     ]
-    assert rows[1].source_date_label == "12-01-2025"
+    assert rows[1].source_date == date(2025, 1, 12)
 
     detail = service.get_run(older_run_id)
     assert detail is not None

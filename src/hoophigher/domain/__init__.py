@@ -1,6 +1,7 @@
 """Domain layer for pure game rules and models."""
 
 from hoophigher.domain.enums import Difficulty, GameMode, GuessDirection, RunEndReason
+from hoophigher.domain.formatting import format_source_date
 from hoophigher.domain.models import (
     NBAGame,
     PlayerLine,
@@ -47,5 +48,6 @@ __all__ = [
     "HISTORICAL_CORRECT_POINTS",
     "HISTORICAL_WRONG_POINTS",
     "calculate_score_delta",
+    "format_source_date",
     "get_run_end_reason_for_guess",
 ]
