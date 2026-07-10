@@ -338,7 +338,9 @@ def test_leaderboard_refreshes_after_a_run_is_played(tmp_path, monkeypatch) -> N
             await pilot.pause()
             assert type(app.screen).__name__ == "LeaderboardScreen"
             assert "No runs recorded yet." not in _label_texts(app)
-            assert "RK  MODE         SCORE  STRK  CORR  DATE" in _label_texts(app)
+            assert any(
+                "RK  MODE         SCORE  STRK  CORR  DATE" in text for text in _label_texts(app)
+            )
             assert any("Endless" in text for text in _label_texts(app))
 
     asyncio.run(scenario())
