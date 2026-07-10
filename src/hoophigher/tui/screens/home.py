@@ -37,6 +37,24 @@ class HomeScreen(Screen[None]):
         width: 100%;
         margin-bottom: 1;
     }
+
+    HomeScreen.-h-sm #home-panel {
+        padding: 1 4;
+    }
+
+    HomeScreen.-h-sm .home-btn {
+        margin-bottom: 0;
+    }
+
+    HomeScreen.-h-xs #home-panel {
+        padding: 0 2;
+    }
+
+    HomeScreen.-h-xs #home-logo,
+    HomeScreen.-h-xs #home-subtitle,
+    HomeScreen.-h-xs .home-btn {
+        margin-bottom: 0;
+    }
     """
 
     BINDINGS = [
