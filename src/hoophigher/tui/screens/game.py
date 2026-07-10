@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from time import monotonic
 
 from textual import events
 from textual.app import ComposeResult
@@ -174,6 +175,7 @@ class GameScreen(Screen[None]):
         self._round_history: list[GuessHistoryItem] = []
         self._awaiting_feedback = False
         self._game_over_screen_visible = False
+        self._question_started_at: float | None = None
         self._status_strip = GameStatusStrip(id="status-bar")
         self._context_strip = GameContextStrip(
             len(snapshot.games_today),
@@ -202,6 +204,11 @@ class GameScreen(Screen[None]):
     def on_mount(self) -> None:
         self._refresh_view()
         self.query_one("#guess-higher", Button).focus()
+
+    def on_screen_resume(self, _event: events.ScreenResume) -> None:
+        """Refresh and begin timing when a question becomes answerable again."""
+        if not self._awaiting_feedback and not self._snapshot.is_finished:
+            self._refresh_view()
 
     def on_resize(self, event: events.Resize) -> None:
         self._sync_responsive_copy(event.size.width, event.size.height)
@@ -260,13 +267,18 @@ class GameScreen(Screen[None]):
 
         self._awaiting_feedback = True
         self._set_buttons_disabled(True)
+        response_time_ms = self._response_time_ms()
+        self._question_started_at = None
 
         previous_snapshot = self._snapshot
         was_last_question = (
             previous_snapshot.question_index == previous_snapshot.total_questions - 1
         )
 
-        result = await self.app.gameplay_service.submit_guess(guess)
+        result = await self.app.gameplay_service.submit_guess(
+            guess,
+            response_time_ms=response_time_ms,
+        )
 
         # Build history item
         history_item = GuessHistoryItem(
@@ -324,6 +336,7 @@ class GameScreen(Screen[None]):
             )
             self._round_history.clear()
             self.app.push_screen(RoundSummaryScreen(summary))
+            return
 
         self._refresh_view()
 
@@ -343,6 +356,7 @@ class GameScreen(Screen[None]):
 
         question = s.current_question
         if question is None:
+            self._question_started_at = None
             self._matchup_panel.clear()
             self._guess_bar.set_prompt("")
             self._guess_bar.set_controls_hint("Use H/L or ←/→ + Enter")
@@ -353,6 +367,7 @@ class GameScreen(Screen[None]):
         self._matchup_panel.set_question(question)
         self._set_buttons_disabled(False)
         self._sync_responsive_copy(self.size.width, self.size.height)
+        self._question_started_at = monotonic()
         self.query_one("#guess-higher", Button).focus()
 
     def _sync_responsive_copy(self, width: int, height: int) -> None:
@@ -417,6 +432,11 @@ class GameScreen(Screen[None]):
 
     def _set_buttons_disabled(self, disabled: bool) -> None:
         self._guess_bar.set_buttons_disabled(disabled)
+
+    def _response_time_ms(self) -> int:
+        if self._question_started_at is None:
+            return 0
+        return max(0, int((monotonic() - self._question_started_at) * 1000))
 
     def _leave_run(self) -> None:
         self._snapshot = self.app.gameplay_service.end_run()
