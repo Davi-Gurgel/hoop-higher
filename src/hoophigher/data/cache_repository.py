@@ -49,6 +49,12 @@ class CacheRepository:
 # contain live or scheduled games, so they cannot be trusted as complete.
 _GAME_LIST_PAYLOAD_VERSION = 2
 
+# Version 2 payloads mark cached boxscores as having been fetched after
+# final-game filtering was introduced. Version 1 payloads (a bare game
+# dictionary) may have been captured while a game was live, so they cannot be
+# trusted as complete.
+_NBA_GAME_PAYLOAD_VERSION = 2
+
 
 def _serialize_game_list(games: Sequence[NBAGame]) -> str:
     payload = {
@@ -66,12 +72,21 @@ def _deserialize_game_list(payload_json: str) -> list[NBAGame] | None:
 
 
 def _serialize_nba_game(game: NBAGame) -> str:
-    return json.dumps(_nba_game_to_dict(game), separators=(",", ":"))
+    payload = {
+        "version": _NBA_GAME_PAYLOAD_VERSION,
+        "game": _nba_game_to_dict(game),
+    }
+    return json.dumps(payload, separators=(",", ":"))
 
 
-def _deserialize_nba_game(payload_json: str) -> NBAGame:
+def _deserialize_nba_game(payload_json: str) -> NBAGame | None:
     payload = json.loads(payload_json)
-    return _nba_game_from_dict(payload)
+    if not isinstance(payload, dict) or payload.get("version") != _NBA_GAME_PAYLOAD_VERSION:
+        return None
+    game = payload.get("game")
+    if not isinstance(game, dict):
+        return None
+    return _nba_game_from_dict(game)
 
 
 def _nba_game_to_dict(game: NBAGame) -> dict[str, object]:

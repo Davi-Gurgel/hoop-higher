@@ -6,6 +6,7 @@ from sqlalchemy import text
 from sqlmodel import Session, select
 from hoophigher.data import (
     CachedGameRecord,
+    CachedGameStatsRecord,
     CacheRepository,
     QuestionRecord,
     QuestionRepository,
@@ -321,6 +322,22 @@ def test_cache_repository_ignores_legacy_unversioned_game_list(tmp_path) -> None
     session.flush()
 
     assert cache_repo.get_games_by_date(target_date) is None
+
+
+def test_cache_repository_ignores_legacy_unversioned_nba_game(tmp_path) -> None:
+    """Bare game payloads may contain boxscores captured before a game was final."""
+    session = make_session(tmp_path)
+    cache_repo = CacheRepository(session)
+    game = make_game("game-1", date(2025, 2, 1), 110, 104)
+    cache_repo.set_nba_game(game)
+
+    record = session.get(CachedGameStatsRecord, game.game_id)
+    assert record is not None
+    record.payload_json = json.dumps(json.loads(record.payload_json)["game"])
+    session.add(record)
+    session.flush()
+
+    assert cache_repo.get_nba_game(game.game_id) is None
 
 
 def test_session_scope_commits_on_success(tmp_path) -> None:
