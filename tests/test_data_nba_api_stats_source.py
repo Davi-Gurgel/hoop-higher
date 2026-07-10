@@ -8,7 +8,13 @@ from datetime import date
 import pytest
 
 import hoophigher.data.stats_sources.nba_api_stats_source as stats_source_module
-from hoophigher.data import CacheRepository, create_sqlite_engine, init_db, session_scope
+from hoophigher.data import (
+    CachedGameStatsRecord,
+    CacheRepository,
+    create_sqlite_engine,
+    init_db,
+    session_scope,
+)
 from hoophigher.data.stats_sources.nba_api_stats_source import (
     GameStatus,
     NBAApiStatsSource,
@@ -248,6 +254,73 @@ def test_get_nba_game_caches_miss_then_hits_cache(tmp_path) -> None:
     assert calls == 1
     assert first == second
     assert first.player_lines[0].minutes == 12
+
+
+def test_get_nba_game_refetches_and_replaces_legacy_cached_boxscore(tmp_path) -> None:
+    game_id = "0022500002"
+    source_date = date(2025, 2, 10)
+    engine = create_sqlite_engine(f"sqlite:///{tmp_path / 'hoophigher.db'}")
+    init_db(engine)
+    legacy_game = _make_game(game_id, source_date)
+    with session_scope(engine) as session:
+        cache_repository = CacheRepository(session)
+        cache_repository.set_nba_game(legacy_game)
+        record = session.get(CachedGameStatsRecord, game_id)
+        assert record is not None
+        record.payload_json = json.dumps(json.loads(record.payload_json)["game"])
+        session.add(record)
+
+    calls = 0
+
+    def nba_game_fetch(fetched_game_id: str, _timeout_seconds: int):
+        nonlocal calls
+        calls += 1
+        return {
+            "boxScoreTraditional": {
+                "gameId": fetched_game_id,
+                "gameDate": source_date.isoformat(),
+                "homeTeam": {
+                    "teamId": "1610612737",
+                    "teamName": "Hawks",
+                    "teamTricode": "ATL",
+                    "score": "110",
+                },
+                "awayTeam": {
+                    "teamId": "1610612738",
+                    "teamName": "Celtics",
+                    "teamTricode": "BOS",
+                    "score": "108",
+                },
+                "playersStats": [
+                    {
+                        "personId": "1",
+                        "name": "Player One",
+                        "teamId": "1610612737",
+                        "teamTricode": "ATL",
+                        "minutes": "34:11",
+                        "points": "31",
+                    }
+                ],
+            }
+        }
+
+    stats_source = NBAApiStatsSource(
+        cache_repository_factory=_make_cache_factory(engine),
+        nba_game_fetch=nba_game_fetch,
+        timeout_seconds=5,
+        retry_delay_seconds=0,
+    )
+
+    first = asyncio.run(stats_source.get_nba_game(game_id))
+    second = asyncio.run(stats_source.get_nba_game(game_id))
+
+    assert calls == 1
+    assert first == second
+    assert first.player_lines[0].points == 31
+    with session_scope(engine) as session:
+        record = session.get(CachedGameStatsRecord, game_id)
+        assert record is not None
+        assert json.loads(record.payload_json)["version"] == 2
 
 
 def test_get_nba_game_accepts_date_fallback_for_v3_payload_without_game_date(tmp_path) -> None:

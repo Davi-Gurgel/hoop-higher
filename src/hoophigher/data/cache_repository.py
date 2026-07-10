@@ -44,34 +44,43 @@ class CacheRepository:
         return record
 
 
-# Version 2 payloads mark the cached day as complete with final games only.
-# Version 1 payloads (a bare JSON list) predate final-game filtering and may
-# contain live or scheduled games, so they cannot be trusted as complete.
-_GAME_LIST_PAYLOAD_VERSION = 2
+# Version 2 marks payloads cached after final-game filtering was introduced.
+# Version 1 payloads (a bare JSON list or bare game dictionary) may contain
+# live or scheduled game data, so they cannot be trusted as complete.
+_CACHE_PAYLOAD_VERSION = 2
+
+
+def _wrap_payload(key: str, value: object) -> str:
+    return json.dumps({"version": _CACHE_PAYLOAD_VERSION, key: value}, separators=(",", ":"))
+
+
+def _unwrap_payload(payload_json: str, key: str) -> object | None:
+    payload = json.loads(payload_json)
+    if not isinstance(payload, dict) or payload.get("version") != _CACHE_PAYLOAD_VERSION:
+        return None
+    return payload.get(key)
 
 
 def _serialize_game_list(games: Sequence[NBAGame]) -> str:
-    payload = {
-        "version": _GAME_LIST_PAYLOAD_VERSION,
-        "games": [_nba_game_to_dict(game) for game in games],
-    }
-    return json.dumps(payload, separators=(",", ":"))
+    return _wrap_payload("games", [_nba_game_to_dict(game) for game in games])
 
 
 def _deserialize_game_list(payload_json: str) -> list[NBAGame] | None:
-    payload = json.loads(payload_json)
-    if not isinstance(payload, dict) or payload.get("version") != _GAME_LIST_PAYLOAD_VERSION:
+    games = _unwrap_payload(payload_json, "games")
+    if not isinstance(games, list):
         return None
-    return [_nba_game_from_dict(item) for item in payload["games"]]
+    return [_nba_game_from_dict(item) for item in games]
 
 
 def _serialize_nba_game(game: NBAGame) -> str:
-    return json.dumps(_nba_game_to_dict(game), separators=(",", ":"))
+    return _wrap_payload("game", _nba_game_to_dict(game))
 
 
-def _deserialize_nba_game(payload_json: str) -> NBAGame:
-    payload = json.loads(payload_json)
-    return _nba_game_from_dict(payload)
+def _deserialize_nba_game(payload_json: str) -> NBAGame | None:
+    game = _unwrap_payload(payload_json, "game")
+    if not isinstance(game, dict):
+        return None
+    return _nba_game_from_dict(game)
 
 
 def _nba_game_to_dict(game: NBAGame) -> dict[str, object]:
