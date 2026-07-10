@@ -13,6 +13,7 @@ from hoophigher.domain.enums import GameMode
 from hoophigher.services import (
     GameplayService,
     LeaderboardService,
+    RunHistoryService,
     StatsService,
 )
 from hoophigher.tui.screens import (
@@ -20,6 +21,7 @@ from hoophigher.tui.screens import (
     HomeScreen,
     LeaderboardScreen,
     ModeSelectScreen,
+    RunHistoryScreen,
     StatsScreen,
 )
 
@@ -119,9 +121,11 @@ class HoopHigherApp(App[None]):
         self.gameplay_service = GameplayService(**gameplay_service_kwargs)
         self.leaderboard_service = LeaderboardService(engine=engine)
         self.stats_service = StatsService(engine=engine)
+        self.run_history_service = RunHistoryService(engine=engine)
         self.install_screen(HomeScreen(), name="home")
         self.install_screen(LeaderboardScreen(), name="leaderboard")
         self.install_screen(StatsScreen(), name="stats")
+        self.install_screen(RunHistoryScreen(), name="run-history")
         self.install_screen(ModeSelectScreen(), name="mode-select")
         self.push_screen("home")
 

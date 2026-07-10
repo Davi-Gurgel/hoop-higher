@@ -16,7 +16,7 @@ class ModeStatsRow:
 
     @property
     def mode_label(self) -> str:
-        return self.mode.value.replace("_", " ").title()
+        return self.mode.label
 
 
 @dataclass(frozen=True, slots=True)

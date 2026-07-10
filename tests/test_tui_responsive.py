@@ -8,6 +8,7 @@ from textual.widget import Widget
 from textual.widgets import Button
 
 from hoophigher.app import HoopHigherApp
+from hoophigher.tui.screens import RunHistoryDetailScreen
 
 TERMINAL_SIZES: tuple[Size, ...] = (
     Size(140, 40),
@@ -39,18 +40,40 @@ def _widget_fits_terminal(widget: Widget, size: Size) -> None:
 
 def test_home_screen_primary_actions_render_across_terminal_sizes() -> None:
     async def scenario() -> None:
-        for size in TERMINAL_SIZES:
+        for size in RESPONSIVE_TARGET_SIZES:
             app = HoopHigherApp(database_url="sqlite://")
 
             async with app.run_test(size=(size.width, size.height)) as pilot:
                 await pilot.pause()
 
-                start = app.screen.query_one("#start-game", Button)
-                quit_button = app.screen.query_one("#quit-game", Button)
-
-                _widget_fits_terminal(start, size)
-                _widget_fits_terminal(quit_button, size)
+                for button_id in (
+                    "#start-game",
+                    "#open-leaderboard",
+                    "#open-stats",
+                    "#open-run-history",
+                    "#quit-game",
+                ):
+                    _widget_fits_terminal(app.screen.query_one(button_id, Button), size)
                 assert getattr(app.screen.focused, "id", None) == "start-game"
+
+    asyncio.run(scenario())
+
+
+def test_run_history_screens_render_across_terminal_sizes() -> None:
+    async def scenario() -> None:
+        for size in RESPONSIVE_TARGET_SIZES:
+            app = HoopHigherApp(database_url="sqlite://")
+
+            async with app.run_test(size=(size.width, size.height)) as pilot:
+                await pilot.press("h")
+                await pilot.pause()
+                _widget_fits_terminal(app.screen.query_one("#run-history-panel", Widget), size)
+                _widget_fits_terminal(app.screen.query_one("#run-history-back", Button), size)
+
+                app.push_screen(RunHistoryDetailScreen(run_id=1))
+                await pilot.pause()
+                _widget_fits_terminal(app.screen.query_one("#run-detail-panel", Widget), size)
+                _widget_fits_terminal(app.screen.query_one("#run-detail-back", Button), size)
 
     asyncio.run(scenario())
 

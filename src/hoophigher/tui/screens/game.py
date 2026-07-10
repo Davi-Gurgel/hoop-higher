@@ -103,7 +103,7 @@ class GameOverScreen(ModalScreen[None]):
             )
             if s.end_reason is not None:
                 yield Label(
-                    f"Reason: {s.end_reason.value.replace('_', ' ').title()}",
+                    f"Reason: {s.end_reason.label}",
                     classes="gameover-stat",
                 )
             yield Button("Return Home [Enter]", id="gameover-home", variant="error")

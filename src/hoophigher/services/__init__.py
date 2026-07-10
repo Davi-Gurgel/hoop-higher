@@ -6,6 +6,13 @@ from hoophigher.services.leaderboard_service import (
     LeaderboardRow,
     LeaderboardService,
 )
+from hoophigher.services.run_history_service import (
+    QuestionHistory,
+    RoundHistory,
+    RunHistoryDetail,
+    RunHistoryRow,
+    RunHistoryService,
+)
 from hoophigher.services.stats_service import ModeStatsRow, StatsResult, StatsService
 
 __all__ = [
@@ -15,6 +22,11 @@ __all__ = [
     "LeaderboardRow",
     "LeaderboardService",
     "ModeStatsRow",
+    "QuestionHistory",
+    "RoundHistory",
+    "RunHistoryDetail",
+    "RunHistoryRow",
+    "RunHistoryService",
     "StatsResult",
     "StatsService",
 ]

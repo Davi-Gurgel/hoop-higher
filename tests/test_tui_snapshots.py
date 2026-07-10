@@ -68,6 +68,17 @@ async def _open_stats(pilot: Pilot) -> None:
     await pilot.pause()
 
 
+async def _open_run_history(pilot: Pilot) -> None:
+    await pilot.press("h")
+    await pilot.pause()
+
+
+async def _open_run_history_detail(pilot: Pilot) -> None:
+    await _open_run_history(pilot)
+    await pilot.press("enter")
+    await pilot.pause()
+
+
 def _seed_leaderboard_runs(database_url: str) -> None:
     engine = create_sqlite_engine(database_url)
     init_db(engine)
@@ -331,4 +342,36 @@ def test_stats_empty_snapshot(snap_compare) -> None:
         snap_compare,
         terminal_size=(110, 32),
         run_before=_open_stats,
+    )
+
+
+def test_run_history_snapshot(snap_compare, tmp_path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'run-history-snapshot.db'}"
+    _seed_stats_runs(database_url)
+
+    assert _compare_app(
+        snap_compare,
+        terminal_size=(110, 32),
+        database_url=database_url,
+        run_before=_open_run_history,
+    )
+
+
+def test_run_history_detail_snapshot(snap_compare, tmp_path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'run-history-detail-snapshot.db'}"
+    _seed_stats_runs(database_url)
+
+    assert _compare_app(
+        snap_compare,
+        terminal_size=(110, 32),
+        database_url=database_url,
+        run_before=_open_run_history_detail,
+    )
+
+
+def test_run_history_empty_snapshot(snap_compare) -> None:
+    assert _compare_app(
+        snap_compare,
+        terminal_size=(110, 32),
+        run_before=_open_run_history,
     )

@@ -1,10 +1,18 @@
 from enum import StrEnum
 
 
+def _title_label(value: str) -> str:
+    return value.replace("_", " ").title()
+
+
 class GameMode(StrEnum):
     ENDLESS = "endless"
     ARCADE = "arcade"
     HISTORICAL = "historical"
+
+    @property
+    def label(self) -> str:
+        return _title_label(self.value)
 
 
 class Difficulty(StrEnum):
@@ -24,3 +32,7 @@ class RunEndReason(StrEnum):
     # for existing databases while the Python identifier follows the glossary.
     WRONG_GUESS = "wrong_answer"
     NO_MORE_GAMES = "no_more_games"
+
+    @property
+    def label(self) -> str:
+        return _title_label(self.value)
