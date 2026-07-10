@@ -8,7 +8,6 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date, datetime
 from enum import StrEnum
-from pathlib import Path
 from typing import ContextManager
 
 from sqlalchemy.engine import Engine
@@ -214,8 +213,7 @@ class NBAApiStatsSource(StatsSource):
         ) from last_error
 
     def _create_default_engine(self) -> Engine:
-        database_path = Path("var/hoophigher.db").resolve()
-        engine = create_sqlite_engine(f"sqlite:///{database_path}")
+        engine = create_sqlite_engine()
         init_db(engine)
         return engine
 

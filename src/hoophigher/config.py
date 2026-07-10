@@ -1,16 +1,16 @@
 from typing import Literal
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from hoophigher.data.db import DEFAULT_SQLITE_URL
+from hoophigher.data.db import default_sqlite_url
 
 
 class Settings(BaseSettings):
     """Application settings shared across layers."""
 
     app_name: str = "Hoop Higher"
-    database_url: str = DEFAULT_SQLITE_URL
+    database_url: str = Field(default_factory=default_sqlite_url)
     sqlite_journal_mode: str | None = "WAL"
     sqlite_synchronous: str | None = "NORMAL"
     sqlite_busy_timeout_ms: int | None = 5000

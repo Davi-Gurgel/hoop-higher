@@ -62,7 +62,11 @@ If the live NBA data source is slow or unavailable, you can still try the game i
 HOOPHIGHER_STATS_PROVIDER=mock uvx hoop-higher
 ```
 
-Local scores, stats, and cached games are stored in `var/hoophigher.db`.
+Local scores, stats, and cached games are stored in your platform's per-user data
+directory (for example, `~/Library/Application Support/hoop-higher/hoophigher.db` on
+macOS). Existing `var/hoophigher.db` databases remain in use so prior data is
+preserved. To use another location, set `HOOPHIGHER_DATABASE_URL` to a SQLite URL,
+such as `sqlite:////absolute/path/to/hoophigher.db`.
 
 ## From Source
 

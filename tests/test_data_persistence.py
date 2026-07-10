@@ -391,6 +391,21 @@ def test_create_sqlite_engine_creates_parent_directory_for_file_db(tmp_path) -> 
     assert database_path.parent.is_dir()
 
 
+def test_create_sqlite_engine_creates_parent_directory_for_default_database(
+    monkeypatch, tmp_path
+) -> None:
+    database_path = tmp_path / "user-data" / "hoop-higher" / "hoophigher.db"
+    monkeypatch.setattr(
+        "hoophigher.data.db.user_data_path",
+        lambda *_args, **_kwargs: database_path.parent,
+    )
+
+    create_sqlite_engine()
+
+    assert database_path.parent.exists()
+    assert database_path.parent.is_dir()
+
+
 def test_create_sqlite_engine_does_not_apply_file_pragmas_to_memory_db() -> None:
     engine_with_override = create_sqlite_engine(
         "sqlite:///:memory:",
