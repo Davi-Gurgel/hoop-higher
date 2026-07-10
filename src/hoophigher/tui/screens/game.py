@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from time import monotonic
 
 from textual import events
 from textual.app import ComposeResult
@@ -174,6 +175,7 @@ class GameScreen(Screen[None]):
         self._round_history: list[GuessHistoryItem] = []
         self._awaiting_feedback = False
         self._game_over_screen_visible = False
+        self._question_started_at: float | None = None
         self._status_strip = GameStatusStrip(id="status-bar")
         self._context_strip = GameContextStrip(
             len(snapshot.games_today),
@@ -200,8 +202,17 @@ class GameScreen(Screen[None]):
     # ── Lifecycle ──────────────────────────────────────────────
 
     def on_mount(self) -> None:
-        self._refresh_view()
         self.query_one("#guess-higher", Button).focus()
+
+    def on_screen_resume(self, _event: events.ScreenResume) -> None:
+        """Present the current Question whenever this screen becomes active.
+
+        Textual sends ScreenResume on the initial push and again when a
+        covering screen (the Round Summary) pops, so time spent reading the
+        summary never counts toward a response time.
+        """
+        if not self._awaiting_feedback and not self._snapshot.is_finished:
+            self._present_question()
 
     def on_resize(self, event: events.Resize) -> None:
         self._sync_responsive_copy(event.size.width, event.size.height)
@@ -260,13 +271,18 @@ class GameScreen(Screen[None]):
 
         self._awaiting_feedback = True
         self._set_buttons_disabled(True)
+        response_time_ms = self._response_time_ms()
+        self._question_started_at = None
 
         previous_snapshot = self._snapshot
         was_last_question = (
             previous_snapshot.question_index == previous_snapshot.total_questions - 1
         )
 
-        result = await self.app.gameplay_service.submit_guess(guess)
+        result = await self.app.gameplay_service.submit_guess(
+            guess,
+            response_time_ms=response_time_ms,
+        )
 
         # Build history item
         history_item = GuessHistoryItem(
@@ -324,10 +340,17 @@ class GameScreen(Screen[None]):
             )
             self._round_history.clear()
             self.app.push_screen(RoundSummaryScreen(summary))
+            return
 
-        self._refresh_view()
+        self._present_question()
 
     # ── View helpers ──────────────────────────────────────────
+
+    def _present_question(self) -> None:
+        """Repaint the screen and start timing the answerable Question, if any."""
+        self._refresh_view()
+        question = self._snapshot.current_question
+        self._question_started_at = None if question is None else monotonic()
 
     def _refresh_view(self) -> None:
         s = self._snapshot
@@ -417,6 +440,12 @@ class GameScreen(Screen[None]):
 
     def _set_buttons_disabled(self, disabled: bool) -> None:
         self._guess_bar.set_buttons_disabled(disabled)
+
+    def _response_time_ms(self) -> int | None:
+        """Elapsed answer time, or None when no Question timing was running."""
+        if self._question_started_at is None:
+            return None
+        return int((monotonic() - self._question_started_at) * 1000)
 
     def _leave_run(self) -> None:
         self._snapshot = self.app.gameplay_service.end_run()
