@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from textual import events
 from textual.app import ComposeResult
+from textual.containers import Vertical
 from textual.screen import Screen
 from textual.widgets import Button, Footer, Header, Label
 
@@ -62,28 +64,23 @@ class LeaderboardScreen(Screen[None]):
     ]
 
     def compose(self) -> ComposeResult:
-        result = self.app.leaderboard_service.get_leaderboard()
-
         yield Header(show_clock=False)
         with DialogShell(id="leaderboard-panel"):
             yield Label("LOCAL LEADERBOARD", id="leaderboard-title")
             yield Label("Top 10 runs saved on this machine.", id="leaderboard-subtitle")
-            if result.is_empty:
-                yield Label("No runs recorded yet.", id="leaderboard-empty")
-            else:
-                yield Label("RK  MODE         SCORE  STRK  CORR  DATE", classes="leaderboard-row")
-                for row in result.rows:
-                    yield Label(
-                        f"{row.rank:>2}  {_format_mode_label(row):<12} "
-                        f"{row.score:>5}  {row.best_streak:>4}  "
-                        f"{row.correct_answers:>4}  {row.source_date_label}",
-                        classes="leaderboard-row",
-                    )
+            yield Vertical(id="leaderboard-rows")
             yield Button("←  Back  [Esc]", id="leaderboard-back", variant="default")
         yield Footer()
 
     def on_mount(self) -> None:
+        self.call_after_refresh(self._refresh_leaderboard_view)
         self.query_one("#leaderboard-back", Button).focus()
+
+    def on_show(self, _: events.Show) -> None:
+        self.call_after_refresh(self._refresh_leaderboard_view)
+
+    def on_screen_resume(self, _: events.ScreenResume) -> None:
+        self.call_after_refresh(self._refresh_leaderboard_view)
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "leaderboard-back":
@@ -91,3 +88,25 @@ class LeaderboardScreen(Screen[None]):
 
     def action_back(self) -> None:
         self.app.pop_screen()
+
+    async def _refresh_leaderboard_view(self) -> None:
+        result = self.app.leaderboard_service.get_leaderboard()
+        rows_container = self.query_one("#leaderboard-rows", Vertical)
+        await rows_container.remove_children()
+        if result.is_empty:
+            await rows_container.mount(Label("No runs recorded yet.", id="leaderboard-empty"))
+        else:
+            await rows_container.mount(
+                Label("RK  MODE         SCORE  STRK  CORR  DATE", classes="leaderboard-row"),
+                *[
+                    Label(
+                        f"{row.rank:>2}  {_format_mode_label(row):<12} "
+                        f"{row.score:>5}  {row.best_streak:>4}  "
+                        f"{row.correct_answers:>4}  {row.source_date_label}",
+                        classes="leaderboard-row",
+                    )
+                    for row in result.rows
+                ],
+            )
+
+        self.query_one("#leaderboard-back", Button).focus()
