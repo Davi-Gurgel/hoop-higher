@@ -1,0 +1,577 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #08090b; }
+  a { color: #ff6a3d; text-decoration: none; border-bottom: 1px dashed #7a3a24; }
+  a:hover { color: #ff8a63; border-bottom-color: #ff6a3d; }
+  ::selection { background: #ff6a3d; color: #0a0b0d; }
+  @keyframes blink { 0%, 55% { opacity: 1; } 56%, 100% { opacity: 0; } }
+  .win { border:1px solid #23272f; border-radius:9px; background:#0e1013; overflow:hidden; box-shadow:0 18px 50px rgba(0,0,0,.55); }
+  .bar { display:flex; align-items:center; gap:7px; padding:9px 13px; background:#14171d; border-bottom:1px solid #20242d; font:600 11px 'JetBrains Mono',monospace; color:#6b7280; }
+  .dot { width:11px; height:11px; border-radius:50%; }
+  .scr { font:15px/1.5 'JetBrains Mono',monospace; color:#c8ccd4; }
+  .lwin { border:1px solid #d5cdbd; border-radius:9px; background:#faf7f1; overflow:hidden; box-shadow:0 18px 50px rgba(120,100,60,.16); }
+  .lbar { display:flex; align-items:center; gap:7px; padding:9px 13px; background:#f0ebe1; border-bottom:1px solid #ddd4c4; font:600 11px 'JetBrains Mono',monospace; color:#948b7a; }
+</style>
+</helmet>
+
+<section style="min-width:2560px;padding:64px 72px 120px;background:#08090b;font-family:'Space Grotesk',sans-serif;color:#e8e6e1">
+
+  <!-- MASTHEAD -->
+  <header style="display:flex;align-items:flex-end;justify-content:space-between;gap:40px;margin-bottom:14px;flex-wrap:wrap">
+    <div>
+      <div style="font:600 12px 'JetBrains Mono',monospace;letter-spacing:.42em;color:#ff6a3d;text-transform:uppercase;margin-bottom:14px">Textual · TUI · Redesign v2</div>
+      <h1 style="margin:0;font-size:76px;font-weight:700;letter-spacing:-.03em;line-height:.9">Hoop&nbsp;Higher</h1>
+      <p style="margin:16px 0 0;font-size:19px;color:#9aa0ab;max-width:860px;line-height:1.5">Rendered as real Textual widgets — bordered panels, filled action buttons, a footer of live bindings — not ASCII art. A warmer orange identity, tighter hierarchy, and colour reserved so green/red mean only one thing. Every screen &amp; state, dark + light, across four terminal sizes.</p>
+    </div>
+    <div style="font:500 12.5px/1.9 'JetBrains Mono',monospace;color:#5c626d;text-align:right;white-space:nowrap">
+      <div>6 screens · 2 modals · 4 states</div>
+      <div>light + dark · truecolor + 256</div>
+      <div>responsive · lg / md / sm / xs</div>
+    </div>
+  </header>
+  <div style="height:1px;background:linear-gradient(90deg,#ff6a3d,#20242d 40%,transparent);margin:28px 0 48px"></div>
+
+  <!-- WHAT CHANGED -->
+  <div style="font:600 12px 'JetBrains Mono',monospace;letter-spacing:.34em;color:#5c626d;text-transform:uppercase;margin-bottom:8px">01 · Direction — STAT DESK</div>
+  <h2 style="margin:0 0 8px;font-size:34px;font-weight:600;letter-spacing:-.02em">Keeping the widgets, fixing the look</h2>
+  <p style="margin:0 0 26px;font-size:16px;color:#9aa0ab;max-width:900px;line-height:1.5">You liked the real widget structure — so it stays. Four targeted fixes on top of it:</p>
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;max-width:1700px;margin-bottom:56px">
+    <div style="border:1px solid #20242d;border-radius:12px;background:#0e1013;padding:20px 22px">
+      <div style="font:700 13px 'JetBrains Mono',monospace;color:#ff6a3d;margin-bottom:9px">One accent</div>
+      <p style="margin:0;font-size:13.5px;line-height:1.6;color:#a6acb6">Blue-everywhere → warm orange for focus/brand only. Data stays neutral so the eye goes where it should.</p>
+    </div>
+    <div style="border:1px solid #20242d;border-radius:12px;background:#0e1013;padding:20px 22px">
+      <div style="font:700 13px 'JetBrains Mono',monospace;color:#46c988;margin-bottom:9px">Colour = meaning</div>
+      <p style="margin:0;font-size:13.5px;line-height:1.6;color:#a6acb6">Buttons aren't green/red by default (that read as pre-judged). Green/red appear <em>only</em> on the reveal.</p>
+    </div>
+    <div style="border:1px solid #20242d;border-radius:12px;background:#0e1013;padding:20px 22px">
+      <div style="font:700 13px 'JetBrains Mono',monospace;color:#f2c14e;margin-bottom:9px">Points as hero</div>
+      <p style="margin:0;font-size:13.5px;line-height:1.6;color:#a6acb6">Empty panels → the point total is the biggest thing on the card; name/team/min are agate around it.</p>
+    </div>
+    <div style="border:1px solid #20242d;border-radius:12px;background:#0e1013;padding:20px 22px">
+      <div style="font:700 13px 'JetBrains Mono',monospace;color:#9aa0ab;margin-bottom:9px">Less chrome</div>
+      <p style="margin:0;font-size:13.5px;line-height:1.6;color:#a6acb6">Dropped the redundant centred title/score band. One scorebug row carries mode, round, Q, score, streak.</p>
+    </div>
+  </div>
+
+  <!-- COLOR SYSTEM -->
+  <div style="font:600 12px 'JetBrains Mono',monospace;letter-spacing:.34em;color:#5c626d;text-transform:uppercase;margin-bottom:8px">02 · Color system — light + dark</div>
+  <h2 style="margin:0 0 8px;font-size:34px;font-weight:600;letter-spacing:-.02em">Two palettes, one set of roles</h2>
+  <p style="margin:0 0 28px;font-size:16px;color:#9aa0ab;max-width:900px;line-height:1.5">Dark ships default; light is a full sibling. Widgets reference a role — accent, success, danger… — never a raw hex, so a theme swap is one variable table. Each maps to a 256/16 fallback that keeps correct green, wrong red, focus orange.</p>
+  <div style="display:flex;gap:28px;flex-wrap:wrap;margin-bottom:56px">
+    <div style="flex:1;min-width:1080px;border:1px solid #20242d;border-radius:14px;background:#0e1013;padding:24px 26px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px"><span style="width:14px;height:14px;border-radius:50%;background:#0a0b0d;border:1px solid #2a2f38"></span><span style="font:700 15px 'JetBrains Mono',monospace">DARK</span><span style="font:500 12px 'JetBrains Mono',monospace;color:#5c626d">· default</span></div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+        <div style="border:1px solid #20242d;border-radius:9px;overflow:hidden"><div style="height:50px;background:#08090b"></div><div style="padding:8px 11px"><div style="font:700 12px 'JetBrains Mono',monospace">Void</div><div style="font:500 11px 'JetBrains Mono',monospace;color:#5c626d">#08090B</div></div></div>
+        <div style="border:1px solid #20242d;border-radius:9px;overflow:hidden"><div style="height:50px;background:#0e1013"></div><div style="padding:8px 11px"><div style="font:700 12px 'JetBrains Mono',monospace">Screen</div><div style="font:500 11px 'JetBrains Mono',monospace;color:#5c626d">#0E1013</div></div></div>
+        <div style="border:1px solid #20242d;border-radius:9px;overflow:hidden"><div style="height:50px;background:#191c22"></div><div style="padding:8px 11px"><div style="font:700 12px 'JetBrains Mono',monospace">Panel</div><div style="font:500 11px 'JetBrains Mono',monospace;color:#5c626d">#191C22</div></div></div>
+        <div style="border:1px solid #20242d;border-radius:9px;overflow:hidden"><div style="height:50px;background:#22262e"></div><div style="padding:8px 11px"><div style="font:700 12px 'JetBrains Mono',monospace">Raised</div><div style="font:500 11px 'JetBrains Mono',monospace;color:#5c626d">#22262E</div></div></div>
+        <div style="border:1px solid #20242d;border-radius:9px;overflow:hidden"><div style="height:50px;background:#ff6a3d"></div><div style="padding:8px 11px"><div style="font:700 12px 'JetBrains Mono',monospace;color:#ff6a3d">Accent/focus</div><div style="font:500 11px 'JetBrains Mono',monospace;color:#5c626d">#FF6A3D</div></div></div>
+        <div style="border:1px solid #20242d;border-radius:9px;overflow:hidden"><div style="height:50px;background:#46c988"></div><div style="padding:8px 11px"><div style="font:700 12px 'JetBrains Mono',monospace;color:#46c988">Success</div><div style="font:500 11px 'JetBrains Mono',monospace;color:#5c626d">#46C988</div></div></div>
+        <div style="border:1px solid #20242d;border-radius:9px;overflow:hidden"><div style="height:50px;background:#ff5d61"></div><div style="padding:8px 11px"><div style="font:700 12px 'JetBrains Mono',monospace;color:#ff5d61">Danger</div><div style="font:500 11px 'JetBrains Mono',monospace;color:#5c626d">#FF5D61</div></div></div>
+        <div style="border:1px solid #20242d;border-radius:9px;overflow:hidden"><div style="height:50px;background:#f2c14e"></div><div style="padding:8px 11px"><div style="font:700 12px 'JetBrains Mono',monospace;color:#f2c14e">Highlight</div><div style="font:500 11px 'JetBrains Mono',monospace;color:#5c626d">#F2C14E</div></div></div>
+        <div style="border:1px solid #20242d;border-radius:9px;overflow:hidden"><div style="height:50px;background:#e8e6e1"></div><div style="padding:8px 11px"><div style="font:700 12px 'JetBrains Mono',monospace">Text</div><div style="font:500 11px 'JetBrains Mono',monospace;color:#5c626d">#E8E6E1</div></div></div>
+        <div style="border:1px solid #20242d;border-radius:9px;overflow:hidden"><div style="height:50px;background:#9aa0ab"></div><div style="padding:8px 11px"><div style="font:700 12px 'JetBrains Mono',monospace;color:#9aa0ab">Muted</div><div style="font:500 11px 'JetBrains Mono',monospace;color:#5c626d">#9AA0AB</div></div></div>
+        <div style="border:1px solid #20242d;border-radius:9px;overflow:hidden"><div style="height:50px;background:#5c626d"></div><div style="padding:8px 11px"><div style="font:700 12px 'JetBrains Mono',monospace;color:#5c626d">Dim</div><div style="font:500 11px 'JetBrains Mono',monospace;color:#5c626d">#5C626D</div></div></div>
+        <div style="border:1px solid #20242d;border-radius:9px;overflow:hidden"><div style="height:50px;background:#2a2f38"></div><div style="padding:8px 11px"><div style="font:700 12px 'JetBrains Mono',monospace;color:#6f7787">Border</div><div style="font:500 11px 'JetBrains Mono',monospace;color:#5c626d">#2A2F38</div></div></div>
+      </div>
+    </div>
+    <div style="flex:1;min-width:1080px;border:1px solid #d5cdbd;border-radius:14px;background:#faf7f1;padding:24px 26px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:18px"><span style="width:14px;height:14px;border-radius:50%;background:#f2eee6;border:1px solid #d5cdbd"></span><span style="font:700 15px 'JetBrains Mono',monospace;color:#1e1b16">LIGHT</span><span style="font:500 12px 'JetBrains Mono',monospace;color:#948b7a">· paper</span></div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px">
+        <div style="border:1px solid #d5cdbd;border-radius:9px;overflow:hidden"><div style="height:50px;background:#eae4d8"></div><div style="padding:8px 11px;background:#fff"><div style="font:700 12px 'JetBrains Mono',monospace;color:#1e1b16">Void</div><div style="font:500 11px 'JetBrains Mono',monospace;color:#948b7a">#EAE4D8</div></div></div>
+        <div style="border:1px solid #d5cdbd;border-radius:9px;overflow:hidden"><div style="height:50px;background:#faf7f1"></div><div style="padding:8px 11px;background:#fff"><div style="font:700 12px 'JetBrains Mono',monospace;color:#1e1b16">Screen</div><div style="font:500 11px 'JetBrains Mono',monospace;color:#948b7a">#FAF7F1</div></div></div>
+        <div style="border:1px solid #d5cdbd;border-radius:9px;overflow:hidden"><div style="height:50px;background:#ece7dd"></div><div style="padding:8px 11px;background:#fff"><div style="font:700 12px 'JetBrains Mono',monospace;color:#1e1b16">Panel</div><div style="font:500 11px 'JetBrains Mono',monospace;color:#948b7a">#ECE7DD</div></div></div>
+        <div style="border:1px solid #d5cdbd;border-radius:9px;overflow:hidden"><div style="height:50px;background:#e0d9cb"></div><div style="padding:8px 11px;background:#fff"><div style="font:700 12px 'JetBrains Mono',monospace;color:#1e1b16">Raised</div><div style="font:500 11px 'JetBrains Mono',monospace;color:#948b7a">#E0D9CB</div></div></div>
+        <div style="border:1px solid #d5cdbd;border-radius:9px;overflow:hidden"><div style="height:50px;background:#e0521f"></div><div style="padding:8px 11px;background:#fff"><div style="font:700 12px 'JetBrains Mono',monospace;color:#e0521f">Accent/focus</div><div style="font:500 11px 'JetBrains Mono',monospace;color:#948b7a">#E0521F</div></div></div>
+        <div style="border:1px solid #d5cdbd;border-radius:9px;overflow:hidden"><div style="height:50px;background:#1f9d57"></div><div style="padding:8px 11px;background:#fff"><div style="font:700 12px 'JetBrains Mono',monospace;color:#1f9d57">Success</div><div style="font:500 11px 'JetBrains Mono',monospace;color:#948b7a">#1F9D57</div></div></div>
+        <div style="border:1px solid #d5cdbd;border-radius:9px;overflow:hidden"><div style="height:50px;background:#d13b3f"></div><div style="padding:8px 11px;background:#fff"><div style="font:700 12px 'JetBrains Mono',monospace;color:#d13b3f">Danger</div><div style="font:500 11px 'JetBrains Mono',monospace;color:#948b7a">#D13B3F</div></div></div>
+        <div style="border:1px solid #d5cdbd;border-radius:9px;overflow:hidden"><div style="height:50px;background:#b8791a"></div><div style="padding:8px 11px;background:#fff"><div style="font:700 12px 'JetBrains Mono',monospace;color:#b8791a">Highlight</div><div style="font:500 11px 'JetBrains Mono',monospace;color:#948b7a">#B8791A</div></div></div>
+        <div style="border:1px solid #d5cdbd;border-radius:9px;overflow:hidden"><div style="height:50px;background:#1e1b16"></div><div style="padding:8px 11px;background:#fff"><div style="font:700 12px 'JetBrains Mono',monospace;color:#1e1b16">Text</div><div style="font:500 11px 'JetBrains Mono',monospace;color:#948b7a">#1E1B16</div></div></div>
+        <div style="border:1px solid #d5cdbd;border-radius:9px;overflow:hidden"><div style="height:50px;background:#6b6355"></div><div style="padding:8px 11px;background:#fff"><div style="font:700 12px 'JetBrains Mono',monospace;color:#6b6355">Muted</div><div style="font:500 11px 'JetBrains Mono',monospace;color:#948b7a">#6B6355</div></div></div>
+        <div style="border:1px solid #d5cdbd;border-radius:9px;overflow:hidden"><div style="height:50px;background:#948b7a"></div><div style="padding:8px 11px;background:#fff"><div style="font:700 12px 'JetBrains Mono',monospace;color:#948b7a">Dim</div><div style="font:500 11px 'JetBrains Mono',monospace;color:#948b7a">#948B7A</div></div></div>
+        <div style="border:1px solid #d5cdbd;border-radius:9px;overflow:hidden"><div style="height:50px;background:#d5cdbd"></div><div style="padding:8px 11px;background:#fff"><div style="font:700 12px 'JetBrains Mono',monospace;color:#8a8272">Border</div><div style="font:500 11px 'JetBrains Mono',monospace;color:#948b7a">#D5CDBD</div></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SCREENS -->
+  <div style="font:600 12px 'JetBrains Mono',monospace;letter-spacing:.34em;color:#5c626d;text-transform:uppercase;margin-bottom:8px">03 · Every screen &amp; state — dark · 100×32</div>
+  <h2 style="margin:0 0 34px;font-size:34px;font-weight:600;letter-spacing:-.02em">Rendered as Textual widgets</h2>
+
+  <div style="display:flex;gap:40px;flex-wrap:wrap;align-items:flex-start">
+
+    <!-- GAME — QUESTION (hero, full width) -->
+    <figure style="margin:0;width:100%;max-width:1180px">
+      <figcaption style="font:600 13px 'JetBrains Mono',monospace;color:#ff6a3d;margin-bottom:12px;letter-spacing:.06em">GAME<span style="color:#5c626d;font-weight:400"> — question state · the core screen</span></figcaption>
+      <div class="win">
+        <div class="bar"><span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span><span style="margin-left:8px">hoop-higher · Game · 100×32 · truecolor</span></div>
+        <div class="scr" style="padding:0">
+          <!-- scorebug -->
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 20px;background:#14171d;border-bottom:1px solid #20242d">
+            <div><span style="color:#ff6a3d;font-weight:700">HOOP HIGHER</span> <span style="color:#363b44">·</span> <span style="color:#9aa0ab">ENDLESS</span> <span style="color:#363b44">·</span> <span style="color:#5c626d">round</span> <span style="color:#e8e6e1;font-weight:700">2</span> <span style="color:#363b44">·</span> <span style="color:#5c626d">Q</span> <span style="color:#e8e6e1;font-weight:700">3/5</span></div>
+            <div><span style="color:#5c626d">score</span> <span style="color:#f2c14e;font-weight:700">640</span>&nbsp;&nbsp;&nbsp;<span style="color:#5c626d">streak</span> <span style="color:#e8e6e1;font-weight:700">4</span> <span style="color:#363b44">·</span> <span style="color:#5c626d">best</span> <span style="color:#9aa0ab">6</span></div>
+          </div>
+          <!-- context row -->
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 20px;font-size:13.5px;border-bottom:1px solid #191c22">
+            <span><span style="color:#9aa0ab;font-weight:700">Apr 12, 2025</span> <span style="color:#5c626d">· LAL @ DEN</span></span>
+            <span style="color:#5c626d">last&nbsp; Morant <span style="color:#9aa0ab">34</span> <span style="color:#ff6a3d">›over›</span> Curry <span style="color:#9aa0ab">29</span>&nbsp; <span style="color:#46c988">✓ +100</span></span>
+          </div>
+          <!-- games strip -->
+          <div style="display:flex;gap:8px;padding:12px 20px 4px;font-size:12.5px">
+            <span style="border:1px solid #ff6a3d;color:#ff6a3d;border-radius:4px;padding:3px 10px;font-weight:700">LAL 105 · DEN 109</span>
+            <span style="border:1px solid #2a2f38;color:#5c626d;border-radius:4px;padding:3px 10px">BOS · LAL</span>
+            <span style="border:1px solid #2a2f38;color:#5c626d;border-radius:4px;padding:3px 10px">MIA · NYK</span>
+            <span style="border:1px solid #2a2f38;color:#5c626d;border-radius:4px;padding:3px 10px">GSW · PHX</span>
+            <span style="border:1px solid #2a2f38;color:#5c626d;border-radius:4px;padding:3px 10px">OKC · MIN</span>
+          </div>
+          <!-- matchup -->
+          <div style="display:flex;align-items:stretch;gap:0;padding:14px 20px 6px">
+            <div style="flex:1;border:1px solid #2a2f38;border-radius:6px;padding:16px 18px 18px;background:#12151b">
+              <div style="font-size:11.5px;letter-spacing:.12em;color:#5c626d;text-transform:uppercase">Player A · locked</div>
+              <div style="font-size:19px;font-weight:700;color:#e8e6e1;margin-top:8px">LeBron James</div>
+              <div style="font-size:12.5px;color:#9aa0ab;margin-top:2px">LAL · 37 min</div>
+              <div style="margin-top:14px;display:flex;align-items:baseline;gap:8px"><span style="font-size:46px;font-weight:800;color:#f2c14e;line-height:1">34</span><span style="font-size:13px;color:#5c626d">PTS</span></div>
+            </div>
+            <div style="display:flex;align-items:center;padding:0 14px;font-size:13px;font-weight:700;color:#5c626d">VS</div>
+            <div style="flex:1;border:1px solid #2a2f38;border-radius:6px;padding:16px 18px 18px;background:#12151b">
+              <div style="font-size:11.5px;letter-spacing:.12em;color:#5c626d;text-transform:uppercase">Player B · <span style="color:#ff6a3d">hidden</span></div>
+              <div style="font-size:19px;font-weight:700;color:#e8e6e1;margin-top:8px">Nikola Jokić</div>
+              <div style="font-size:12.5px;color:#9aa0ab;margin-top:2px">DEN · 41 min</div>
+              <div style="margin-top:14px;display:flex;align-items:baseline;gap:8px"><span style="font-size:46px;font-weight:800;color:#3a4048;line-height:1">— —</span><span style="font-size:13px;color:#5c626d">PTS</span></div>
+            </div>
+          </div>
+          <!-- prompt -->
+          <div style="text-align:center;padding:12px 20px 4px;font-size:14.5px;color:#c8ccd4">Did <span style="color:#e8e6e1;font-weight:700">Jokić</span> score <span style="color:#e8e6e1;font-weight:700">more</span> or <span style="color:#e8e6e1;font-weight:700">fewer</span> than LeBron's <span style="color:#f2c14e;font-weight:700">34</span>?</div>
+          <!-- buttons -->
+          <div style="display:flex;gap:12px;padding:12px 20px 16px">
+            <div style="flex:1;text-align:center;padding:11px;border-radius:6px;background:#ff6a3d;color:#0a0b0d;font-weight:700;font-size:14px">▲ HIGHER&nbsp; <span style="opacity:.7">[H]</span></div>
+            <div style="flex:1;text-align:center;padding:11px;border-radius:6px;border:1px solid #2a2f38;color:#9aa0ab;font-size:14px">▼ LOWER&nbsp; <span style="color:#5c626d">[L]</span></div>
+          </div>
+          <div style="padding:9px 20px;border-top:1px solid #20242d;background:#0c0e11;font-size:12px;color:#5c626d">H higher · L lower · ←/→ move · enter guess · esc abandon · Q quit</div>
+        </div>
+      </div>
+      <div style="font:500 12.5px/1.55 'JetBrains Mono',monospace;color:#5c626d;margin-top:12px;max-width:820px">Focused action = solid orange fill. Unfocused = hairline outline, muted label. No colour pre-judges the guess.</div>
+    </figure>
+
+    <!-- GAME — REVEAL CORRECT -->
+    <figure style="margin:0;width:100%;max-width:570px">
+      <figcaption style="font:600 13px 'JetBrains Mono',monospace;color:#46c988;margin-bottom:12px;letter-spacing:.06em">GAME<span style="color:#5c626d;font-weight:400"> — reveal · CORRECT (1.2s hold)</span></figcaption>
+      <div class="win">
+        <div class="bar"><span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span><span style="margin-left:8px">reveal ✓</span></div>
+        <div class="scr" style="padding:0">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 20px;background:#14171d;border-bottom:1px solid #20242d;font-size:13px">
+            <span><span style="color:#ff6a3d;font-weight:700">HOOP HIGHER</span> <span style="color:#363b44">·</span> <span style="color:#9aa0ab">ENDLESS · Q 3/5</span></span>
+            <span><span style="color:#5c626d">score</span> <span style="color:#46c988;font-weight:700">740 ▲</span> <span style="color:#5c626d">streak</span> <span style="color:#46c988">5</span></span>
+          </div>
+          <div style="display:flex;gap:0;padding:16px 18px 8px">
+            <div style="flex:1;border:1px solid #2a2f38;border-radius:6px;padding:14px 16px;background:#12151b">
+              <div style="font-size:11px;letter-spacing:.1em;color:#5c626d;text-transform:uppercase">A · locked</div>
+              <div style="font-size:16px;font-weight:700;margin-top:6px">LeBron James</div>
+              <div style="font-size:12px;color:#9aa0ab">LAL · 37 min</div>
+              <div style="margin-top:10px"><span style="font-size:38px;font-weight:800;color:#f2c14e">34</span><span style="font-size:12px;color:#5c626d"> PTS</span></div>
+            </div>
+            <div style="display:flex;align-items:center;padding:0 10px;font-size:12px;font-weight:700;color:#5c626d">VS</div>
+            <div style="flex:1;border:1px solid #46c988;border-radius:6px;padding:14px 16px;background:#0f1a14">
+              <div style="font-size:11px;letter-spacing:.1em;color:#46c988;text-transform:uppercase">B · revealed</div>
+              <div style="font-size:16px;font-weight:700;margin-top:6px">Nikola Jokić</div>
+              <div style="font-size:12px;color:#9aa0ab">DEN · 41 min</div>
+              <div style="margin-top:10px"><span style="font-size:38px;font-weight:800;color:#46c988">49 ▲</span><span style="font-size:12px;color:#5c626d"> PTS</span></div>
+            </div>
+          </div>
+          <div style="margin:6px 18px;padding:12px 16px;border-radius:6px;background:#0f1a14;border-left:3px solid #46c988;font-size:13.5px">
+            <span style="color:#46c988;font-weight:700">CALLED IT.</span> <span style="color:#c8ccd4">Jokić went for 49 — that's over.</span> <span style="float:right;color:#46c988;font-weight:700">+100</span>
+          </div>
+          <div style="display:flex;gap:12px;padding:10px 18px 14px;opacity:.45">
+            <div style="flex:1;text-align:center;padding:9px;border-radius:6px;border:1px solid #2a2f38;color:#5c626d;font-size:13px">▲ HIGHER [H]</div>
+            <div style="flex:1;text-align:center;padding:9px;border-radius:6px;border:1px solid #2a2f38;color:#5c626d;font-size:13px">▼ LOWER [L]</div>
+          </div>
+          <div style="padding:9px 20px;border-top:1px solid #20242d;background:#0c0e11;font-size:12px;color:#5c626d">reveal held · <span style="color:#f2c14e;animation:blink .8s step-end infinite">next question in 1.2s…</span></div>
+        </div>
+      </div>
+    </figure>
+
+    <!-- GAME — REVEAL WRONG -->
+    <figure style="margin:0;width:100%;max-width:570px">
+      <figcaption style="font:600 13px 'JetBrains Mono',monospace;color:#ff5d61;margin-bottom:12px;letter-spacing:.06em">GAME<span style="color:#5c626d;font-weight:400"> — reveal · WRONG (1.2s hold)</span></figcaption>
+      <div class="win">
+        <div class="bar"><span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span><span style="margin-left:8px">reveal ✗</span></div>
+        <div class="scr" style="padding:0">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 20px;background:#14171d;border-bottom:1px solid #20242d;font-size:13px">
+            <span><span style="color:#ff6a3d;font-weight:700">HOOP HIGHER</span> <span style="color:#363b44">·</span> <span style="color:#9aa0ab">ENDLESS · Q 3/5</span></span>
+            <span><span style="color:#5c626d">score</span> <span style="color:#ff5d61;font-weight:700">580 ▼</span> <span style="color:#5c626d">streak</span> <span style="color:#ff5d61">0</span></span>
+          </div>
+          <div style="display:flex;gap:0;padding:16px 18px 8px">
+            <div style="flex:1;border:1px solid #2a2f38;border-radius:6px;padding:14px 16px;background:#12151b">
+              <div style="font-size:11px;letter-spacing:.1em;color:#5c626d;text-transform:uppercase">A · locked</div>
+              <div style="font-size:16px;font-weight:700;margin-top:6px">LeBron James</div>
+              <div style="font-size:12px;color:#9aa0ab">LAL · 37 min</div>
+              <div style="margin-top:10px"><span style="font-size:38px;font-weight:800;color:#f2c14e">34</span><span style="font-size:12px;color:#5c626d"> PTS</span></div>
+            </div>
+            <div style="display:flex;align-items:center;padding:0 10px;font-size:12px;font-weight:700;color:#5c626d">VS</div>
+            <div style="flex:1;border:1px solid #ff5d61;border-radius:6px;padding:14px 16px;background:#1a1012">
+              <div style="font-size:11px;letter-spacing:.1em;color:#ff5d61;text-transform:uppercase">B · revealed</div>
+              <div style="font-size:16px;font-weight:700;margin-top:6px">Nikola Jokić</div>
+              <div style="font-size:12px;color:#9aa0ab">DEN · 41 min</div>
+              <div style="margin-top:10px"><span style="font-size:38px;font-weight:800;color:#ff5d61">49 ▲</span><span style="font-size:12px;color:#5c626d"> PTS</span></div>
+            </div>
+          </div>
+          <div style="margin:6px 18px;padding:12px 16px;border-radius:6px;background:#1a1012;border-left:3px solid #ff5d61;font-size:13.5px">
+            <span style="color:#ff5d61;font-weight:700">ICE COLD.</span> <span style="color:#c8ccd4">He dropped 49 — you said lower.</span> <span style="float:right;color:#ff5d61;font-weight:700">−60</span>
+          </div>
+          <div style="display:flex;gap:12px;padding:10px 18px 14px">
+            <div style="flex:1;text-align:center;padding:9px;border-radius:6px;border:1px solid #2a2f38;color:#5c626d;font-size:13px;opacity:.45">▲ HIGHER [H]</div>
+            <div style="flex:1;text-align:center;padding:9px;border-radius:6px;border:1px solid #ff5d61;color:#ff5d61;font-size:13px">✗ ▼ LOWER [L]</div>
+          </div>
+          <div style="padding:9px 20px;border-top:1px solid #20242d;background:#0c0e11;font-size:12px;color:#5c626d">reveal held · <span style="color:#f2c14e;animation:blink .8s step-end infinite">next question in 1.2s…</span></div>
+        </div>
+      </div>
+    </figure>
+
+    <!-- HOME -->
+    <figure style="margin:0;width:100%;max-width:570px">
+      <figcaption style="font:600 13px 'JetBrains Mono',monospace;color:#ff6a3d;margin-bottom:12px;letter-spacing:.06em">HOME<span style="color:#5c626d;font-weight:400"> — identity + 4 actions</span></figcaption>
+      <div class="win">
+        <div class="bar"><span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span><span style="margin-left:8px">hoop-higher · Home</span></div>
+        <div class="scr" style="padding:26px 24px 0;min-height:360px;display:flex;flex-direction:column">
+          <div style="font-size:30px;font-weight:800;color:#ff6a3d;letter-spacing:.02em">HOOP HIGHER</div>
+          <div style="height:1px;background:#2a2f38;margin:12px 0 10px"></div>
+          <div style="color:#9aa0ab;font-size:13.5px">higher / lower · guess who scored more</div>
+          <div style="color:#f2c14e;font-size:13.5px;margin-top:14px">Two players, one hidden number. Back yourself.</div>
+          <div style="margin-top:26px;display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:11px 16px;border-radius:6px;background:#ff6a3d;color:#0a0b0d;font-weight:700"><span>▸ Play</span><span style="opacity:.7">enter</span></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:11px 16px;border-radius:6px;border:1px solid #2a2f38"><span style="color:#c8ccd4">Leaderboard</span><span style="color:#5c626d">[L]</span></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:11px 16px;border-radius:6px;border:1px solid #2a2f38"><span style="color:#c8ccd4">Stats</span><span style="color:#5c626d">[S]</span></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:11px 16px;border-radius:6px;border:1px solid #2a2f38"><span style="color:#c8ccd4">Quit</span><span style="color:#5c626d">[Q]</span></div>
+          </div>
+          <div style="margin-top:auto;padding:9px 0;border-top:1px solid #20242d;font-size:12px;color:#5c626d">↑/↓ move · enter select · letter = shortcut <span style="color:#ff6a3d;animation:blink 1.1s step-end infinite">▍</span></div>
+        </div>
+      </div>
+    </figure>
+
+    <!-- MODE SELECT — IDLE -->
+    <figure style="margin:0;width:100%;max-width:570px">
+      <figcaption style="font:600 13px 'JetBrains Mono',monospace;color:#ff6a3d;margin-bottom:12px;letter-spacing:.06em">MODE SELECT<span style="color:#5c626d;font-weight:400"> — idle</span></figcaption>
+      <div class="win">
+        <div class="bar"><span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span><span style="margin-left:8px">hoop-higher · Mode Select</span></div>
+        <div class="scr" style="padding:0">
+          <div style="padding:12px 20px;background:#14171d;border-bottom:1px solid #20242d"><span style="color:#5c626d">‹ back&nbsp;&nbsp;</span><span style="color:#ff6a3d;font-weight:700">CHOOSE YOUR MODE</span></div>
+          <div style="padding:16px 20px;display:flex;flex-direction:column;gap:10px">
+            <div style="border:1px solid #ff6a3d;border-radius:6px;padding:12px 16px;background:#1a120d">
+              <div style="display:flex;justify-content:space-between"><span style="color:#ff6a3d;font-weight:700">▸ 1 &nbsp;ENDLESS</span><span><span style="color:#46c988">+100</span> <span style="color:#5c626d">/</span> <span style="color:#ff5d61">−60</span></span></div>
+              <div style="color:#9aa0ab;font-size:13px;margin-top:4px">Miss all you like — the run rolls on.</div>
+            </div>
+            <div style="border:1px solid #2a2f38;border-radius:6px;padding:12px 16px">
+              <div style="display:flex;justify-content:space-between"><span style="color:#e8e6e1;font-weight:700">&nbsp;&nbsp;2 &nbsp;ARCADE</span><span><span style="color:#46c988">+150</span> <span style="color:#5c626d">/ over</span></span></div>
+              <div style="color:#9aa0ab;font-size:13px;margin-top:4px">One miss and you're done. Bigger points.</div>
+            </div>
+            <div style="border:1px solid #2a2f38;border-radius:6px;padding:12px 16px">
+              <div style="display:flex;justify-content:space-between"><span style="color:#e8e6e1;font-weight:700">&nbsp;&nbsp;3 &nbsp;HISTORICAL</span><span><span style="color:#46c988">+100</span> <span style="color:#5c626d">/</span> <span style="color:#ff5d61">−60</span></span></div>
+              <div style="color:#9aa0ab;font-size:13px;margin-top:4px">A random night from the archives.</div>
+            </div>
+          </div>
+          <div style="padding:9px 20px;border-top:1px solid #20242d;background:#0c0e11;font-size:12px;color:#5c626d">↑/↓ move · enter start · 1·2·3 jump · esc back · Q quit</div>
+        </div>
+      </div>
+    </figure>
+
+    <!-- MODE SELECT — LOADING -->
+    <figure style="margin:0;width:100%;max-width:570px">
+      <figcaption style="font:600 13px 'JetBrains Mono',monospace;color:#f2c14e;margin-bottom:12px;letter-spacing:.06em">MODE SELECT<span style="color:#5c626d;font-weight:400"> — loading (escalated)</span></figcaption>
+      <div class="win">
+        <div class="bar"><span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span><span style="margin-left:8px">loading</span></div>
+        <div class="scr" style="padding:0">
+          <div style="padding:12px 20px;background:#14171d;border-bottom:1px solid #20242d"><span style="color:#5c626d">‹ back&nbsp;&nbsp;</span><span style="color:#ff6a3d;font-weight:700">CHOOSE YOUR MODE</span></div>
+          <div style="padding:16px 20px;display:flex;flex-direction:column;gap:10px">
+            <div style="border:1px solid #4a3a1c;border-radius:6px;padding:12px 16px;background:#16130c">
+              <div style="color:#9aa0ab">1 &nbsp;ENDLESS &nbsp;<span style="color:#f2c14e">← starting</span></div>
+            </div>
+            <div style="border:1px solid #191c22;border-radius:6px;padding:12px 16px;color:#363b44">2 &nbsp;ARCADE&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;· disabled while loading</div>
+            <div style="border:1px solid #191c22;border-radius:6px;padding:12px 16px;color:#363b44">3 &nbsp;HISTORICAL · disabled while loading</div>
+            <div style="margin-top:6px;padding:14px 16px;border-radius:6px;background:#16130c;border-left:3px solid #f2c14e">
+              <div><span style="color:#f2c14e;font-weight:700;animation:blink 1s step-end infinite">⣾</span> <span style="color:#e8e6e1">Still fetching NBA games</span> <span style="color:#f2c14e">(7s)…</span></div>
+              <div style="color:#5c626d;font-size:12.5px;margin-top:4px">stats.nba.com can be slow. Press esc to bail.</div>
+            </div>
+          </div>
+          <div style="padding:9px 20px;border-top:1px solid #20242d;background:#0c0e11;font-size:12px"><span style="color:#f2c14e;font-weight:700">esc CANCEL</span> <span style="color:#5c626d">· modes locked until data lands</span></div>
+        </div>
+      </div>
+    </figure>
+
+    <!-- MODE SELECT — ERROR -->
+    <figure style="margin:0;width:100%;max-width:570px">
+      <figcaption style="font:600 13px 'JetBrains Mono',monospace;color:#ff5d61;margin-bottom:12px;letter-spacing:.06em">MODE SELECT<span style="color:#5c626d;font-weight:400"> — error toast</span></figcaption>
+      <div class="win">
+        <div class="bar"><span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span><span style="margin-left:8px">error</span></div>
+        <div class="scr" style="padding:0;position:relative">
+          <div style="padding:12px 20px;background:#14171d;border-bottom:1px solid #20242d"><span style="color:#5c626d">‹ back&nbsp;&nbsp;</span><span style="color:#ff6a3d;font-weight:700">CHOOSE YOUR MODE</span></div>
+          <div style="padding:16px 20px;display:flex;flex-direction:column;gap:10px">
+            <div style="border:1px solid #ff6a3d;border-radius:6px;padding:12px 16px;background:#1a120d;color:#ff6a3d;font-weight:700">▸ 1 &nbsp;ENDLESS</div>
+            <div style="border:1px solid #2a2f38;border-radius:6px;padding:12px 16px;color:#e8e6e1;font-weight:700">&nbsp;&nbsp;2 &nbsp;ARCADE</div>
+            <div style="border:1px solid #2a2f38;border-radius:6px;padding:12px 16px;color:#e8e6e1;font-weight:700">&nbsp;&nbsp;3 &nbsp;HISTORICAL</div>
+          </div>
+          <!-- toast -->
+          <div style="position:absolute;right:16px;top:58px;width:290px;border:1px solid #ff5d61;border-radius:8px;background:#1a1012;padding:13px 15px;box-shadow:0 10px 30px rgba(0,0,0,.5)">
+            <div style="color:#ff5d61;font-weight:700;font-size:13px">✗ Unable to start game</div>
+            <div style="color:#c8ccd4;font-size:12.5px;margin-top:5px;line-height:1.5">stats.nba.com timed out. Not on you this time — try again.</div>
+          </div>
+          <div style="padding:9px 20px;border-top:1px solid #20242d;background:#0c0e11;font-size:12px;color:#5c626d">screen returns to idle · pick a mode again</div>
+        </div>
+      </div>
+    </figure>
+
+    <!-- ROUND SUMMARY -->
+    <figure style="margin:0;width:100%;max-width:570px">
+      <figcaption style="font:600 13px 'JetBrains Mono',monospace;color:#ff6a3d;margin-bottom:12px;letter-spacing:.06em">ROUND SUMMARY<span style="color:#5c626d;font-weight:400"> — modal over Game</span></figcaption>
+      <div class="win">
+        <div class="bar"><span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span><span style="margin-left:8px">Round Summary · modal</span></div>
+        <div class="scr" style="padding:0;position:relative;min-height:320px">
+          <!-- dimmed game behind -->
+          <div style="padding:11px 20px;background:#101216;border-bottom:1px solid #16181d;font-size:13px;color:#2a2f3a;display:flex;justify-content:space-between"><span>HOOP HIGHER · ENDLESS · Q 5/5</span><span>980 · streak 6</span></div>
+          <div style="padding:14px 18px;opacity:.25;filter:blur(.4px)">
+            <div style="display:flex;gap:12px"><div style="flex:1;border:1px solid #2a2f38;border-radius:6px;height:80px"></div><div style="flex:1;border:1px solid #2a2f38;border-radius:6px;height:80px"></div></div>
+          </div>
+          <!-- modal -->
+          <div style="position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);width:420px;border:1px solid #ff6a3d;border-radius:10px;background:#12100c;box-shadow:0 20px 60px rgba(0,0,0,.7);padding:20px 22px">
+            <div style="display:flex;justify-content:space-between;align-items:baseline"><span style="color:#ff6a3d;font-weight:700;font-size:15px">ROUND 2 · COMPLETE</span><span style="color:#9aa0ab;font-size:12.5px">LAL @ DEN</span></div>
+            <div style="height:1px;background:#3a2a1c;margin:14px 0"></div>
+            <div style="display:flex;justify-content:space-between;align-items:center;font-size:14px"><span><span style="color:#46c988">✓ 4 right</span>&nbsp;&nbsp;&nbsp;<span style="color:#ff5d61">✗ 1 wrong</span></span><span><span style="color:#5c626d">round</span> <span style="color:#46c988;font-weight:700">+340</span></span></div>
+            <div style="color:#c8ccd4;font-size:13px;margin-top:14px">Next round pulls a different game. Stay hot.</div>
+            <div style="margin-top:18px;text-align:center;padding:11px;border-radius:6px;background:#ff6a3d;color:#0a0b0d;font-weight:700">▸ Continue&nbsp; <span style="opacity:.7">[enter]</span></div>
+          </div>
+          <div style="position:absolute;bottom:0;left:0;right:0;padding:9px 20px;border-top:1px solid #20242d;background:#0c0e11;font-size:12px;color:#5c626d">enter continue</div>
+        </div>
+      </div>
+    </figure>
+
+    <!-- GAME OVER -->
+    <figure style="margin:0;width:100%;max-width:570px">
+      <figcaption style="font:600 13px 'JetBrains Mono',monospace;color:#ff5d61;margin-bottom:12px;letter-spacing:.06em">GAME OVER<span style="color:#5c626d;font-weight:400"> — modal over Game</span></figcaption>
+      <div class="win">
+        <div class="bar"><span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span><span style="margin-left:8px">Game Over · modal</span></div>
+        <div class="scr" style="padding:0;position:relative;min-height:340px">
+          <div style="padding:11px 20px;background:#101216;border-bottom:1px solid #16181d;font-size:13px;color:#2a2f3a;display:flex;justify-content:space-between"><span>HOOP HIGHER · ARCADE · Q 4/5</span><span>1450 · streak 0</span></div>
+          <div style="padding:14px 18px;opacity:.22"><div style="display:flex;gap:12px"><div style="flex:1;border:1px solid #2a2f38;border-radius:6px;height:70px"></div><div style="flex:1;border:1px solid #2a2f38;border-radius:6px;height:70px"></div></div></div>
+          <div style="position:absolute;left:50%;top:52%;transform:translate(-50%,-50%);width:430px;border:1px solid #ff5d61;border-radius:10px;background:#140f0f;box-shadow:0 20px 60px rgba(0,0,0,.7);padding:22px 24px;text-align:center">
+            <div style="display:flex;justify-content:space-between;align-items:baseline"><span style="color:#ff5d61;font-weight:700;font-size:15px">GAME OVER <span style="color:#5c626d;font-weight:400">· arcade</span></span><span style="color:#ff5d61;font-size:12.5px">Wrong Guess</span></div>
+            <div style="color:#5c626d;font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;margin-top:20px">final score</div>
+            <div style="font-size:52px;font-weight:800;color:#f2c14e;line-height:1.05">1,450</div>
+            <div style="display:flex;justify-content:center;gap:20px;font-size:13.5px;margin-top:16px"><span style="color:#46c988">✓ 9 right</span><span style="color:#ff5d61">✗ 1 wrong</span><span style="color:#9aa0ab">best streak <span style="color:#e8e6e1;font-weight:700">7</span></span></div>
+            <div style="color:#f2c14e;font-size:13px;margin-top:14px">Cooked — but respectable.</div>
+            <div style="margin-top:18px;padding:11px;border-radius:6px;border:1px solid #e8e6e1;color:#e8e6e1;font-weight:700">▸ Return home&nbsp; <span style="color:#9aa0ab">[enter / esc]</span></div>
+          </div>
+          <div style="position:absolute;bottom:0;left:0;right:0;padding:9px 20px;border-top:1px solid #20242d;background:#0c0e11;font-size:12px;color:#5c626d">enter / esc · return home</div>
+        </div>
+      </div>
+    </figure>
+
+    <!-- LEADERBOARD -->
+    <figure style="margin:0;width:100%;max-width:730px">
+      <figcaption style="font:600 13px 'JetBrains Mono',monospace;color:#ff6a3d;margin-bottom:12px;letter-spacing:.06em">LEADERBOARD<span style="color:#5c626d;font-weight:400"> — top 10, local</span></figcaption>
+      <div class="win">
+        <div class="bar"><span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span><span style="margin-left:8px">hoop-higher · Leaderboard</span></div>
+        <div class="scr" style="padding:0;font-size:13px">
+          <div style="padding:12px 20px;background:#14171d;border-bottom:1px solid #20242d"><span style="color:#5c626d">‹ back&nbsp;&nbsp;</span><span style="color:#ff6a3d;font-weight:700">LEADERBOARD</span> <span style="color:#5c626d">· top 10 · this machine</span></div>
+          <div style="display:grid;grid-template-columns:36px 1fr 90px 70px 80px 70px;padding:9px 20px;color:#5c626d;font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;border-bottom:1px solid #191c22"><span>#</span><span>mode</span><span style="text-align:right">score</span><span style="text-align:right">streak</span><span style="text-align:right">acc</span><span style="text-align:right">date</span></div>
+          <div style="padding:2px 0">
+            <div style="display:grid;grid-template-columns:36px 1fr 90px 70px 80px 70px;padding:6px 20px;background:#16130c"><span style="color:#ff6a3d;font-weight:700">1</span><span style="color:#f2c14e">arcade</span><span style="text-align:right;color:#e8e6e1;font-weight:700">2,150</span><span style="text-align:right">11</span><span style="text-align:right;color:#46c988">92.0%</span><span style="text-align:right;color:#5c626d">Apr 12</span></div>
+            <div style="display:grid;grid-template-columns:36px 1fr 90px 70px 80px 70px;padding:6px 20px"><span style="color:#9aa0ab">2</span><span>endless</span><span style="text-align:right">1,880</span><span style="text-align:right">9</span><span style="text-align:right;color:#46c988">78.5%</span><span style="text-align:right;color:#5c626d">Apr 10</span></div>
+            <div style="display:grid;grid-template-columns:36px 1fr 90px 70px 80px 70px;padding:6px 20px;background:#101216"><span style="color:#9aa0ab">3</span><span>endless</span><span style="text-align:right">1,640</span><span style="text-align:right">8</span><span style="text-align:right;color:#9aa0ab">74.1%</span><span style="text-align:right;color:#5c626d">Apr 09</span></div>
+            <div style="display:grid;grid-template-columns:36px 1fr 90px 70px 80px 70px;padding:6px 20px"><span style="color:#9aa0ab">4</span><span>historical</span><span style="text-align:right">1,500</span><span style="text-align:right">7</span><span style="text-align:right;color:#9aa0ab">71.0%</span><span style="text-align:right;color:#5c626d">Apr 06</span></div>
+            <div style="display:grid;grid-template-columns:36px 1fr 90px 70px 80px 70px;padding:6px 20px;background:#101216"><span style="color:#9aa0ab">5</span><span>arcade</span><span style="text-align:right">1,350</span><span style="text-align:right">9</span><span style="text-align:right;color:#9aa0ab">88.9%</span><span style="text-align:right;color:#5c626d">Apr 04</span></div>
+            <div style="display:grid;grid-template-columns:36px 1fr 90px 70px 80px 70px;padding:6px 20px"><span style="color:#9aa0ab">6</span><span>endless</span><span style="text-align:right">1,120</span><span style="text-align:right">6</span><span style="text-align:right;color:#9aa0ab">66.7%</span><span style="text-align:right;color:#5c626d">Apr 01</span></div>
+            <div style="display:grid;grid-template-columns:36px 1fr 90px 70px 80px 70px;padding:6px 20px;background:#101216"><span style="color:#9aa0ab">7</span><span>historical</span><span style="text-align:right">940</span><span style="text-align:right">5</span><span style="text-align:right;color:#9aa0ab">62.5%</span><span style="text-align:right;color:#5c626d">Mar 28</span></div>
+            <div style="display:grid;grid-template-columns:36px 1fr 90px 70px 80px 70px;padding:6px 20px"><span style="color:#9aa0ab">8</span><span>arcade</span><span style="text-align:right">900</span><span style="text-align:right">6</span><span style="text-align:right;color:#9aa0ab">85.7%</span><span style="text-align:right;color:#5c626d">Mar 25</span></div>
+            <div style="display:grid;grid-template-columns:36px 1fr 90px 70px 80px 70px;padding:6px 20px;background:#101216"><span style="color:#9aa0ab">9</span><span>endless</span><span style="text-align:right">720</span><span style="text-align:right">4</span><span style="text-align:right;color:#9aa0ab">58.3%</span><span style="text-align:right;color:#5c626d">Mar 22</span></div>
+            <div style="display:grid;grid-template-columns:36px 1fr 90px 70px 80px 70px;padding:6px 20px"><span style="color:#9aa0ab">10</span><span>historical</span><span style="text-align:right">540</span><span style="text-align:right">3</span><span style="text-align:right;color:#9aa0ab">54.5%</span><span style="text-align:right;color:#5c626d">Mar 20</span></div>
+          </div>
+          <div style="padding:9px 20px;border-top:1px solid #20242d;background:#0c0e11;font-size:12px;color:#5c626d">empty → <span style="color:#9aa0ab">"No runs recorded yet. The board's waiting."</span> &nbsp;·&nbsp; esc back · Q quit</div>
+        </div>
+      </div>
+    </figure>
+
+    <!-- STATS -->
+    <figure style="margin:0;width:100%;max-width:730px">
+      <figcaption style="font:600 13px 'JetBrains Mono',monospace;color:#ff6a3d;margin-bottom:12px;letter-spacing:.06em">STATS<span style="color:#5c626d;font-weight:400"> — aggregate + per-mode</span></figcaption>
+      <div class="win">
+        <div class="bar"><span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span><span style="margin-left:8px">hoop-higher · Stats</span></div>
+        <div class="scr" style="padding:0">
+          <div style="padding:12px 20px;background:#14171d;border-bottom:1px solid #20242d"><span style="color:#5c626d">‹ back&nbsp;&nbsp;</span><span style="color:#ff6a3d;font-weight:700">STATS</span> <span style="color:#5c626d">· every run you've saved</span></div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:18px 20px 8px">
+            <div style="border:1px solid #2a2f38;border-radius:6px;padding:12px 14px"><div style="color:#5c626d;font-size:11px;text-transform:uppercase;letter-spacing:.1em">runs</div><div style="font-size:26px;font-weight:800;margin-top:4px">42</div></div>
+            <div style="border:1px solid #2a2f38;border-radius:6px;padding:12px 14px"><div style="color:#5c626d;font-size:11px;text-transform:uppercase;letter-spacing:.1em">questions</div><div style="font-size:26px;font-weight:800;margin-top:4px">610</div></div>
+            <div style="border:1px solid #2a2f38;border-radius:6px;padding:12px 14px"><div style="color:#5c626d;font-size:11px;text-transform:uppercase;letter-spacing:.1em">correct</div><div style="font-size:26px;font-weight:800;color:#46c988;margin-top:4px">471</div></div>
+            <div style="border:1px solid #2a2f38;border-radius:6px;padding:12px 14px"><div style="color:#5c626d;font-size:11px;text-transform:uppercase;letter-spacing:.1em">accuracy</div><div style="font-size:26px;font-weight:800;color:#46c988;margin-top:4px">77.2%</div></div>
+          </div>
+          <div style="display:flex;gap:12px;padding:0 20px 14px">
+            <div style="flex:1;border:1px solid #2a2f38;border-radius:6px;padding:12px 14px"><span style="color:#5c626d;font-size:12px">best score</span> <span style="color:#f2c14e;font-weight:800;font-size:18px">2,150</span></div>
+            <div style="flex:1;border:1px solid #2a2f38;border-radius:6px;padding:12px 14px"><span style="color:#5c626d;font-size:12px">best streak</span> <span style="color:#f2c14e;font-weight:800;font-size:18px">11</span></div>
+          </div>
+          <div style="padding:4px 20px 6px;color:#5c626d;font-size:11.5px;text-transform:uppercase;letter-spacing:.1em">by mode</div>
+          <div style="padding:0 20px 14px;font-size:13px">
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:7px"><span style="width:90px;color:#c8ccd4">endless</span><span style="flex:1;height:14px;border-radius:3px;background:linear-gradient(90deg,#ff6a3d 66%,#22262e 66%)"></span><span style="width:28px;text-align:right">24</span></div>
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:7px"><span style="width:90px;color:#c8ccd4">arcade</span><span style="flex:1;height:14px;border-radius:3px;background:linear-gradient(90deg,#ff6a3d 33%,#22262e 33%)"></span><span style="width:28px;text-align:right">12</span></div>
+            <div style="display:flex;align-items:center;gap:12px"><span style="width:90px;color:#c8ccd4">historical</span><span style="flex:1;height:14px;border-radius:3px;background:linear-gradient(90deg,#ff6a3d 16%,#22262e 16%)"></span><span style="width:28px;text-align:right">6</span></div>
+          </div>
+          <div style="padding:9px 20px;border-top:1px solid #20242d;background:#0c0e11;font-size:12px;color:#5c626d">empty → <span style="color:#9aa0ab">"No runs yet — go make some regrettable guesses."</span> &nbsp;·&nbsp; esc back · Q quit</div>
+        </div>
+      </div>
+    </figure>
+
+  </div>
+
+  <div style="height:1px;background:linear-gradient(90deg,#ff6a3d,#20242d 40%,transparent);margin:56px 0 48px"></div>
+
+  <!-- RESPONSIVE -->
+  <div style="font:600 12px 'JetBrains Mono',monospace;letter-spacing:.34em;color:#5c626d;text-transform:uppercase;margin-bottom:8px">04 · Responsive — how the Game screen adapts</div>
+  <h2 style="margin:0 0 8px;font-size:34px;font-weight:600;letter-spacing:-.02em">One screen, four terminal sizes</h2>
+  <p style="margin:0 0 32px;font-size:16px;color:#9aa0ab;max-width:920px;line-height:1.5">Detail sheds in a fixed priority order as space shrinks; the matchup and the two guess actions never leave. Breakpoints match the app: <span style="font-family:'JetBrains Mono',monospace;color:#c8ccd4">lg ≥128 · md 96–127 · sm 72–95 · xs &lt;72</span>.</p>
+
+  <div style="display:flex;gap:36px;flex-wrap:wrap;align-items:flex-start">
+    <!-- SM -->
+    <figure style="margin:0;width:100%;max-width:540px">
+      <figcaption style="font:600 13px 'JetBrains Mono',monospace;color:#f2c14e;margin-bottom:12px;letter-spacing:.06em">sm<span style="color:#5c626d;font-weight:400"> · games strip trimmed · 84×28</span></figcaption>
+      <div class="win">
+        <div class="bar"><span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span><span style="margin-left:8px">sm · 84 cols</span></div>
+        <div class="scr" style="padding:0;font-size:13px">
+          <div style="display:flex;justify-content:space-between;padding:10px 16px;background:#14171d;border-bottom:1px solid #20242d"><span style="color:#ff6a3d;font-weight:700">HOOP HIGHER <span style="color:#9aa0ab;font-weight:400">· E · Q3/5</span></span><span><span style="color:#f2c14e;font-weight:700">640</span> <span style="color:#5c626d">·</span> <span>4</span><span style="color:#5c626d">/6</span></span></div>
+          <div style="padding:8px 16px;color:#5c626d;font-size:12.5px;border-bottom:1px solid #191c22">LAL @ DEN <span style="color:#363b44">· game 1/4</span> &nbsp; last Morant<span style="color:#9aa0ab">34</span><span style="color:#ff6a3d">›</span>Curry<span style="color:#9aa0ab">29</span> <span style="color:#46c988">+100</span></div>
+          <div style="display:flex;gap:0;padding:12px 16px 6px">
+            <div style="flex:1;border:1px solid #2a2f38;border-radius:6px;padding:11px 13px"><div style="font-size:10.5px;color:#5c626d;text-transform:uppercase;letter-spacing:.1em">A · locked</div><div style="font-weight:700;margin-top:4px">LeBron James</div><div style="font-size:11.5px;color:#9aa0ab">LAL · 37m</div><div style="margin-top:8px"><span style="font-size:30px;font-weight:800;color:#f2c14e">34</span><span style="font-size:11px;color:#5c626d">p</span></div></div>
+            <div style="display:flex;align-items:center;padding:0 8px;color:#5c626d;font-size:11px;font-weight:700">VS</div>
+            <div style="flex:1;border:1px solid #2a2f38;border-radius:6px;padding:11px 13px"><div style="font-size:10.5px;color:#ff6a3d;text-transform:uppercase;letter-spacing:.1em">B · hidden</div><div style="font-weight:700;margin-top:4px">Nikola Jokić</div><div style="font-size:11.5px;color:#9aa0ab">DEN · 41m</div><div style="margin-top:8px"><span style="font-size:30px;font-weight:800;color:#3a4048">——</span><span style="font-size:11px;color:#5c626d">p</span></div></div>
+          </div>
+          <div style="text-align:center;font-size:13px;color:#c8ccd4;padding:6px 16px">More or fewer than 34?</div>
+          <div style="display:flex;gap:10px;padding:8px 16px 12px"><div style="flex:1;text-align:center;padding:9px;border-radius:6px;background:#ff6a3d;color:#0a0b0d;font-weight:700">▲ HIGHER</div><div style="flex:1;text-align:center;padding:9px;border-radius:6px;border:1px solid #2a2f38;color:#9aa0ab">▼ LOWER</div></div>
+          <div style="padding:8px 16px;border-top:1px solid #20242d;background:#0c0e11;font-size:11.5px;color:#5c626d">H · L · ←/→ · esc · Q</div>
+        </div>
+      </div>
+      <div style="font:500 12px/1.5 'JetBrains Mono',monospace;color:#5c626d;margin-top:12px;max-width:520px">Games strip → <span style="color:#9aa0ab">active + count</span>. Scorebug &amp; footer abbreviate. Matchup stays side-by-side; buttons keep full labels.</div>
+    </figure>
+
+    <!-- XS -->
+    <figure style="margin:0;width:100%;max-width:420px">
+      <figcaption style="font:600 13px 'JetBrains Mono',monospace;color:#ff5d61;margin-bottom:12px;letter-spacing:.06em">xs<span style="color:#5c626d;font-weight:400"> · stacked, stripped · 70×20</span></figcaption>
+      <div class="win">
+        <div class="bar"><span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span><span style="margin-left:8px">xs · 70 cols</span></div>
+        <div class="scr" style="padding:0;font-size:13px">
+          <div style="display:flex;justify-content:space-between;padding:9px 14px;background:#14171d;border-bottom:1px solid #20242d"><span style="color:#ff6a3d;font-weight:700">HOOP HIGHER</span><span><span style="color:#f2c14e;font-weight:700">640</span> <span style="color:#ff6a3d">★4</span></span></div>
+          <div style="padding:8px 14px;color:#5c626d;font-size:12px;border-bottom:1px solid #191c22">LAL @ DEN · Q3/5</div>
+          <div style="padding:12px 14px 6px;display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;align-items:center;justify-content:space-between;border:1px solid #2a2f38;border-radius:6px;padding:9px 12px"><span><span style="color:#ff6a3d;font-weight:700">A</span> <span style="font-weight:700">LeBron James</span> <span style="color:#5c626d;font-size:11px">LAL</span></span><span><span style="font-size:20px;font-weight:800;color:#f2c14e">34</span><span style="font-size:10px;color:#5c626d">p</span></span></div>
+            <div style="text-align:center;color:#5c626d;font-size:11px">— vs —</div>
+            <div style="display:flex;align-items:center;justify-content:space-between;border:1px solid #ff6a3d;border-radius:6px;padding:9px 12px"><span><span style="color:#ff6a3d;font-weight:700">B</span> <span style="font-weight:700">Nikola Jokić</span> <span style="color:#5c626d;font-size:11px">DEN</span></span><span><span style="font-size:20px;font-weight:800;color:#3a4048">——</span><span style="font-size:10px;color:#5c626d">p</span></span></div>
+          </div>
+          <div style="text-align:center;font-size:12.5px;color:#9aa0ab;padding:6px 14px">More or fewer than 34?</div>
+          <div style="display:flex;gap:8px;padding:6px 14px 12px"><div style="flex:1;text-align:center;padding:9px;border-radius:6px;background:#ff6a3d;color:#0a0b0d;font-weight:700">▲ HI · H</div><div style="flex:1;text-align:center;padding:9px;border-radius:6px;border:1px solid #2a2f38;color:#9aa0ab">▼ LO · L</div></div>
+          <div style="padding:8px 14px;border-top:1px solid #20242d;background:#0c0e11;font-size:11.5px;color:#5c626d">H/L · esc home</div>
+        </div>
+      </div>
+      <div style="font:500 12px/1.5 'JetBrains Mono',monospace;color:#5c626d;margin-top:12px;max-width:400px">Games strip + last-guess <span style="color:#9aa0ab">dropped</span>. Players stack into rows. Buttons shrink to HI/LO. Area scrolls under 20 rows.</div>
+    </figure>
+  </div>
+
+  <div style="height:1px;background:linear-gradient(90deg,#ff6a3d,#20242d 40%,transparent);margin:48px 0 48px"></div>
+
+  <!-- LIGHT MODE -->
+  <div style="font:600 12px 'JetBrains Mono',monospace;letter-spacing:.34em;color:#5c626d;text-transform:uppercase;margin-bottom:8px">05 · Light mode</div>
+  <h2 style="margin:0 0 8px;font-size:34px;font-weight:600;letter-spacing:-.02em">The same widgets on paper</h2>
+  <p style="margin:0 0 32px;font-size:16px;color:#9aa0ab;max-width:900px;line-height:1.5">Identical layout, roles remapped: borders warm-tan, text ink, orange deepened to <span style="font-family:'JetBrains Mono',monospace;color:#e0521f">#E0521F</span> to hold contrast on paper. Toggled from a setting or terminal theme; choice persists per machine.</p>
+
+  <div style="display:flex;gap:36px;flex-wrap:wrap;align-items:flex-start">
+    <!-- LIGHT GAME -->
+    <figure style="margin:0;width:100%;max-width:620px">
+      <figcaption style="font:600 13px 'JetBrains Mono',monospace;color:#e0521f;margin-bottom:12px;letter-spacing:.06em">GAME<span style="color:#948b7a;font-weight:400"> · light · question state</span></figcaption>
+      <div class="lwin">
+        <div class="lbar"><span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span><span style="margin-left:8px">hoop-higher · Game · light</span></div>
+        <div style="font:14px/1.5 'JetBrains Mono',monospace;color:#3b352b">
+          <div style="display:flex;justify-content:space-between;padding:11px 20px;background:#f0ebe1;border-bottom:1px solid #ddd4c4;font-size:13px"><span><span style="color:#e0521f;font-weight:700">HOOP HIGHER</span> <span style="color:#948b7a">· ENDLESS · round 2 · Q 3/5</span></span><span><span style="color:#948b7a">score</span> <span style="color:#b8791a;font-weight:700">640</span> <span style="color:#948b7a">streak</span> <span style="color:#1e1b16;font-weight:700">4</span></span></div>
+          <div style="padding:9px 20px;font-size:12.5px;color:#6b6355;border-bottom:1px solid #ece7dd"><span style="color:#1e1b16;font-weight:700">Apr 12, 2025</span> · LAL @ DEN &nbsp;&nbsp; last Morant 34 <span style="color:#e0521f">›over›</span> Curry 29 <span style="color:#1f9d57">✓ +100</span></div>
+          <div style="display:flex;gap:8px;padding:12px 20px 4px;font-size:12px"><span style="border:1px solid #e0521f;color:#e0521f;border-radius:4px;padding:3px 9px;font-weight:700">LAL 105 · DEN 109</span><span style="border:1px solid #ddd4c4;color:#948b7a;border-radius:4px;padding:3px 9px">BOS·LAL</span><span style="border:1px solid #ddd4c4;color:#948b7a;border-radius:4px;padding:3px 9px">MIA·NYK</span><span style="border:1px solid #ddd4c4;color:#948b7a;border-radius:4px;padding:3px 9px">GSW·PHX</span></div>
+          <div style="display:flex;gap:0;padding:14px 20px 6px">
+            <div style="flex:1;border:1px solid #ddd4c4;border-radius:6px;padding:15px 17px;background:#f3eee4"><div style="font-size:11px;color:#948b7a;text-transform:uppercase;letter-spacing:.1em">Player A · locked</div><div style="font-size:18px;font-weight:700;margin-top:7px;color:#1e1b16">LeBron James</div><div style="font-size:12px;color:#6b6355">LAL · 37 min</div><div style="margin-top:12px"><span style="font-size:42px;font-weight:800;color:#b8791a">34</span><span style="font-size:12px;color:#948b7a"> PTS</span></div></div>
+            <div style="display:flex;align-items:center;padding:0 12px;color:#948b7a;font-size:12px;font-weight:700">VS</div>
+            <div style="flex:1;border:1px solid #ddd4c4;border-radius:6px;padding:15px 17px;background:#f3eee4"><div style="font-size:11px;color:#e0521f;text-transform:uppercase;letter-spacing:.1em">Player B · hidden</div><div style="font-size:18px;font-weight:700;margin-top:7px;color:#1e1b16">Nikola Jokić</div><div style="font-size:12px;color:#6b6355">DEN · 41 min</div><div style="margin-top:12px"><span style="font-size:42px;font-weight:800;color:#c8bfa8">— —</span><span style="font-size:12px;color:#948b7a"> PTS</span></div></div>
+          </div>
+          <div style="text-align:center;padding:12px 20px 4px;font-size:14px;color:#3b352b">Did <span style="font-weight:700;color:#1e1b16">Jokić</span> score <span style="font-weight:700;color:#1e1b16">more</span> or <span style="font-weight:700;color:#1e1b16">fewer</span> than LeBron's <span style="color:#b8791a;font-weight:700">34</span>?</div>
+          <div style="display:flex;gap:12px;padding:12px 20px 16px"><div style="flex:1;text-align:center;padding:11px;border-radius:6px;background:#e0521f;color:#faf7f1;font-weight:700">▲ HIGHER <span style="opacity:.75">[H]</span></div><div style="flex:1;text-align:center;padding:11px;border-radius:6px;border:1px solid #ddd4c4;color:#6b6355">▼ LOWER <span style="color:#948b7a">[L]</span></div></div>
+          <div style="padding:9px 20px;border-top:1px solid #ddd4c4;background:#f0ebe1;font-size:12px;color:#948b7a">H higher · L lower · ←/→ move · enter guess · esc abandon · Q quit</div>
+        </div>
+      </div>
+    </figure>
+
+    <!-- LIGHT HOME -->
+    <figure style="margin:0;width:100%;max-width:520px">
+      <figcaption style="font:600 13px 'JetBrains Mono',monospace;color:#e0521f;margin-bottom:12px;letter-spacing:.06em">HOME<span style="color:#948b7a;font-weight:400"> · light</span></figcaption>
+      <div class="lwin">
+        <div class="lbar"><span class="dot" style="background:#ff5f57"></span><span class="dot" style="background:#febc2e"></span><span class="dot" style="background:#28c840"></span><span style="margin-left:8px">hoop-higher · Home · light</span></div>
+        <div style="font:14px/1.5 'JetBrains Mono',monospace;color:#3b352b;padding:26px 24px 0;min-height:360px;display:flex;flex-direction:column">
+          <div style="font-size:30px;font-weight:800;color:#e0521f">HOOP HIGHER</div>
+          <div style="height:1px;background:#ddd4c4;margin:12px 0 10px"></div>
+          <div style="color:#6b6355;font-size:13.5px">higher / lower · guess who scored more</div>
+          <div style="color:#b8791a;font-size:13.5px;margin-top:14px">Two players, one hidden number. Back yourself.</div>
+          <div style="margin-top:26px;display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;justify-content:space-between;padding:11px 16px;border-radius:6px;background:#e0521f;color:#faf7f1;font-weight:700"><span>▸ Play</span><span style="opacity:.8">enter</span></div>
+            <div style="display:flex;justify-content:space-between;padding:11px 16px;border-radius:6px;border:1px solid #ddd4c4"><span style="color:#3b352b">Leaderboard</span><span style="color:#948b7a">[L]</span></div>
+            <div style="display:flex;justify-content:space-between;padding:11px 16px;border-radius:6px;border:1px solid #ddd4c4"><span style="color:#3b352b">Stats</span><span style="color:#948b7a">[S]</span></div>
+            <div style="display:flex;justify-content:space-between;padding:11px 16px;border-radius:6px;border:1px solid #ddd4c4"><span style="color:#3b352b">Quit</span><span style="color:#948b7a">[Q]</span></div>
+          </div>
+          <div style="margin-top:auto;padding:9px 0;border-top:1px solid #ddd4c4;font-size:12px;color:#948b7a">↑/↓ move · enter select · letter = shortcut</div>
+        </div>
+      </div>
+    </figure>
+  </div>
+
+  <div style="height:1px;background:linear-gradient(90deg,#ff6a3d,#20242d 40%,transparent);margin:48px 0 48px"></div>
+
+  <!-- INTERACTION SPEC -->
+  <div style="font:600 12px 'JetBrains Mono',monospace;letter-spacing:.34em;color:#5c626d;text-transform:uppercase;margin-bottom:8px">06 · Interaction spec</div>
+  <h2 style="margin:0 0 30px;font-size:34px;font-weight:600;letter-spacing:-.02em">How it feels to play</h2>
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:22px;max-width:1700px">
+    <div style="border:1px solid #20242d;border-radius:14px;background:#0e1013;padding:24px 26px">
+      <div style="font:700 15px 'JetBrains Mono',monospace;color:#ff6a3d;margin-bottom:12px">Focus</div>
+      <p style="margin:0;font-size:14px;line-height:1.62;color:#a6acb6">The focused widget fills solid orange (paper: #E0521F); everything else is a hairline outline with a muted label. ←/→ toggle the two guess buttons, ↑/↓ walk menus. Focus is a fill change, never colour-only — legible on 16-colour terminals via reverse video.</p>
+    </div>
+    <div style="border:1px solid #20242d;border-radius:14px;background:#0e1013;padding:24px 26px">
+      <div style="font:700 15px 'JetBrains Mono',monospace;color:#46c988;margin-bottom:12px">The 1.2s reveal</div>
+      <p style="margin:0;font-size:14px;line-height:1.62;color:#a6acb6">On guess both buttons dim to disabled instantly (no double-submit). Player B's <span style="color:#5c626d">— — PTS</span> flips to the real number and its whole panel border + number turn <span style="color:#46c988">green</span> (right) or <span style="color:#ff5d61">red</span> (wrong) with a ▲/▼. A verdict strip drops in with the trash-talk line + signed delta; the scorebug score recolours for one beat. After 1.2s the next question swaps in — or a modal takes over.</p>
+    </div>
+    <div style="border:1px solid #20242d;border-radius:14px;background:#0e1013;padding:24px 26px">
+      <div style="font:700 15px 'JetBrains Mono',monospace;color:#f2c14e;margin-bottom:12px">Loading &amp; errors</div>
+      <p style="margin:0;font-size:14px;line-height:1.62;color:#a6acb6">Picking a mode disables all three cards and drops an amber status strip with a braille spinner. Message escalates on a 1s tick: &lt;5s "Loading…" → 5–15s "Still fetching NBA games (n s)…" → &gt;15s "stats.nba.com is slow; esc to cancel." Back becomes <span style="color:#f2c14e;font-weight:700">CANCEL</span>. Failure raises the red "Unable to start game" toast and returns to idle.</p>
+    </div>
+    <div style="border:1px solid #20242d;border-radius:14px;background:#0e1013;padding:24px 26px">
+      <div style="font:700 15px 'JetBrains Mono',monospace;color:#ff6a3d;margin-bottom:12px">The scorebug</div>
+      <p style="margin:0;font-size:14px;line-height:1.62;color:#a6acb6">One row pinned to the top of Game: brand + mode + round + Q on the left, score + streak + best on the right. It replaces the old redundant centred title band, and is the single constant that carries run status through every question and modal.</p>
+    </div>
+    <div style="border:1px solid #20242d;border-radius:14px;background:#0e1013;padding:24px 26px">
+      <div style="font:700 15px 'JetBrains Mono',monospace;color:#9aa0ab;margin-bottom:12px">Degradation order</div>
+      <p style="margin:0;font-size:14px;line-height:1.62;color:#a6acb6">As width drops, things leave in this order: games strip detail → last-guess line → side-by-side layout (players stack) → button labels (HIGHER→HI). The matchup and both actions are never dropped. Short heights let the game body scroll while scorebug + buttons + footer stay pinned.</p>
+    </div>
+    <div style="border:1px solid #20242d;border-radius:14px;background:#0e1013;padding:24px 26px">
+      <div style="font:700 15px 'JetBrains Mono',monospace;color:#c8ccd4;margin-bottom:12px">Keys &amp; discovery</div>
+      <p style="margin:0;font-size:14px;line-height:1.62;color:#a6acb6">Every screen ends in a dim footer of live bindings (<span style="color:#c8ccd4">H L · ←/→ · 1 2 3 · enter · esc · Q</span>), so muscle-memory keys are always one glance away. Letter shortcuts sit bracketed inside their own labels — binding and target never separated. No action is mouse-only.</p>
+    </div>
+  </div>
+
+  <div style="height:60px"></div>
+  <div style="font:500 12.5px 'JetBrains Mono',monospace;color:#3a4048;letter-spacing:.06em">HOOP HIGHER · TUI redesign v2 · STAT DESK · widget-faithful · dark default + light · lg/md/sm/xs</div>
+
+</section>
+</x-dc>
+</body>
+</html>
