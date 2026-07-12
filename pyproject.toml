@@ -14,7 +14,7 @@ dependencies = [
     "platformdirs>=4.9.4",
     "pydantic-settings>=2.13.1",
     "sqlmodel>=0.0.38",
-    "textual>=8.2.1",
+    "textual>=8.2.8",
 ]
 
 [dependency-groups]
