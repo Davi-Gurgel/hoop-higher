@@ -422,8 +422,8 @@ def test_stats_screen_refreshes_after_a_run_is_played(tmp_path, monkeypatch) -> 
             await pilot.press("enter")
             await pilot.pause()
             assert type(app.screen).__name__ == "StatsScreen"
-            assert "Runs played: 0" in _label_texts(app)
-            assert "Questions answered: 0" in _label_texts(app)
+            assert app.screen.query_one("#stat-runs-value").visual.plain == "0"
+            assert app.screen.query_one("#stat-questions-value").visual.plain == "0"
 
             await pilot.press("escape")
             await pilot.pause()
@@ -448,8 +448,8 @@ def test_stats_screen_refreshes_after_a_run_is_played(tmp_path, monkeypatch) -> 
             await pilot.press("s")
             await pilot.pause()
             assert type(app.screen).__name__ == "StatsScreen"
-            assert "Runs played: 1" in _label_texts(app)
-            assert "Questions answered: 1" in _label_texts(app)
+            assert app.screen.query_one("#stat-runs-value").visual.plain == "1"
+            assert app.screen.query_one("#stat-questions-value").visual.plain == "1"
 
     asyncio.run(scenario())
 
