@@ -11,7 +11,7 @@ from textual.screen import ModalScreen, Screen
 from textual.widgets import Button, Label
 
 from hoophigher.domain.enums import GuessDirection
-from hoophigher.domain.models import Question
+from hoophigher.domain.models import Question, QuestionResult
 from hoophigher.services import GameplaySnapshot
 from hoophigher.tui.widgets import (
     DialogShell,
@@ -20,11 +20,13 @@ from hoophigher.tui.widgets import (
     GuessBar,
     MatchupPanel,
     Scorebug,
+    StatusStrip,
     hints,
 )
 from hoophigher.tui.widgets.gameplay import LastGuess
 
 _FEEDBACK_DURATION_SECONDS = 1.2
+_REVEAL_HELD_HINT = "[blink $warning]reveal held · next question in 1.2s…[/]"
 
 _FOOTER_HINTS = {
     "full": hints(
@@ -146,27 +148,6 @@ class GameScreen(Screen[None]):
         overflow-y: hidden;
     }
 
-    GameScreen #feedback-bar {
-        height: 3;
-        width: 100%;
-        padding: 1 2;
-        text-align: center;
-        text-style: bold;
-        display: none;
-    }
-
-    GameScreen #feedback-bar.feedback-correct {
-        background: $success-fill;
-        color: $success;
-        display: block;
-    }
-
-    GameScreen #feedback-bar.feedback-wrong {
-        background: $danger-fill;
-        color: $error;
-        display: block;
-    }
-
     GameScreen.-h-sm #game-scroll,
     GameScreen.-h-xs #game-scroll {
         overflow-y: auto;
@@ -205,12 +186,12 @@ class GameScreen(Screen[None]):
 
     def compose(self) -> ComposeResult:
         yield self._scorebug
-        yield Label("", id="feedback-bar")
 
         with Vertical(id="game-layout"):
             with Vertical(id="game-scroll"):
                 yield self._context_strip
                 yield self._matchup_panel
+            yield StatusStrip(id="verdict-strip")
             yield self._guess_bar
 
         yield self._footer
@@ -320,7 +301,7 @@ class GameScreen(Screen[None]):
         self._snapshot = self.app.gameplay_service.snapshot()
 
         # Show reveal + feedback
-        self._show_reveal(result.revealed_points, result.is_correct, result.score_delta)
+        self._show_reveal(result, guess)
 
         # After feedback delay, advance
         self.set_timer(
@@ -419,24 +400,46 @@ class GameScreen(Screen[None]):
             )
         return Content.from_markup(f"More or fewer than [$warning]{points}[/]?")
 
-    def _show_reveal(self, revealed_points: int, is_correct: bool, score_delta: int) -> None:
-        """Flash feedback bar and reveal Player B's points."""
-        feedback = self.query_one("#feedback-bar", Label)
-        feedback.remove_class("feedback-correct", "feedback-wrong")
+    def _show_reveal(self, result: QuestionResult, guess: GuessDirection) -> None:
+        """Reveal B's number, drop the verdict strip, flash the scorebug."""
+        went_over = result.revealed_points > result.question.player_a.points
+        self._matchup_panel.reveal(
+            result.revealed_points,
+            is_correct=result.is_correct,
+            went_over=went_over,
+        )
 
-        if is_correct:
-            feedback.update(f"✓  CORRECT!  +{score_delta} pts")
-            feedback.add_class("feedback-correct")
+        signed_delta = f"{result.score_delta:+d}".replace("-", "−")
+        strip = self.query_one("#verdict-strip", StatusStrip)
+        if result.is_correct:
+            strip.show(
+                "-success",
+                Content.from_markup(
+                    "[bold $success]CALLED IT.[/]  $b_name went for "
+                    f"{result.revealed_points} — that's {'over' if went_over else 'under'}.",
+                    b_name=(result.question.player_b.player_name.split() or ["—"])[-1],
+                ),
+                f"[bold $success]{signed_delta}[/]",
+            )
         else:
-            feedback.update(f"✕  WRONG!  {score_delta:+d} pts")
-            feedback.add_class("feedback-wrong")
+            strip.show(
+                "-danger",
+                Content.from_markup(
+                    f"[bold $error]ICE COLD.[/]  He dropped {result.revealed_points} "
+                    f"— you said {guess.value}.",
+                ),
+                f"[bold $error]{signed_delta}[/]",
+            )
+            losing_button = "guess-higher" if guess is GuessDirection.HIGHER else "guess-lower"
+            self._guess_bar.mark_wrong(losing_button)
 
-        self._matchup_panel.reveal_points(revealed_points)
+        self._scorebug.update_snapshot(self._snapshot)
+        self._scorebug.show_scoring_event(is_gain=result.is_correct)
+        self._footer.set_hints(_REVEAL_HELD_HINT)
 
     def _hide_feedback(self) -> None:
-        feedback = self.query_one("#feedback-bar", Label)
-        feedback.remove_class("feedback-correct", "feedback-wrong")
-        feedback.update("")
+        self.query_one("#verdict-strip", StatusStrip).hide()
+        self._guess_bar.clear_wrong()
 
     def _show_game_over_screen(self) -> None:
         if self._game_over_screen_visible:

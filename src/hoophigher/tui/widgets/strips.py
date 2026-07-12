@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from textual.app import ComposeResult
 from textual.containers import Horizontal
+from textual.content import Content
 from textual.widgets import Static
 
 STATUS_STRIP_TONES = ("-loading", "-success", "-danger")
@@ -57,7 +58,7 @@ class StatusStrip(Horizontal):
         yield Static("", id="strip-body")
         yield Static("", id="strip-value")
 
-    def show(self, tone: str, body_markup: str, value_markup: str = "") -> None:
+    def show(self, tone: str, body_markup: str | Content, value_markup: str | Content = "") -> None:
         """Reveal the strip with the given tone, body, and right-aligned value."""
         if tone not in STATUS_STRIP_TONES:
             raise ValueError(f"Unknown StatusStrip tone {tone!r}.")

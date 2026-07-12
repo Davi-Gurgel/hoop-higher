@@ -212,6 +212,16 @@ class PlayerCard(Vertical):
     PlayerCard .player-pts-value {
         width: 100%;
     }
+
+    PlayerCard.-revealed-success {
+        border: round $success;
+        background: $success-fill;
+    }
+
+    PlayerCard.-revealed-danger {
+        border: round $error;
+        background: $danger-fill;
+    }
     """
 
     def __init__(self, prefix: str, *, hidden_side: bool = False, **kwargs: object) -> None:
@@ -226,6 +236,7 @@ class PlayerCard(Vertical):
         yield Static("", id=f"{self._prefix}-pts", classes="player-pts-value")
 
     def show_player(self, *, name: str, team: str, minutes: int) -> None:
+        self.remove_class("-revealed-success", "-revealed-danger")
         if self._hidden_side:
             label = "PLAYER B · [$accent]HIDDEN[/]"
         else:
@@ -241,6 +252,19 @@ class PlayerCard(Vertical):
     def show_points(self, points: int) -> None:
         self.query_one(f"#{self._prefix}-pts", Static).update(
             Content.from_markup(f"[bold $warning]{points}[/][$dim] PTS[/]")
+        )
+
+    def reveal(self, points: int, *, is_correct: bool, went_over: bool) -> None:
+        """Flip the hidden total to the real number and recolor the card."""
+        tone = "success" if is_correct else "danger"
+        color = "$success" if is_correct else "$error"
+        arrow = "▲" if went_over else "▼"
+        self.add_class(f"-revealed-{tone}")
+        self.query_one(f"#{self._prefix}-label", Static).update(
+            Content.from_markup(f"PLAYER B · [{color}]REVEALED[/]")
+        )
+        self.query_one(f"#{self._prefix}-pts", Static).update(
+            Content.from_markup(f"[bold {color}]{points} {arrow}[/][$dim] PTS[/]")
         )
 
     def clear(self) -> None:
@@ -310,8 +334,8 @@ class MatchupPanel(Vertical):
             minutes=question.player_b.minutes,
         )
 
-    def reveal_points(self, points: int) -> None:
-        self._player_b_card.show_points(points)
+    def reveal(self, points: int, *, is_correct: bool, went_over: bool) -> None:
+        self._player_b_card.reveal(points, is_correct=is_correct, went_over=went_over)
 
 
 class GuessButton(Button, inherit_bindings=False):
@@ -353,6 +377,12 @@ class GuessButton(Button, inherit_bindings=False):
             color: $disabled-text;
             text-opacity: 1;
         }
+
+        &.-wrong, &.-wrong:disabled {
+            border: round $error;
+            background: transparent;
+            color: $error;
+        }
     }
     """
 
@@ -382,6 +412,16 @@ class GuessBar(Vertical):
     }
     """
 
+    _LABELS = {
+        "full": ("▲ HIGHER [H]", "▼ LOWER [L]"),
+        "compact": ("▲ HIGHER", "▼ LOWER"),
+        "mini": ("▲ HI · H", "▼ LO · L"),
+    }
+
+    def __init__(self, **kwargs: object) -> None:
+        super().__init__(**kwargs)
+        self._label_mode = "full"
+
     def compose(self) -> ComposeResult:
         yield Static("", id="pb-compare")
         with Horizontal(id="guess-actions"):
@@ -392,14 +432,21 @@ class GuessBar(Vertical):
         self.query_one("#pb-compare", Static).update(prompt)
 
     def set_label_mode(self, mode: str) -> None:
-        labels = {
-            "full": ("▲ HIGHER [H]", "▼ LOWER [L]"),
-            "compact": ("▲ HIGHER", "▼ LOWER"),
-            "mini": ("▲ HI · H", "▼ LO · L"),
-        }
-        higher_text, lower_text = labels[mode]
+        self._label_mode = mode
+        higher_text, lower_text = self._LABELS[mode]
         self.query_one("#guess-higher", Button).label = Content(higher_text)
         self.query_one("#guess-lower", Button).label = Content(lower_text)
+
+    def mark_wrong(self, button_id: str) -> None:
+        """Give the losing guess button a danger outline and a ✗ marker."""
+        button = self.query_one(f"#{button_id}", Button)
+        button.add_class("-wrong")
+        button.label = Content(f"✗ {button.label.plain}")
+
+    def clear_wrong(self) -> None:
+        for button in self.query(GuessButton):
+            button.remove_class("-wrong")
+        self.set_label_mode(self._label_mode)
 
     def set_buttons_disabled(self, disabled: bool) -> None:
         self.query_one("#guess-higher", Button).disabled = disabled
