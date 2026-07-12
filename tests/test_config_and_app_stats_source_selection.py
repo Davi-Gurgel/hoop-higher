@@ -490,10 +490,10 @@ def test_start_game_times_out_slow_real_data_provider(monkeypatch) -> None:
     assert notifications == [
         (
             (
-                "NBA data is taking too long to respond. Try again, use cached data, "
-                "or lower HOOPHIGHER_NBA_API_TIMEOUT_SECONDS for faster failures."
+                "stats.nba.com timed out. Not on you this time — try again, use cached "
+                "data, or lower HOOPHIGHER_NBA_API_TIMEOUT_SECONDS for faster failures."
             ),
-            {"title": "Unable to start game", "severity": "error"},
+            {"title": "✗ Unable to start game", "severity": "error"},
         )
     ]
 
@@ -523,7 +523,7 @@ def test_start_game_notifies_when_real_data_cannot_start(monkeypatch) -> None:
     assert notifications == [
         (
             "No playable games found for provided candidate dates.",
-            {"title": "Unable to start game", "severity": "error"},
+            {"title": "✗ Unable to start game", "severity": "error"},
         )
     ]
 

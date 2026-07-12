@@ -531,7 +531,7 @@ def test_game_screen_surfaces_active_game_context() -> None:
             await pilot.pause()
 
             snapshot = app.gameplay_service.snapshot()
-            active_game = app.screen.query_one("#active-game-title", Label)
+            active_game = app.screen.query_one("#context-date")
             player_a_name = app.screen.query_one("#pa-name", Label)
             player_b_name = app.screen.query_one("#pb-name", Label)
 
@@ -542,9 +542,7 @@ def test_game_screen_surfaces_active_game_context() -> None:
                 for i, g in enumerate(snapshot.games_today)
                 if g.game_id == snapshot.current_game.game_id
             )
-            assert app.screen.query_one(f"#game-tab-{current_game_index}", Label).has_class(
-                "browser-tab-active"
-            )
+            assert app.screen.query_one(f"#game-tab-{current_game_index}").has_class("-active")
             assert player_a_name.visual.plain != ""
             assert player_b_name.visual.plain != ""
 
@@ -606,7 +604,7 @@ def test_game_screen_renders_provider_strings_as_plain_text(
 
             label_texts = _label_texts(app)
 
-            assert any("[RED]NAME[/RED]" in text for text in label_texts)
+            assert any("[red]Name[/red]" in text for text in label_texts)
             assert any("[red]X[/red]" in text for text in label_texts)
 
     asyncio.run(scenario())
@@ -760,8 +758,8 @@ def test_game_screen_active_tab_moves_after_round_end() -> None:
             )
 
             assert next_active_index != initial_active_index
-            active_tab = app.screen.query_one(f"#game-tab-{next_active_index}", Label)
-            assert active_tab.has_class("browser-tab-active")
+            active_tab = app.screen.query_one(f"#game-tab-{next_active_index}")
+            assert active_tab.has_class("-active")
 
     asyncio.run(scenario())
 

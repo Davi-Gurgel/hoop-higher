@@ -6,22 +6,38 @@ from time import monotonic
 from textual import events
 from textual.app import ComposeResult
 from textual.containers import Vertical
+from textual.content import Content
 from textual.screen import ModalScreen, Screen
-from textual.widgets import Button, Footer, Header, Label
+from textual.widgets import Button, Label
 
 from hoophigher.domain.enums import GuessDirection
 from hoophigher.domain.models import Question
 from hoophigher.services import GameplaySnapshot
 from hoophigher.tui.widgets import (
     DialogShell,
+    FooterHints,
     GameContextStrip,
-    GameStatusStrip,
     GuessBar,
     MatchupPanel,
+    Scorebug,
+    hints,
 )
+from hoophigher.tui.widgets.gameplay import LastGuess
 
-_MAX_HISTORY_ITEMS = 6
 _FEEDBACK_DURATION_SECONDS = 1.2
+
+_FOOTER_HINTS = {
+    "full": hints(
+        ("H", "higher"),
+        ("L", "lower"),
+        ("←/→", "move"),
+        ("enter", "guess"),
+        ("esc", "abandon"),
+        ("Q", "quit"),
+    ),
+    "compact": hints(("H", ""), ("L", ""), ("←/→", ""), ("esc", ""), ("Q", "")),
+    "mini": hints(("H/L", ""), ("esc", "home")),
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,7 +45,6 @@ class GuessHistoryItem:
     index: int
     is_correct: bool
     score_delta: int
-    description: str
 
 
 class GameOverScreen(ModalScreen[None]):
@@ -42,13 +57,13 @@ class GameOverScreen(ModalScreen[None]):
 
     GameOverScreen #gameover-overlay {
         width: 56;
-        border: heavy #f85149;
+        border: heavy $error;
     }
 
     GameOverScreen #gameover-title {
         text-align: center;
         text-style: bold;
-        color: #f85149;
+        color: $error;
         width: 100%;
         margin-bottom: 1;
     }
@@ -62,7 +77,7 @@ class GameOverScreen(ModalScreen[None]):
     GameOverScreen .gameover-stat-highlight {
         text-align: center;
         text-style: bold;
-        color: #f0883e;
+        color: $warning;
         width: 100%;
         margin-bottom: 1;
     }
@@ -141,14 +156,14 @@ class GameScreen(Screen[None]):
     }
 
     GameScreen #feedback-bar.feedback-correct {
-        background: #1a3a1a;
-        color: #3fb950;
+        background: $success-fill;
+        color: $success;
         display: block;
     }
 
     GameScreen #feedback-bar.feedback-wrong {
-        background: #3a1a1a;
-        color: #f85149;
+        background: $danger-fill;
+        color: $error;
         display: block;
     }
 
@@ -173,22 +188,23 @@ class GameScreen(Screen[None]):
         self._snapshot = snapshot
         self._history: list[GuessHistoryItem] = []
         self._round_history: list[GuessHistoryItem] = []
+        self._last_guess: LastGuess | None = None
         self._awaiting_feedback = False
         self._game_over_screen_visible = False
         self._question_started_at: float | None = None
-        self._status_strip = GameStatusStrip(id="status-bar")
+        self._scorebug = Scorebug(id="scorebug")
         self._context_strip = GameContextStrip(
             len(snapshot.games_today),
             id="day-games-panel",
         )
         self._matchup_panel = MatchupPanel(id="matchup-area")
         self._guess_bar = GuessBar(id="actions-panel")
+        self._footer = FooterHints(id="game-footer")
 
     # ── Layout ────────────────────────────────────────────────
 
     def compose(self) -> ComposeResult:
-        yield Header(show_clock=False)
-        yield self._status_strip
+        yield self._scorebug
         yield Label("", id="feedback-bar")
 
         with Vertical(id="game-layout"):
@@ -197,7 +213,7 @@ class GameScreen(Screen[None]):
                 yield self._matchup_panel
             yield self._guess_bar
 
-        yield Footer()
+        yield self._footer
 
     # ── Lifecycle ──────────────────────────────────────────────
 
@@ -284,21 +300,22 @@ class GameScreen(Screen[None]):
             response_time_ms=response_time_ms,
         )
 
-        # Build history item
         history_item = GuessHistoryItem(
             index=previous_snapshot.question_index + 1,
             is_correct=result.is_correct,
             score_delta=result.score_delta,
-            description=(
-                f"Q{previous_snapshot.question_index + 1}: "
-                f"{result.question.player_a.player_name} vs "
-                f"{result.question.player_b.player_name} "
-                f"→ {'✓' if result.is_correct else '✕'} ({result.score_delta:+d})"
-            ),
         )
         self._history.append(history_item)
-        self._history = self._history[-_MAX_HISTORY_ITEMS:]
         self._round_history.append(history_item)
+        self._last_guess = LastGuess(
+            player_a_name=result.question.player_a.player_name,
+            player_a_points=result.question.player_a.points,
+            guessed_over=guess is GuessDirection.HIGHER,
+            player_b_name=result.question.player_b.player_name,
+            player_b_points=result.revealed_points,
+            is_correct=result.is_correct,
+            score_delta=result.score_delta,
+        )
 
         self._snapshot = self.app.gameplay_service.snapshot()
 
@@ -355,20 +372,14 @@ class GameScreen(Screen[None]):
     def _refresh_view(self) -> None:
         s = self._snapshot
 
-        self._status_strip.update_snapshot(s)
+        self._scorebug.update_snapshot(s)
         self._context_strip.update_snapshot(s)
-
-        if self._history:
-            last = self._history[-1]
-            self._context_strip.update_history(last.description)
-        else:
-            self._context_strip.update_history("")
+        self._context_strip.update_last_guess(self._last_guess)
 
         question = s.current_question
         if question is None:
             self._matchup_panel.clear()
             self._guess_bar.set_prompt("")
-            self._guess_bar.set_controls_hint("Use H/L or ←/→ + Enter")
             self._set_buttons_disabled(True)
             self._sync_responsive_copy(self.size.width, self.size.height)
             return
@@ -386,6 +397,8 @@ class GameScreen(Screen[None]):
             mode = "compact"
 
         self._guess_bar.set_label_mode(mode)
+        self._scorebug.set_tier({"full": "full", "compact": "sm", "mini": "xs"}[mode])
+        self._footer.set_hints(_FOOTER_HINTS[mode])
 
         question = self._snapshot.current_question
         if question is None:
@@ -393,25 +406,18 @@ class GameScreen(Screen[None]):
         else:
             self._guess_bar.set_prompt(self._build_compare_prompt(question, mode))
 
-        controls_hint = {
-            "full": "Use H/L or ←/→ + Enter",
-            "compact": "H/L or ←/→ + Enter",
-            "mini": "H/L or ←/→",
-        }[mode]
-        self._guess_bar.set_controls_hint(controls_hint)
-
-    def _build_compare_prompt(self, question: Question, mode: str) -> str:
-        if mode == "mini":
-            return f"{question.player_b.player_name} vs {question.player_a.points} pts?"
-        if mode == "compact":
-            return (
-                f"Did {question.player_b.player_name} score above or below "
-                f"{question.player_a.points} pts?"
+    def _build_compare_prompt(self, question: Question, mode: str) -> Content:
+        points = question.player_a.points
+        if mode == "full":
+            first_name = question.player_a.player_name.split()
+            last_name = question.player_b.player_name.split()
+            return Content.from_markup(
+                "Did [bold]$b_name[/] score [bold]more[/] or [bold]fewer[/] "
+                f"than $a_name's [$warning]{points}[/]?",
+                b_name=last_name[-1] if last_name else question.player_b.player_name,
+                a_name=first_name[0] if first_name else question.player_a.player_name,
             )
-        return (
-            f"Did {question.player_b.player_name} score more or fewer than "
-            f"{question.player_a.points} pts?"
-        )
+        return Content.from_markup(f"More or fewer than [$warning]{points}[/]?")
 
     def _show_reveal(self, revealed_points: int, is_correct: bool, score_delta: int) -> None:
         """Flash feedback bar and reveal Player B's points."""

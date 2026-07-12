@@ -5,8 +5,8 @@ from hoophigher.tui.widgets.mode_card import ModeCard
 from hoophigher.tui.widgets.strips import StatusStrip
 from hoophigher.tui.widgets.gameplay import (
     GameContextStrip,
-    GameStatusStrip,
     GuessBar,
+    LastGuess,
     MatchupPanel,
 )
 
@@ -15,9 +15,9 @@ __all__ = [
     "DialogShell",
     "FooterHints",
     "GameContextStrip",
-    "GameStatusStrip",
     "GuessBar",
     "HeaderBand",
+    "LastGuess",
     "MatchupPanel",
     "ModeCard",
     "Scorebug",
