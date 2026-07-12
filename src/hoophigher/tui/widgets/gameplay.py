@@ -97,6 +97,24 @@ class GameContextStrip(Vertical):
         color: $dim;
         display: none;
     }
+
+    /* sm (and very short terminals): games strip collapses to the active
+       summary line. xs: strip and last-guess line drop entirely. */
+    GameScreen.-w-sm GameContextStrip #games-strip,
+    GameScreen.-w-xs GameContextStrip #games-strip,
+    GameScreen.-h-xs GameContextStrip #games-strip {
+        display: none;
+    }
+
+    GameScreen.-w-sm GameContextStrip #games-strip-summary,
+    GameScreen.-h-xs GameContextStrip #games-strip-summary {
+        display: block;
+    }
+
+    GameScreen.-w-xs GameContextStrip #context-last-guess,
+    GameScreen.-w-xs GameContextStrip #games-strip-summary {
+        display: none;
+    }
     """
 
     def __init__(self, total_games: int, **kwargs: object) -> None:
@@ -180,7 +198,11 @@ class GameContextStrip(Vertical):
 
 
 class PlayerCard(Vertical):
-    """One matchup card: dim label, bold name, muted meta, hero point total."""
+    """One matchup card: dim label, bold name, muted meta, hero point total.
+
+    Renders from internal state so the xs tier can swap to a single compact
+    row (`A LeBron James  LAL  34p`) without losing the reveal treatment.
+    """
 
     DEFAULT_CSS = """
     PlayerCard {
@@ -213,6 +235,11 @@ class PlayerCard(Vertical):
         width: 100%;
     }
 
+    PlayerCard .player-compact-line {
+        width: 100%;
+        display: none;
+    }
+
     PlayerCard.-revealed-success {
         border: round $success;
         background: $success-fill;
@@ -222,56 +249,128 @@ class PlayerCard(Vertical):
         border: round $error;
         background: $danger-fill;
     }
+
+    PlayerCard.-compact {
+        border: none;
+        background: transparent;
+        padding: 0 1;
+        min-height: 1;
+        height: auto;
+    }
+
+    PlayerCard.-compact .player-label,
+    PlayerCard.-compact .player-name-label,
+    PlayerCard.-compact .player-meta-label,
+    PlayerCard.-compact .player-pts-value {
+        display: none;
+    }
+
+    PlayerCard.-compact .player-compact-line {
+        display: block;
+    }
     """
 
     def __init__(self, prefix: str, *, hidden_side: bool = False, **kwargs: object) -> None:
         super().__init__(**kwargs)
         self._prefix = prefix
         self._hidden_side = hidden_side
+        self._tier = "full"
+        self._name = "—"
+        self._team = ""
+        self._minutes: int | None = None
+        self._points: int | None = None
+        self._reveal_state: tuple[bool, bool] | None = None  # (is_correct, went_over)
 
     def compose(self) -> ComposeResult:
         yield Static("", id=f"{self._prefix}-label", classes="player-label")
         yield Label("", id=f"{self._prefix}-name", classes="player-name-label", markup=False)
         yield Label("", id=f"{self._prefix}-meta", classes="player-meta-label", markup=False)
         yield Static("", id=f"{self._prefix}-pts", classes="player-pts-value")
+        yield Static("", id=f"{self._prefix}-compact", classes="player-compact-line")
+
+    def on_mount(self) -> None:
+        self._render_card()
 
     def show_player(self, *, name: str, team: str, minutes: int) -> None:
-        self.remove_class("-revealed-success", "-revealed-danger")
-        if self._hidden_side:
-            label = "PLAYER B · [$accent]HIDDEN[/]"
-        else:
-            label = "PLAYER A · LOCKED"
-        self.query_one(f"#{self._prefix}-label", Static).update(Content.from_markup(label))
-        self.query_one(f"#{self._prefix}-name", Label).update(name)
-        self.query_one(f"#{self._prefix}-meta", Label).update(f"{team} · {minutes} min")
-        if self._hidden_side:
-            self.query_one(f"#{self._prefix}-pts", Static).update(
-                Content.from_markup("[$hidden-glyph]— —[/][$dim] PTS[/]")
-            )
+        self._name = name
+        self._team = team
+        self._minutes = minutes
+        self._points = None
+        self._reveal_state = None
+        self._render_card()
 
     def show_points(self, points: int) -> None:
-        self.query_one(f"#{self._prefix}-pts", Static).update(
-            Content.from_markup(f"[bold $warning]{points}[/][$dim] PTS[/]")
-        )
+        self._points = points
+        self._render_card()
 
     def reveal(self, points: int, *, is_correct: bool, went_over: bool) -> None:
         """Flip the hidden total to the real number and recolor the card."""
-        tone = "success" if is_correct else "danger"
-        color = "$success" if is_correct else "$error"
-        arrow = "▲" if went_over else "▼"
-        self.add_class(f"-revealed-{tone}")
-        self.query_one(f"#{self._prefix}-label", Static).update(
-            Content.from_markup(f"PLAYER B · [{color}]REVEALED[/]")
-        )
-        self.query_one(f"#{self._prefix}-pts", Static).update(
-            Content.from_markup(f"[bold {color}]{points} {arrow}[/][$dim] PTS[/]")
-        )
+        self._points = points
+        self._reveal_state = (is_correct, went_over)
+        self._render_card()
 
     def clear(self) -> None:
-        self.query_one(f"#{self._prefix}-label", Static).update("")
-        self.query_one(f"#{self._prefix}-name", Label).update("—")
-        self.query_one(f"#{self._prefix}-meta", Label).update("")
-        self.query_one(f"#{self._prefix}-pts", Static).update("")
+        self._name = "—"
+        self._team = ""
+        self._minutes = None
+        self._points = None
+        self._reveal_state = None
+        self._render_card()
+
+    def set_tier(self, tier: str) -> None:
+        if tier != self._tier:
+            self._tier = tier
+            self.set_class(tier == "xs", "-compact")
+            self._render_card()
+
+    def _render_card(self) -> None:
+        if not self.is_mounted:
+            return
+        side = "B" if self._hidden_side else "A"
+        if self._reveal_state is not None:
+            is_correct, _went_over = self._reveal_state
+            color = "$success" if is_correct else "$error"
+            self.set_class(is_correct, "-revealed-success")
+            self.set_class(not is_correct, "-revealed-danger")
+            label = Content.from_markup(f"PLAYER B · [{color}]REVEALED[/]")
+        else:
+            self.remove_class("-revealed-success", "-revealed-danger")
+            if self._hidden_side:
+                label = Content.from_markup("PLAYER B · [$accent]HIDDEN[/]")
+            else:
+                label = Content.from_markup("PLAYER A · LOCKED")
+        self.query_one(f"#{self._prefix}-label", Static).update(label)
+        self.query_one(f"#{self._prefix}-name", Label).update(self._name)
+        minutes_label = (
+            ""
+            if self._minutes is None
+            else (f"{self._minutes} min" if self._tier == "full" else f"{self._minutes}m")
+        )
+        meta = f"{self._team} · {minutes_label}" if self._team else ""
+        self.query_one(f"#{self._prefix}-meta", Label).update(meta)
+        self.query_one(f"#{self._prefix}-pts", Static).update(self._points_markup(" PTS"))
+        compact = Content.from_markup(
+            "[$dim]$side[/] [bold]$name[/]  [$muted]$team[/]  ",
+            side=side,
+            name=self._name,
+            team=self._team,
+        )
+        self.query_one(f"#{self._prefix}-compact", Static).update(
+            compact + self._points_markup("p")
+        )
+
+    def _points_markup(self, unit: str) -> Content:
+        if self._points is None:
+            if self._hidden_side:
+                glyph = "— —" if self._tier == "full" else "——"
+                return Content.from_markup(f"[$hidden-glyph]{glyph}[/][$dim]{unit}[/]")
+            return Content("")
+        if self._reveal_state is not None:
+            is_correct, went_over = self._reveal_state
+            color = "$success" if is_correct else "$error"
+            arrow = "▲" if went_over else "▼"
+            return Content.from_markup(f"[bold {color}]{self._points} {arrow}[/][$dim]{unit}[/]")
+        return Content.from_markup(f"[bold $warning]{self._points}[/][$dim]{unit}[/]")
 
 
 class MatchupPanel(Vertical):
@@ -303,6 +402,16 @@ class MatchupPanel(Vertical):
         text-align: center;
         color: $dim;
     }
+
+    MatchupPanel.-compact #matchup-content {
+        layout: vertical;
+    }
+
+    MatchupPanel.-compact #vs-divider {
+        width: 100%;
+        height: 1;
+        min-height: 1;
+    }
     """
 
     def __init__(self, **kwargs: object) -> None:
@@ -320,6 +429,12 @@ class MatchupPanel(Vertical):
     def clear(self) -> None:
         self._player_a_card.clear()
         self._player_b_card.clear()
+
+    def set_tier(self, tier: str) -> None:
+        self.set_class(tier == "xs", "-compact")
+        self._player_a_card.set_tier(tier)
+        self._player_b_card.set_tier(tier)
+        self.query_one("#vs-text", Label).update("— vs —" if tier == "xs" else "VS")
 
     def set_question(self, question: Question) -> None:
         self._player_a_card.show_player(

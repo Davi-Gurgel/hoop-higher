@@ -397,15 +397,19 @@ class GameScreen(Screen[None]):
         self.query_one("#guess-higher", Button).focus()
 
     def _sync_responsive_copy(self, width: int, height: int) -> None:
+        # Width tiers per the handoff (xs <72 / sm 72-95 / md+ ≥96); very
+        # short terminals also drop to the tightest copy so the pinned rows
+        # keep fitting.
         mode = "full"
         if width < 72 or height < 24:
             mode = "mini"
-        elif width < 80 and height < 26:
+        elif width < 96:
             mode = "compact"
 
         self._guess_bar.set_label_mode(mode)
         self._scorebug.set_tier({"full": "full", "compact": "sm", "mini": "xs"}[mode])
         self._footer.set_hints(_FOOTER_HINTS[mode])
+        self._matchup_panel.set_tier("xs" if width < 72 else ("sm" if width < 96 else "full"))
 
         question = self._snapshot.current_question
         if question is None:

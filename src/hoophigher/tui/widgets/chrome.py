@@ -22,7 +22,14 @@ _SCORE_FLASH_SECONDS = 0.8
 
 def hints(*pairs: tuple[str, str]) -> str:
     """Render `(key, label)` pairs as one dim footer line: `H higher · L lower`."""
-    parts = [f"[$muted]{key}[/] {label}" if key else label for key, label in pairs]
+    parts = []
+    for key, label in pairs:
+        if key and label:
+            parts.append(f"[$muted]{key}[/] {label}")
+        elif key:
+            parts.append(f"[$muted]{key}[/]")
+        else:
+            parts.append(label)
     return " · ".join(parts)
 
 
