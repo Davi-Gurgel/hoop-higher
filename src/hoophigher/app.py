@@ -173,15 +173,15 @@ class HoopHigherApp(App[None]):
         except TimeoutError:
             self.notify(
                 (
-                    "NBA data is taking too long to respond. Try again, use cached data, "
-                    "or lower HOOPHIGHER_NBA_API_TIMEOUT_SECONDS for faster failures."
+                    "stats.nba.com timed out. Not on you this time — try again, use cached "
+                    "data, or lower HOOPHIGHER_NBA_API_TIMEOUT_SECONDS for faster failures."
                 ),
-                title="Unable to start game",
+                title="✗ Unable to start game",
                 severity="error",
             )
             return False
         except (LookupError, ValueError) as exc:
-            self.notify(str(exc), title="Unable to start game", severity="error")
+            self.notify(str(exc), title="✗ Unable to start game", severity="error")
             return False
         if not self._uses_mock_stats_source:
             self.clear_notifications()

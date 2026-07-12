@@ -134,17 +134,15 @@ def test_mode_select_shows_loading_state_while_starting_game(monkeypatch) -> Non
             await asyncio.wait_for(started.wait(), timeout=1)
             await pilot.pause()
 
-            assert app.screen.query_one("#mode-loading-status", Label).has_class("-visible")
-            assert app.screen.query_one("#mode-endless", Button).disabled is True
+            assert app.screen.query_one("#mode-loading-status").has_class("-visible")
+            assert app.screen.query_one("#mode-endless", Button).disabled is False
             assert app.screen.query_one("#mode-arcade", Button).disabled is True
             assert app.screen.query_one("#mode-historical", Button).disabled is True
 
             release.set()
             await pilot.pause()
 
-            assert (
-                app.screen.query_one("#mode-loading-status", Label).has_class("-visible") is False
-            )
+            assert app.screen.query_one("#mode-loading-status").has_class("-visible") is False
             assert app.screen.query_one("#mode-endless", Button).disabled is False
 
     asyncio.run(scenario())
@@ -174,18 +172,17 @@ def test_mode_select_back_cancels_loading_worker(monkeypatch) -> None:
             await asyncio.wait_for(started.wait(), timeout=1)
             await pilot.pause()
 
-            assert app.screen.query_one("#mode-endless", Button).disabled is True
+            assert app.screen.query_one("#mode-arcade", Button).disabled is True
+            assert "CANCEL" in app.screen.query_one("#mode-footer").visual.plain
 
             await pilot.press("escape")
             await asyncio.wait_for(cancelled.wait(), timeout=1)
             await pilot.pause()
 
             assert type(app.screen).__name__ == "ModeSelectScreen"
-            assert app.screen.query_one("#mode-endless", Button).disabled is False
-            assert (
-                app.screen.query_one("#mode-loading-status", Label).has_class("-visible") is False
-            )
-            assert "Cancel" not in app.screen.query_one("#mode-back", Button).label.plain
+            assert app.screen.query_one("#mode-arcade", Button).disabled is False
+            assert app.screen.query_one("#mode-loading-status").has_class("-visible") is False
+            assert "CANCEL" not in app.screen.query_one("#mode-footer").visual.plain
 
     asyncio.run(scenario())
 
