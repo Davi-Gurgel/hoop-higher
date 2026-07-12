@@ -5,6 +5,7 @@ from datetime import date, timedelta
 
 from sqlalchemy.engine import Engine
 from textual.app import App
+from textual.theme import Theme
 
 from hoophigher.config import Settings
 from hoophigher.data import create_sqlite_engine, init_db
@@ -23,6 +24,13 @@ from hoophigher.tui.screens import (
     ModeSelectScreen,
     RunHistoryScreen,
     StatsScreen,
+)
+from hoophigher.tui.theme import (
+    DEFAULT_THEME_NAME,
+    STAT_DESK_THEMES,
+    THEME_VARIABLE_DEFAULTS,
+    load_saved_theme_name,
+    save_theme_name,
 )
 
 MOCK_CANDIDATE_DATES = (
@@ -88,7 +96,25 @@ class HoopHigherApp(App[None]):
         self._session_recent_date: date | None = None
         self._game_start_timeout_seconds = GAME_START_TIMEOUT_SECONDS
 
+    def get_theme_variable_defaults(self) -> dict[str, str]:
+        return THEME_VARIABLE_DEFAULTS
+
+    def _restore_theme(self) -> None:
+        for theme in STAT_DESK_THEMES:
+            self.register_theme(theme)
+        saved_theme_name = None if self.is_headless else load_saved_theme_name()
+        if saved_theme_name in self.available_themes:
+            self.theme = saved_theme_name
+        else:
+            self.theme = DEFAULT_THEME_NAME
+        self.theme_changed_signal.subscribe(self, self._persist_theme_choice)
+
+    def _persist_theme_choice(self, theme: Theme) -> None:
+        if not self.is_headless:
+            save_theme_name(theme.name)
+
     def on_mount(self) -> None:
+        self._restore_theme()
         settings = Settings()
         engine = create_sqlite_engine(
             self._database_url or settings.database_url,
