@@ -5,7 +5,7 @@ from datetime import date, datetime, timezone
 
 import pytest
 from sqlmodel import Session
-from textual.widgets import Button, Label
+from textual.widgets import Button, Label, Static
 
 import hoophigher.tui.screens.game as game_screen_module
 from hoophigher.data import (
@@ -838,10 +838,10 @@ def test_round_summary_reports_completed_round_and_resets_for_next_round(monkeyp
                 await pilot.pause(0.05)
 
             assert type(app.screen).__name__ == "RoundSummaryScreen"
-            summary_labels = [label.visual.plain for label in app.screen.query(Label)]
-            assert "ROUND 1 COMPLETE" in summary_labels
-            assert "✓ 5   ✕ 0   (5 questions)" in summary_labels
-            assert "Score Delta: +500" in summary_labels
+            summary_labels = [static.visual.plain for static in app.screen.query(Static)]
+            assert "ROUND 1 · COMPLETE" in summary_labels
+            assert "✓ 5 right   ✗ 0 wrong" in summary_labels
+            assert "round +500" in summary_labels
 
             await pilot.press("enter")
             await pilot.pause()
@@ -858,9 +858,9 @@ def test_round_summary_reports_completed_round_and_resets_for_next_round(monkeyp
                 await pilot.pause(0.05)
 
             assert type(app.screen).__name__ == "RoundSummaryScreen"
-            summary_labels = [label.visual.plain for label in app.screen.query(Label)]
-            assert "ROUND 2 COMPLETE" in summary_labels
-            assert "✓ 4   ✕ 1   (5 questions)" in summary_labels
-            assert "Score Delta: +340" in summary_labels
+            summary_labels = [static.visual.plain for static in app.screen.query(Static)]
+            assert "ROUND 2 · COMPLETE" in summary_labels
+            assert "✓ 4 right   ✗ 1 wrong" in summary_labels
+            assert "round +340" in summary_labels
 
     asyncio.run(scenario())

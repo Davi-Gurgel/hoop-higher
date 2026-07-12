@@ -327,10 +327,15 @@ class GameScreen(Screen[None]):
                 RoundSummaryScreen,
             )
 
+            previous_game = previous_snapshot.current_game
             summary = RoundSummary(
                 round_index=self._snapshot.round_index - 1,
                 game_id=previous_snapshot.game_id,
-                source_date=previous_snapshot.current_game.source_date,
+                source_date=previous_game.source_date,
+                matchup=(
+                    f"{previous_game.away_team.abbreviation} @ "
+                    f"{previous_game.home_team.abbreviation}"
+                ),
                 questions=len(self._round_history),
                 correct_answers=sum(1 for item in self._round_history if item.is_correct),
                 wrong_answers=sum(1 for item in self._round_history if not item.is_correct),
