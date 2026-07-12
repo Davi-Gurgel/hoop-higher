@@ -5,6 +5,7 @@ import time
 from textual import work
 from textual.app import ComposeResult
 from textual.containers import Vertical
+from textual.css.query import NoMatches
 from textual.screen import Screen
 from textual.timer import Timer
 from textual.widgets import Button
@@ -135,11 +136,16 @@ class ModeSelectScreen(Screen[None]):
         if self._loading_status_timer is not None:
             self._loading_status_timer.stop()
             self._loading_status_timer = None
-        for card in self._mode_cards():
-            card.set_loading(False)
-            card.disabled = False
-        self.query_one("#mode-footer", FooterHints).set_hints(_IDLE_HINTS)
-        self.query_one("#mode-loading-status", StatusStrip).hide()
+        try:
+            for card in self._mode_cards():
+                card.set_loading(False)
+                card.disabled = False
+            self.query_one("#mode-footer", FooterHints).set_hints(_IDLE_HINTS)
+            self.query_one("#mode-loading-status", StatusStrip).hide()
+        except NoMatches:
+            # The worker can be cancelled during app shutdown, after this
+            # screen's widgets are gone.
+            pass
 
     def _cancel_start_game(self) -> None:
         self.workers.cancel_group(self, _START_GAME_WORKER_GROUP)

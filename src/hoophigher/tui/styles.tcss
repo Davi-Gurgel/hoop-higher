@@ -8,15 +8,3 @@ Screen {
     background: $background;
     color: $foreground;
 }
-
-Header {
-    background: $panel;
-    color: $accent;
-    dock: top;
-}
-
-Footer {
-    background: $footer-strip;
-    color: $dim;
-    dock: bottom;
-}

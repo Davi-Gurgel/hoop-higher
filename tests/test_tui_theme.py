@@ -43,6 +43,26 @@ def test_light_theme_can_be_activated() -> None:
     asyncio.run(scenario())
 
 
+def test_app_stays_usable_under_ansi_fallback_theme() -> None:
+    """The 16-color validation harness: custom tokens must still resolve and
+    focus must survive without RGB color."""
+
+    async def scenario() -> None:
+        app = HoopHigherApp(database_url="sqlite://")
+
+        async with app.run_test() as pilot:
+            app.theme = "ansi-dark"
+            await pilot.pause()
+            assert getattr(app.screen.focused, "id", None) == "start-game"
+
+            await pilot.press("enter")
+            await pilot.press("1")
+            await pilot.pause()
+            assert type(app.screen).__name__ == "GameScreen"
+
+    asyncio.run(scenario())
+
+
 def test_theme_name_round_trips_through_settings_file(tmp_path) -> None:
     settings_path = tmp_path / "theme"
     assert load_saved_theme_name(settings_path) is None

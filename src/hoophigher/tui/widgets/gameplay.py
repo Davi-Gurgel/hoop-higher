@@ -23,11 +23,6 @@ def _last_name(full_name: str) -> str:
     return parts[-1] if parts else full_name
 
 
-def _first_name(full_name: str) -> str:
-    parts = full_name.split()
-    return parts[0] if parts else full_name
-
-
 @dataclass(frozen=True, slots=True)
 class LastGuess:
     """The context row's `last Morant 34 ›over› Curry 29 ✓ +100` record."""
