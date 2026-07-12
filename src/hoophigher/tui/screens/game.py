@@ -5,16 +5,15 @@ from time import monotonic
 
 from textual import events
 from textual.app import ComposeResult
-from textual.containers import Vertical
+from textual.containers import Horizontal, Vertical
 from textual.content import Content
 from textual.screen import ModalScreen, Screen
-from textual.widgets import Button, Label
+from textual.widgets import Button, Static
 
 from hoophigher.domain.enums import GuessDirection
 from hoophigher.domain.models import Question, QuestionResult
 from hoophigher.services import GameplaySnapshot
 from hoophigher.tui.widgets import (
-    DialogShell,
     FooterHints,
     GameContextStrip,
     GuessBar,
@@ -55,19 +54,37 @@ class GameOverScreen(ModalScreen[None]):
     DEFAULT_CSS = """
     GameOverScreen {
         align: center middle;
+        background: $void 60%;
     }
 
     GameOverScreen #gameover-overlay {
-        width: 56;
-        border: heavy $error;
+        width: 66;
+        max-width: 90%;
+        height: auto;
+        padding: 1 2;
+        border: round $error;
+        background: $danger-fill;
+    }
+
+    GameOverScreen #gameover-actions {
+        width: 100%;
+        height: auto;
+        align-horizontal: center;
+    }
+
+    GameOverScreen #gameover-header {
+        width: 100%;
+        height: 1;
+        margin-bottom: 1;
     }
 
     GameOverScreen #gameover-title {
-        text-align: center;
-        text-style: bold;
+        width: 1fr;
+    }
+
+    GameOverScreen #gameover-reason {
+        width: auto;
         color: $error;
-        width: 100%;
-        margin-bottom: 1;
     }
 
     GameOverScreen .gameover-stat {
@@ -76,17 +93,24 @@ class GameOverScreen(ModalScreen[None]):
         margin-bottom: 1;
     }
 
-    GameOverScreen .gameover-stat-highlight {
-        text-align: center;
-        text-style: bold;
-        color: $warning;
-        width: 100%;
-        margin-bottom: 1;
-    }
+    GameOverScreen #gameover-home,
+    GameOverScreen #gameover-home.-style-default {
+        width: auto;
+        height: 3;
+        min-width: 0;
+        padding: 0 2;
+        border: round $border;
+        background: transparent;
+        color: $foreground;
+        text-style: none;
 
-    GameOverScreen #gameover-home {
-        width: 100%;
-        margin-top: 1;
+        &:focus {
+            border: round $muted;
+            background: transparent;
+            color: $foreground;
+            text-style: bold;
+            background-tint: transparent;
+        }
     }
     """
 
@@ -98,32 +122,29 @@ class GameOverScreen(ModalScreen[None]):
 
     def compose(self) -> ComposeResult:
         s = self._snapshot
-        with DialogShell(id="gameover-overlay"):
-            yield Label("GAME OVER", id="gameover-title")
-            yield Label(
-                f"Mode: {s.mode.value.upper()}",
-                classes="gameover-stat",
-            )
-            if s.source_date is not None:
-                yield Label(
-                    f"Date: {s.source_date:%d-%m-%Y}",
-                    classes="gameover-stat",
+        with Vertical(id="gameover-overlay"):
+            with Horizontal(id="gameover-header"):
+                yield Static(
+                    f"[bold $error]GAME OVER[/][$dim] · {s.mode.value}[/]",
+                    id="gameover-title",
                 )
-            yield Label(f"Final Score: {s.score}", classes="gameover-stat-highlight")
-            yield Label(
-                f"✓ {s.correct_answers}  ✕ {s.wrong_answers}",
-                classes="gameover-stat",
-            )
-            yield Label(
-                f"Best Streak: {s.best_streak}",
-                classes="gameover-stat",
-            )
-            if s.end_reason is not None:
-                yield Label(
-                    f"Reason: {s.end_reason.label}",
-                    classes="gameover-stat",
+                # Display follows the glossary term ("Wrong Guess"), while the
+                # persisted enum value stays "wrong_answer".
+                yield Static(
+                    "" if s.end_reason is None else s.end_reason.name.replace("_", " ").title(),
+                    id="gameover-reason",
                 )
-            yield Button("Return Home [Enter]", id="gameover-home", variant="error")
+            yield Static("[$dim]FINAL SCORE[/]", classes="gameover-stat")
+            yield Static(f"[bold $warning]{s.score:,}[/]", classes="gameover-stat")
+            yield Static(
+                f"[$success]✓ {s.correct_answers} right[/][$dim] · [/]"
+                f"[$error]✗ {s.wrong_answers} wrong[/][$dim] · [/]"
+                f"best streak [bold]{s.best_streak}[/]",
+                classes="gameover-stat",
+            )
+            yield Static("[$warning]Cooked — but respectable.[/]", classes="gameover-stat")
+            with Horizontal(id="gameover-actions"):
+                yield Button(Content("▸ Return home [enter / esc]"), id="gameover-home")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "gameover-home":
