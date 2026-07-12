@@ -469,7 +469,7 @@ def test_leaderboard_refreshes_after_a_run_is_played(tmp_path, monkeypatch) -> N
             await pilot.press("enter")
             await pilot.pause()
             assert type(app.screen).__name__ == "LeaderboardScreen"
-            assert "No runs recorded yet." in _label_texts(app)
+            assert app.screen.query_one("#leaderboard-empty").has_class("-visible")
 
             await pilot.press("escape")
             await pilot.pause()
@@ -492,11 +492,14 @@ def test_leaderboard_refreshes_after_a_run_is_played(tmp_path, monkeypatch) -> N
             await pilot.press("l")
             await pilot.pause()
             assert type(app.screen).__name__ == "LeaderboardScreen"
-            assert "No runs recorded yet." not in _label_texts(app)
-            assert any(
-                "RK  MODE         SCORE  STRK  CORR  DATE" in text for text in _label_texts(app)
-            )
-            assert any("Endless" in text for text in _label_texts(app))
+            assert not app.screen.query_one("#leaderboard-empty").has_class("-visible")
+
+            from textual.widgets import DataTable
+
+            table = app.screen.query_one("#leaderboard-table", DataTable)
+            assert table.row_count == 1
+            first_row = table.get_row_at(0)
+            assert first_row[1].plain == "endless"
 
     asyncio.run(scenario())
 
