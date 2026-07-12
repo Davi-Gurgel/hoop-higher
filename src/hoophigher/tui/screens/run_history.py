@@ -5,18 +5,18 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import VerticalScroll
 from textual.screen import Screen
-from textual.widgets import Button, Footer, Header, Label
+from textual.widgets import Button, Label
 
 from hoophigher.domain.formatting import format_source_date
 from hoophigher.services import QuestionHistory, RoundHistory, RunHistoryDetail, RunHistoryRow
-from hoophigher.tui.widgets import DialogShell
+from hoophigher.tui.widgets import ActionRow, FooterHints, HeaderBand, hints
 
 
-class _RunRow(Button):
+class _RunRow(ActionRow):
     """A saved-Run entry; pressing it opens that Run's details."""
 
     def __init__(self, run: RunHistoryRow) -> None:
-        super().__init__(_format_run_summary(run), classes="run-history-row")
+        super().__init__(_format_run_summary(run), "enter", classes="run-history-row")
         self.run_id = run.run_id
 
 
@@ -71,52 +71,14 @@ def _format_round_heading(round_history: RoundHistory) -> str:
 
 class RunHistoryScreen(Screen[None]):
     DEFAULT_CSS = """
-    RunHistoryScreen {
-        align: center middle;
-    }
-
-    RunHistoryScreen #run-history-panel {
-        width: 90%;
-        max-width: 76;
-        height: 80%;
-        max-height: 24;
-        border: heavy #f0883e;
-    }
-
-    RunHistoryScreen #run-history-title {
-        text-align: center;
-        text-style: bold;
-        color: #f0883e;
-        width: 100%;
-        margin-bottom: 1;
-    }
-
-    RunHistoryScreen #run-history-subtitle {
-        text-align: center;
-        color: #8b949e;
-        width: 100%;
-        margin-bottom: 1;
-    }
-
     RunHistoryScreen #run-history-list {
+        width: 100%;
         height: 1fr;
-        width: 100%;
-    }
-
-    RunHistoryScreen .run-history-row {
-        width: 100%;
-        margin-bottom: 1;
-        text-align: left;
+        padding: 1 2;
     }
 
     RunHistoryScreen #run-history-empty {
-        color: #8b949e;
-        text-align: center;
-        width: 100%;
-        margin-top: 2;
-    }
-
-    RunHistoryScreen #run-history-back {
+        color: $muted;
         width: 100%;
         margin-top: 1;
     }
@@ -125,21 +87,21 @@ class RunHistoryScreen(Screen[None]):
     BINDINGS = [
         ("up", "focus_previous_button", "Prev"),
         ("down", "focus_next_button", "Next"),
+        ("enter", "open_selected", "Open"),
         ("escape", "back", "Back"),
         ("q", "quit", "Quit"),
     ]
 
     def compose(self) -> ComposeResult:
-        yield Header(show_clock=False)
-        with DialogShell(id="run-history-panel"):
-            yield Label("RUN HISTORY", id="run-history-title")
-            yield Label(
-                "Review saved runs and open one to inspect its rounds.",
-                id="run-history-subtitle",
-            )
-            yield _RunHistoryList(id="run-history-list")
-            yield Button("←  Back  [Esc]", id="run-history-back", variant="default")
-        yield Footer()
+        yield HeaderBand(
+            "RUN HISTORY",
+            "open a run to inspect its rounds",
+            id="run-history-header",
+        )
+        yield _RunHistoryList(id="run-history-list")
+        footer = FooterHints(id="run-history-footer")
+        footer.set_hints(hints(("↑/↓", "move"), ("enter", "open"), ("esc", "back"), ("Q", "quit")))
+        yield footer
 
     async def on_screen_resume(self, _: events.ScreenResume) -> None:
         """Reload saved runs whenever this screen becomes active.
@@ -153,11 +115,14 @@ class RunHistoryScreen(Screen[None]):
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if isinstance(event.button, _RunRow):
             self.app.push_screen(RunHistoryDetailScreen(event.button.run_id))
-        elif event.button.id == "run-history-back":
-            self.app.pop_screen()
 
     def action_back(self) -> None:
         self.app.pop_screen()
+
+    def action_open_selected(self) -> None:
+        focused = self.focused
+        if isinstance(focused, Button):
+            focused.press()
 
     def action_focus_previous_button(self) -> None:
         self.focus_previous(Button)
@@ -180,57 +145,24 @@ class RunHistoryScreen(Screen[None]):
             await run_list.mount(
                 Label("No saved runs yet. Play a run to see it here.", id="run-history-empty")
             )
-            self.query_one("#run-history-back", Button).focus()
 
 
 class RunHistoryDetailScreen(Screen[None]):
     DEFAULT_CSS = """
-    RunHistoryDetailScreen {
-        align: center middle;
-    }
-
-    RunHistoryDetailScreen #run-detail-panel {
-        width: 90%;
-        max-width: 96;
-        height: 80%;
-        max-height: 28;
-        border: heavy #f0883e;
-    }
-
-    RunHistoryDetailScreen #run-detail-title {
-        text-align: center;
-        text-style: bold;
-        color: #f0883e;
-        width: 100%;
-        margin-bottom: 1;
-    }
-
-    RunHistoryDetailScreen #run-detail-subtitle {
-        text-align: center;
-        color: #8b949e;
-        width: 100%;
-        margin-bottom: 1;
-    }
-
     RunHistoryDetailScreen #run-detail-content {
-        height: 1fr;
         width: 100%;
+        height: 1fr;
+        padding: 1 2;
     }
 
     RunHistoryDetailScreen #run-detail-empty {
-        color: #8b949e;
-        text-align: center;
-        width: 100%;
-        margin-top: 2;
-    }
-
-    RunHistoryDetailScreen #run-detail-back {
+        color: $muted;
         width: 100%;
         margin-top: 1;
     }
 
     RunHistoryDetailScreen .round-history-heading {
-        color: #58a6ff;
+        color: $accent;
         text-style: bold;
         width: 100%;
         margin-top: 1;
@@ -238,7 +170,7 @@ class RunHistoryDetailScreen(Screen[None]):
 
     RunHistoryDetailScreen .question-history-row {
         width: 100%;
-        color: #c9d1d9;
+        color: $muted;
     }
     """
 
@@ -256,21 +188,12 @@ class RunHistoryDetailScreen(Screen[None]):
     def compose(self) -> ComposeResult:
         detail = self.app.run_history_service.get_run(self._run_id)
 
-        yield Header(show_clock=False)
-        with DialogShell(id="run-detail-panel"):
-            yield Label("RUN DETAILS", id="run-detail-title")
-            if detail is not None:
-                yield Label(_format_run_summary(detail.run), id="run-detail-subtitle")
-            yield VerticalScroll(*self._detail_widgets(detail), id="run-detail-content")
-            yield Button("←  Back  [Esc]", id="run-detail-back", variant="default")
-        yield Footer()
-
-    def on_mount(self) -> None:
-        self.query_one("#run-detail-back", Button).focus()
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "run-detail-back":
-            self.app.pop_screen()
+        subtitle = "" if detail is None else _format_run_summary(detail.run)
+        yield HeaderBand("RUN DETAILS", subtitle, id="run-detail-header")
+        yield VerticalScroll(*self._detail_widgets(detail), id="run-detail-content")
+        footer = FooterHints(id="run-detail-footer")
+        footer.set_hints(hints(("↑/↓", "scroll"), ("esc", "back"), ("Q", "quit")))
+        yield footer
 
     def action_back(self) -> None:
         self.app.pop_screen()

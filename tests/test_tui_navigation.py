@@ -40,7 +40,7 @@ def _wrong_guess_key(app: HoopHigherApp) -> str:
 
 
 def _label_texts(app: HoopHigherApp) -> list[str]:
-    return [label.visual.plain for label in app.screen.query(Label)]
+    return [static.visual.plain for static in app.screen.query(Static)]
 
 
 def _enter_binding_description(app: HoopHigherApp) -> str | None:

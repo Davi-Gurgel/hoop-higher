@@ -67,13 +67,13 @@ def test_run_history_screens_render_across_terminal_sizes() -> None:
             async with app.run_test(size=(size.width, size.height)) as pilot:
                 await pilot.press("h")
                 await pilot.pause()
-                _widget_fits_terminal(app.screen.query_one("#run-history-panel", Widget), size)
-                _widget_fits_terminal(app.screen.query_one("#run-history-back", Button), size)
+                _widget_fits_terminal(app.screen.query_one("#run-history-list", Widget), size)
+                _widget_fits_terminal(app.screen.query_one("#run-history-footer", Widget), size)
 
                 app.push_screen(RunHistoryDetailScreen(run_id=1))
                 await pilot.pause()
-                _widget_fits_terminal(app.screen.query_one("#run-detail-panel", Widget), size)
-                _widget_fits_terminal(app.screen.query_one("#run-detail-back", Button), size)
+                _widget_fits_terminal(app.screen.query_one("#run-detail-content", Widget), size)
+                _widget_fits_terminal(app.screen.query_one("#run-detail-footer", Widget), size)
 
     asyncio.run(scenario())
 
