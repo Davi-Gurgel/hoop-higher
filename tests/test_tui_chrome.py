@@ -95,6 +95,29 @@ def test_scorebug_flash_shows_gain_marker_then_settles() -> None:
     asyncio.run(scenario())
 
 
+def test_scorebug_scoring_update_preserves_presented_question() -> None:
+    async def scenario() -> None:
+        app = _ChromeApp()
+        async with app.run_test() as pilot:
+            scorebug = app.query_one("#scorebug", Scorebug)
+            scorebug.update_snapshot(
+                _snapshot(round_index=0, question_index=0, score=0, current_streak=0)
+            )
+            scorebug.update_scoring(
+                _snapshot(round_index=0, question_index=1, score=100, current_streak=1)
+            )
+            await pilot.pause()
+
+            run_text = app.query_one("#scorebug-run", Static).visual.plain
+            score_text = app.query_one("#scorebug-score", Static).visual.plain
+            assert "round 1" in run_text
+            assert "Q 1/5" in run_text
+            assert "score 100" in score_text
+            assert "streak 1" in score_text
+
+    asyncio.run(scenario())
+
+
 def test_scorebug_tiers_abbreviate() -> None:
     async def scenario() -> None:
         app = _ChromeApp()

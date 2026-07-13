@@ -350,7 +350,10 @@ class GameScreen(Screen[None]):
             losing_button = "guess-higher" if guess is GuessDirection.HIGHER else "guess-lower"
             self._guess_bar.mark_wrong(losing_button)
 
-        self._scorebug.update_snapshot(self._snapshot)
+        # The service has already advanced to the next question (and may have
+        # started the next round), but the UI is still revealing this answer.
+        # Refresh only scoring here; _present_question advances the counters.
+        self._scorebug.update_scoring(self._snapshot)
         self._scorebug.show_scoring_event(is_gain=result.is_correct)
         self._footer.set_hints(_REVEAL_HELD_HINT)
 

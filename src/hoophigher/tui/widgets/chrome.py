@@ -7,6 +7,7 @@ key bindings pinned to the bottom.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import Literal
 
 from textual.app import ComposeResult
@@ -72,6 +73,19 @@ class Scorebug(Horizontal):
 
     def update_snapshot(self, snapshot: GameplaySnapshot) -> None:
         self._snapshot = snapshot
+        self._render_band()
+
+    def update_scoring(self, snapshot: GameplaySnapshot) -> None:
+        """Refresh scoring while keeping the currently presented question."""
+        if self._snapshot is None:
+            self.update_snapshot(snapshot)
+            return
+        self._snapshot = replace(
+            self._snapshot,
+            score=snapshot.score,
+            current_streak=snapshot.current_streak,
+            best_streak=snapshot.best_streak,
+        )
         self._render_band()
 
     def set_tier(self, tier: Tier) -> None:
