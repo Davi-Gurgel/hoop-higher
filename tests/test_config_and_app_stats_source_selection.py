@@ -171,7 +171,10 @@ def test_app_selects_nba_api_provider_by_default(monkeypatch) -> None:
     async def scenario() -> None:
         app = app_module.HoopHigherApp(database_url="sqlite://")
         async with app.run_test():
-            assert isinstance(app.gameplay_service._stats_source, NBAApiStatsSource)
+            assert isinstance(
+                app.gameplay_service._nba_game_resolver._stats_source,
+                NBAApiStatsSource,
+            )
 
     asyncio.run(scenario())
 
@@ -183,7 +186,10 @@ def test_app_selects_nba_api_provider_when_env_is_set(monkeypatch) -> None:
     async def scenario() -> None:
         app = app_module.HoopHigherApp(database_url="sqlite://")
         async with app.run_test():
-            assert isinstance(app.gameplay_service._stats_source, NBAApiStatsSource)
+            assert isinstance(
+                app.gameplay_service._nba_game_resolver._stats_source,
+                NBAApiStatsSource,
+            )
 
     asyncio.run(scenario())
 
@@ -195,7 +201,10 @@ def test_app_selects_mock_provider_when_env_is_set(monkeypatch) -> None:
     async def scenario() -> None:
         app = app_module.HoopHigherApp(database_url="sqlite://")
         async with app.run_test():
-            assert isinstance(app.gameplay_service._stats_source, MockStatsSource)
+            assert isinstance(
+                app.gameplay_service._nba_game_resolver._stats_source,
+                MockStatsSource,
+            )
 
     asyncio.run(scenario())
 
@@ -211,11 +220,12 @@ def test_app_wires_nba_api_timeout_from_settings(monkeypatch) -> None:
     async def scenario() -> None:
         app = app_module.HoopHigherApp(database_url="sqlite://")
         async with app.run_test():
-            stats_source = app.gameplay_service._stats_source
+            resolver = app.gameplay_service._nba_game_resolver
+            stats_source = resolver._stats_source
             assert isinstance(stats_source, NBAApiStatsSource)
             assert stats_source._timeout_seconds == 37
             assert stats_source._max_retries == 4
-            assert app.gameplay_service._non_historical_startup_games == 3
+            assert resolver._non_historical_startup_games == 3
             assert app._game_start_timeout_seconds == 55
 
     asyncio.run(scenario())
@@ -246,7 +256,7 @@ def test_app_wires_nba_api_cache_to_configured_database(monkeypatch, tmp_path) -
     async def scenario() -> None:
         app = app_module.HoopHigherApp(database_url=database_url)
         async with app.run_test():
-            stats_source = app.gameplay_service._stats_source
+            stats_source = app.gameplay_service._nba_game_resolver._stats_source
             assert isinstance(stats_source, NBAApiStatsSource)
             with stats_source._cache_repository_factory() as cache_repository:
                 cache_repository.set_nba_game(cached_game)
@@ -265,7 +275,10 @@ def test_app_uses_bounded_historical_probes_for_nba_api_provider(monkeypatch) ->
     async def scenario() -> None:
         app = app_module.HoopHigherApp(database_url="sqlite://")
         async with app.run_test():
-            assert app.gameplay_service._historical_eligible_dates_fetcher is None
+            assert (
+                app.gameplay_service._nba_game_resolver._historical_eligible_source_dates_fetcher
+                is None
+            )
 
     asyncio.run(scenario())
 
@@ -278,7 +291,7 @@ def test_app_keeps_mock_provider_startup_game_count_for_snapshots(monkeypatch) -
     async def scenario() -> None:
         app = app_module.HoopHigherApp(database_url="sqlite://")
         async with app.run_test():
-            assert app.gameplay_service._non_historical_startup_games == 5
+            assert app.gameplay_service._nba_game_resolver._non_historical_startup_games == 5
 
     asyncio.run(scenario())
 

@@ -1,6 +1,7 @@
 """Service layer for application use cases."""
 
 from hoophigher.services.gameplay_service import GameplayService, GameplaySnapshot
+from hoophigher.services.playable_nba_game_resolver import PlayableNBAGameResolver
 from hoophigher.services.leaderboard_service import (
     LeaderboardResult,
     LeaderboardRow,
@@ -18,6 +19,7 @@ from hoophigher.services.stats_service import ModeStatsRow, StatsResult, StatsSe
 __all__ = [
     "GameplayService",
     "GameplaySnapshot",
+    "PlayableNBAGameResolver",
     "LeaderboardResult",
     "LeaderboardRow",
     "LeaderboardService",
