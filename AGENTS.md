@@ -40,6 +40,8 @@ When changing layouts, screens, widgets, or `styles.tcss`, update snapshots only
 
 Recent history uses concise imperative subjects and prefixes such as `fix:`, `chore:`, `docs:`, and `refactor:`. Prefer examples like `fix: stabilize tui snapshots` or `docs: refresh readme commands`.
 
+Agents must make repository changes on a dedicated branch and deliver them through a pull request. Before editing or committing, create or switch to a branch based on the current `main`. Never commit directly to `main`, never push `main`, and keep local `main` aligned with `origin/main` unless the user explicitly requests otherwise.
+
 Pull requests must always follow `.github/pull_request_template.md` and keep its section pattern: Summary, Changes, Validation, Screenshots / Snapshots, Risk & Rollback, and Checklist. Fill each section explicitly; use `Not applicable` only when it truly applies.
 
 ## Versioning & Releases
