@@ -42,6 +42,12 @@ Recent history uses concise imperative subjects and prefixes such as `fix:`, `ch
 
 Pull requests must always follow `.github/pull_request_template.md` and keep its section pattern: Summary, Changes, Validation, Screenshots / Snapshots, Risk & Rollback, and Checklist. Fill each section explicitly; use `Not applicable` only when it truly applies.
 
+## Versioning & Releases
+
+The package version lives in `pyproject.toml` and follows semver (pre-1.0: bump minor for user-facing features or dependency floor raises, patch for fixes; internal-only refactors, docs, and test changes do not bump). A PR that ships release-worthy changes includes the version bump, so `main` never describes itself with an already-published version.
+
+Releases are cut from `main` by tagging the release commit `vX.Y.Z` (matching the `pyproject.toml` version exactly); pushing the tag triggers the PyPI publish workflow in `.github/workflows/publish.yml`. Tagging is a maintainer action — agents bump versions in PRs but never push tags.
+
 ## Security & Configuration Tips
 
 Configuration is handled through `src/hoophigher/config.py` with `pydantic-settings`. Environment variables must use the `HOOPHIGHER_` prefix. Keep secrets out of version control; use `.env.example` as the public reference for expected settings.

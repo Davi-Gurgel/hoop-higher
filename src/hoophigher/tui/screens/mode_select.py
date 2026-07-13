@@ -4,64 +4,42 @@ import time
 
 from textual import work
 from textual.app import ComposeResult
+from textual.containers import Vertical
+from textual.css.query import NoMatches
 from textual.screen import Screen
 from textual.timer import Timer
-from textual.widgets import Button, Footer, Header, Label
+from textual.widgets import Button
 
 from hoophigher.domain.enums import GameMode
-from hoophigher.tui.widgets import DialogShell
+from hoophigher.tui.widgets import FooterHints, HeaderBand, ModeCard, StatusStrip, hints
 
 _START_GAME_WORKER_GROUP = "start-game"
 _LOADING_STATUS_INTERVAL_SECONDS = 1
+_SPINNER_FRAMES = "⣾⣽⣻⢿⡿⣟⣯⣷"
+
+_IDLE_HINTS = hints(
+    ("↑/↓", "move"),
+    ("enter", "start"),
+    ("1·2·3", "jump"),
+    ("esc", "back"),
+    ("Q", "quit"),
+)
+_CANCEL_HINTS = "[bold $warning]esc CANCEL[/][$dim] · modes locked until data lands[/]"
 
 
 class ModeSelectScreen(Screen[None]):
     DEFAULT_CSS = """
-    ModeSelectScreen {
-        align: center middle;
-    }
-
-    ModeSelectScreen #mode-panel {
-        width: 60;
-        border: heavy #f0883e;
-    }
-
-    ModeSelectScreen #mode-title {
-        text-align: center;
-        text-style: bold;
-        color: #f0883e;
+    ModeSelectScreen #mode-content {
         width: 100%;
-        margin-bottom: 2;
-    }
-
-    ModeSelectScreen .mode-btn {
-        width: 100%;
-        margin-bottom: 1;
-    }
-
-    ModeSelectScreen .mode-description {
-        text-align: center;
-        color: #8b949e;
-        width: 100%;
-        margin-bottom: 2;
-    }
-
-    ModeSelectScreen #mode-loading-status {
-        display: none;
-        text-align: center;
-        color: #e6edf3;
-        width: 100%;
-        margin-bottom: 2;
-    }
-
-    ModeSelectScreen #mode-loading-status.-visible {
-        display: block;
+        height: 1fr;
+        padding: 1 2;
     }
     """
 
     BINDINGS = [
         ("up", "focus_previous_button", "Prev"),
         ("down", "focus_next_button", "Next"),
+        ("enter", "start_focused_mode", "Start"),
         ("1", "select_endless", "Endless"),
         ("2", "select_arcade", "Arcade"),
         ("3", "select_historical", "Historical"),
@@ -74,44 +52,25 @@ class ModeSelectScreen(Screen[None]):
         self._loading_mode: GameMode | None = None
         self._loading_started_at = 0.0
         self._loading_status_timer: Timer | None = None
+        self._spinner_frame = 0
 
     def compose(self) -> ComposeResult:
-        yield Header(show_clock=False)
-        with DialogShell(id="mode-panel"):
-            yield Label("SELECT MODE", id="mode-title")
-            yield Label(
-                "Endless: errors lose points, run continues\n"
-                "Arcade:  one miss and you're out\n"
-                "Historical: random date, real NBA feel",
-                classes="mode-description",
-            )
-            yield Label("", id="mode-loading-status")
-            yield Button(
-                "♾  Endless  [1]", id="mode-endless", variant="primary", classes="mode-btn"
-            )
-            yield Button("🕹  Arcade  [2]", id="mode-arcade", variant="warning", classes="mode-btn")
-            yield Button(
-                "📅  Historical  [3]", id="mode-historical", variant="default", classes="mode-btn"
-            )
-            yield Button("←  Back  [Esc]", id="mode-back", variant="default", classes="mode-btn")
-        yield Footer()
+        yield HeaderBand("CHOOSE YOUR MODE", id="mode-header")
+        with Vertical(id="mode-content"):
+            yield ModeCard(GameMode.ENDLESS, "1", id="mode-endless")
+            yield ModeCard(GameMode.ARCADE, "2", id="mode-arcade")
+            yield ModeCard(GameMode.HISTORICAL, "3", id="mode-historical")
+            yield StatusStrip(id="mode-loading-status")
+        footer = FooterHints(id="mode-footer")
+        footer.set_hints(_IDLE_HINTS)
+        yield footer
 
     def on_mount(self) -> None:
         self.query_one("#mode-endless", Button).focus()
 
     async def on_button_pressed(self, event: Button.Pressed) -> None:
-        button_id = event.button.id
-        if button_id == "mode-back":
-            self.action_back()
-            return
-        mode_map = {
-            "mode-endless": GameMode.ENDLESS,
-            "mode-arcade": GameMode.ARCADE,
-            "mode-historical": GameMode.HISTORICAL,
-        }
-        mode = mode_map.get(button_id)
-        if mode is not None:
-            self._begin_start_game(mode)
+        if isinstance(event.button, ModeCard):
+            self._begin_start_game(event.button.mode)
 
     def action_select_endless(self) -> None:
         self._begin_start_game(GameMode.ENDLESS)
@@ -121,6 +80,11 @@ class ModeSelectScreen(Screen[None]):
 
     def action_select_historical(self) -> None:
         self._begin_start_game(GameMode.HISTORICAL)
+
+    def action_start_focused_mode(self) -> None:
+        focused = self.focused
+        if isinstance(focused, ModeCard):
+            self._begin_start_game(focused.mode)
 
     def action_back(self) -> None:
         if self._loading_mode is not None:
@@ -149,18 +113,26 @@ class ModeSelectScreen(Screen[None]):
         try:
             await self.app.start_game(mode)
         except Exception as exc:  # noqa: BLE001
-            self.app.notify(str(exc), title="Unable to start game", severity="error")
+            self.app.notify(str(exc), title="✗ Unable to start game", severity="error")
         finally:
             self._reset_loading()
+
+    def _mode_cards(self) -> list[ModeCard]:
+        return list(self.query(ModeCard))
 
     def _set_loading(self, mode: GameMode) -> None:
         self._loading_mode = mode
         self._loading_started_at = time.monotonic()
+        self._spinner_frame = 0
         self._loading_status_timer = self.set_interval(
             _LOADING_STATUS_INTERVAL_SECONDS, self._refresh_loading_status
         )
-        self._set_mode_buttons_disabled(True)
-        self.query_one("#mode-back", Button).label = "Cancel  [Esc]"
+        for card in self._mode_cards():
+            if card.mode is mode:
+                card.set_loading(True)
+            else:
+                card.disabled = True
+        self.query_one("#mode-footer", FooterHints).set_hints(_CANCEL_HINTS)
         self._refresh_loading_status()
 
     def _reset_loading(self) -> None:
@@ -170,22 +142,26 @@ class ModeSelectScreen(Screen[None]):
         if self._loading_status_timer is not None:
             self._loading_status_timer.stop()
             self._loading_status_timer = None
-        self._set_mode_buttons_disabled(False)
-        self.query_one("#mode-back", Button).label = "←  Back  [Esc]"
-        status = self.query_one("#mode-loading-status", Label)
-        status.update("")
-        status.remove_class("-visible")
+        try:
+            for card in self._mode_cards():
+                card.set_loading(False)
+                card.disabled = False
+            self.query_one("#mode-footer", FooterHints).set_hints(_IDLE_HINTS)
+            self.query_one("#mode-loading-status", StatusStrip).hide()
+        except NoMatches:
+            # The worker can be cancelled during app shutdown, after this
+            # screen's widgets are gone.
+            pass
 
     def _cancel_start_game(self) -> None:
         self.workers.cancel_group(self, _START_GAME_WORKER_GROUP)
         self._reset_loading()
 
     def _refresh_loading_status(self) -> None:
-        status = self.query_one("#mode-loading-status", Label)
+        strip = self.query_one("#mode-loading-status", StatusStrip)
         mode = self._loading_mode
         if mode is None:
-            status.update("")
-            status.remove_class("-visible")
+            strip.hide()
             return
 
         elapsed_seconds = max(0, int(time.monotonic() - self._loading_started_at))
@@ -195,9 +171,6 @@ class ModeSelectScreen(Screen[None]):
             message = f"Still fetching NBA games ({elapsed_seconds}s)..."
         else:
             message = f"stats.nba.com is slow; press Esc to cancel ({elapsed_seconds}s)."
-        status.update(message)
-        status.add_class("-visible")
-
-    def _set_mode_buttons_disabled(self, disabled: bool) -> None:
-        for button_id in ("#mode-endless", "#mode-arcade", "#mode-historical"):
-            self.query_one(button_id, Button).disabled = disabled
+        spinner = _SPINNER_FRAMES[self._spinner_frame % len(_SPINNER_FRAMES)]
+        self._spinner_frame += 1
+        strip.show("-loading", f"[$warning]{spinner}[/] {message}")

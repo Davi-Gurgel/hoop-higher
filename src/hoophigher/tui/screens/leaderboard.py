@@ -1,71 +1,56 @@
 from __future__ import annotations
 
+from rich.text import Text
 from textual import events
 from textual.app import ComposeResult
+from textual.containers import Vertical
 from textual.screen import Screen
-from textual.widgets import Button, Footer, Header, Label
+from textual.theme import Theme
+from textual.widgets import DataTable, Static
 
-from hoophigher.services import LeaderboardResult, LeaderboardRow
-from hoophigher.tui.widgets import DialogShell
+from hoophigher.services import LeaderboardResult
+from hoophigher.tui.widgets import FooterHints, HeaderBand, hints
 
-
-def _format_mode_label(row: LeaderboardRow) -> str:
-    return row.mode.value.replace("_", " ").title()
-
-
-def _render_rows(result: LeaderboardResult) -> str:
-    if result.is_empty:
-        return "No runs recorded yet."
-    lines = ["RK  MODE         SCORE  STRK  CORR  DATE"]
-    lines.extend(
-        f"{row.rank:>2}  {_format_mode_label(row):<12} "
-        f"{row.score:>5}  {row.best_streak:>4}  "
-        f"{row.correct_answers:>4}  {row.source_date_label}"
-        for row in result.rows
-    )
-    return "\n\n".join(lines)
+_ACCURACY_SUCCESS_THRESHOLD = 0.75
 
 
 class LeaderboardScreen(Screen[None]):
     DEFAULT_CSS = """
-    LeaderboardScreen {
-        align: center middle;
-    }
-
-    LeaderboardScreen #leaderboard-panel {
-        width: 76;
-        border: heavy #f0883e;
-    }
-
-    LeaderboardScreen #leaderboard-title {
-        text-align: center;
-        text-style: bold;
-        color: #f0883e;
+    LeaderboardScreen #leaderboard-content {
         width: 100%;
-        margin-bottom: 1;
+        height: 1fr;
+        padding: 1 2;
     }
 
-    LeaderboardScreen #leaderboard-subtitle {
-        text-align: center;
-        color: #8b949e;
+    LeaderboardScreen #leaderboard-table {
         width: 100%;
-        margin-bottom: 2;
+        height: auto;
+        background: transparent;
     }
 
-    LeaderboardScreen #leaderboard-rows {
+    LeaderboardScreen #leaderboard-table > .datatable--header {
+        background: transparent;
+        color: $dim;
+        text-style: none;
+    }
+
+    LeaderboardScreen #leaderboard-table > .datatable--odd-row {
+        background: $zebra-fill;
+    }
+
+    LeaderboardScreen #leaderboard-table > .datatable--even-row {
+        background: transparent;
+    }
+
+    LeaderboardScreen #leaderboard-empty {
         width: 100%;
-        margin-bottom: 1;
-    }
-
-    LeaderboardScreen #leaderboard-rows.-empty {
-        text-align: center;
-        color: #8b949e;
-        margin-bottom: 2;
-    }
-
-    LeaderboardScreen #leaderboard-back {
-        width: 100%;
+        color: $muted;
         margin-top: 1;
+        display: none;
+    }
+
+    LeaderboardScreen #leaderboard-empty.-visible {
+        display: block;
     }
     """
 
@@ -74,17 +59,28 @@ class LeaderboardScreen(Screen[None]):
         ("q", "quit", "Quit"),
     ]
 
+    def __init__(self) -> None:
+        super().__init__()
+        self._result: LeaderboardResult | None = None
+
     def compose(self) -> ComposeResult:
-        yield Header(show_clock=False)
-        with DialogShell(id="leaderboard-panel"):
-            yield Label("LOCAL LEADERBOARD", id="leaderboard-title")
-            yield Label("Top 10 runs saved on this machine.", id="leaderboard-subtitle")
-            yield Label("", id="leaderboard-rows")
-            yield Button("←  Back  [Esc]", id="leaderboard-back", variant="default")
-        yield Footer()
+        yield HeaderBand("LEADERBOARD", "top 10 · this machine", id="leaderboard-header")
+        with Vertical(id="leaderboard-content"):
+            yield DataTable(id="leaderboard-table", cursor_type="none", zebra_stripes=True)
+            yield Static("No runs recorded yet. The board's waiting.", id="leaderboard-empty")
+        footer = FooterHints(id="leaderboard-footer")
+        footer.set_hints(hints(("esc", "back"), ("Q", "quit")))
+        yield footer
 
     def on_mount(self) -> None:
-        self.query_one("#leaderboard-back", Button).focus()
+        table = self.query_one("#leaderboard-table", DataTable)
+        table.add_column(Text("#", justify="right"), key="rank")
+        table.add_column("mode", key="mode")
+        table.add_column(Text("score", justify="right"), key="score")
+        table.add_column(Text("streak", justify="right"), key="streak")
+        table.add_column(Text("acc", justify="right"), key="acc")
+        table.add_column("date", key="date")
+        self.app.theme_changed_signal.subscribe(self, self._on_theme_changed)
 
     def on_screen_resume(self, _: events.ScreenResume) -> None:
         """Reload rows whenever this screen becomes active.
@@ -94,13 +90,45 @@ class LeaderboardScreen(Screen[None]):
         appear without restarting the app.
         """
         result = self.app.leaderboard_service.get_leaderboard()
-        rows = self.query_one("#leaderboard-rows", Label)
-        rows.set_class(result.is_empty, "-empty")
-        rows.update(_render_rows(result))
+        self._result = result
+        self._populate(result)
 
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "leaderboard-back":
-            self.app.pop_screen()
+    def _on_theme_changed(self, _theme: Theme) -> None:
+        if self._result is not None:
+            self._populate(self._result)
+
+    def _populate(self, result: LeaderboardResult) -> None:
+        table = self.query_one("#leaderboard-table", DataTable)
+        table.clear()
+        table.display = not result.is_empty
+        self.query_one("#leaderboard-empty", Static).set_class(result.is_empty, "-visible")
+        if result.is_empty:
+            return
+
+        # DataTable cells take Rich renderables, not TCSS variables, so the
+        # role colors are resolved from the active theme at build time.
+        theme_variables = self.app.theme_variables
+        accent = theme_variables.get("accent", "")
+        highlight = theme_variables.get("warning", "")
+        success = theme_variables.get("success", "")
+        muted = theme_variables.get("muted", "")
+
+        for row in result.rows:
+            is_top = row.rank == 1
+            accuracy = row.accuracy_rate
+            accuracy_style = success if accuracy >= _ACCURACY_SUCCESS_THRESHOLD else muted
+            date_label = "--" if row.source_date is None else f"{row.source_date:%b %d}"
+            table.add_row(
+                Text(str(row.rank), style=f"bold {accent}" if is_top else "", justify="right"),
+                Text(row.mode.value, style=f"bold {highlight}" if is_top else ""),
+                Text(f"{row.score:,}", style="bold" if is_top else "", justify="right"),
+                Text(str(row.best_streak), justify="right"),
+                Text(f"{accuracy * 100:.1f}%", style=accuracy_style, justify="right"),
+                Text(date_label, style=muted),
+            )
 
     def action_back(self) -> None:
         self.app.pop_screen()
+
+    def action_quit(self) -> None:
+        self.app.exit()

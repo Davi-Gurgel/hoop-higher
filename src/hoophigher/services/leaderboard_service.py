@@ -18,12 +18,18 @@ class LeaderboardRow:
     score: int
     best_streak: int
     correct_answers: int
+    wrong_answers: int
     source_date: date | None
     created_at: datetime
 
     @property
     def source_date_label(self) -> str:
         return format_source_date(self.source_date)
+
+    @property
+    def accuracy_rate(self) -> float:
+        total = self.correct_answers + self.wrong_answers
+        return self.correct_answers / total if total else 0.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -51,6 +57,7 @@ class LeaderboardService:
                     score=record.final_score,
                     best_streak=record.best_streak,
                     correct_answers=record.correct_answers,
+                    wrong_answers=record.wrong_answers,
                     source_date=record.source_date,
                     created_at=record.created_at,
                 )

@@ -1,59 +1,46 @@
 from __future__ import annotations
 
 from textual.app import ComposeResult
+from textual.containers import Vertical
 from textual.screen import Screen
-from textual.widgets import Button, Footer, Header, Label
+from textual.widgets import Button, Rule, Static
 
-from hoophigher.tui.widgets import DialogShell
+from hoophigher.tui.widgets import ActionRow, FooterHints, hints
 
 
 class HomeScreen(Screen[None]):
     DEFAULT_CSS = """
-    HomeScreen {
-        align: center middle;
+    HomeScreen #home-content {
+        width: 100%;
+        height: 1fr;
+        padding: 1 2;
     }
 
-    HomeScreen #home-panel {
-        width: 60;
-        border: heavy #f0883e;
-    }
-
-    HomeScreen #home-logo {
-        text-align: center;
+    HomeScreen #home-title {
+        color: $accent;
         text-style: bold;
-        color: #f0883e;
+        width: 100%;
+    }
+
+    HomeScreen #home-rule {
+        color: $border;
+        margin: 0;
+    }
+
+    HomeScreen #home-tagline {
+        color: $muted;
+        width: 100%;
+    }
+
+    HomeScreen #home-hype {
+        color: $warning;
         width: 100%;
         margin-bottom: 1;
     }
 
-    HomeScreen #home-subtitle {
-        text-align: center;
-        color: #8b949e;
-        width: 100%;
-        margin-bottom: 2;
-    }
-
-    HomeScreen .home-btn {
-        width: 100%;
-        margin-bottom: 1;
-    }
-
-    HomeScreen.-h-sm #home-panel {
-        padding: 1 4;
-    }
-
-    HomeScreen.-h-sm .home-btn {
-        margin-bottom: 0;
-    }
-
-    HomeScreen.-h-xs #home-panel {
-        padding: 0 2;
-    }
-
-    HomeScreen.-h-xs #home-logo,
-    HomeScreen.-h-xs #home-subtitle,
-    HomeScreen.-h-xs .home-btn {
-        margin-bottom: 0;
+    HomeScreen.-h-xs #home-tagline,
+    HomeScreen.-h-xs #home-hype {
+        display: none;
     }
     """
 
@@ -68,18 +55,22 @@ class HomeScreen(Screen[None]):
     ]
 
     def compose(self) -> ComposeResult:
-        yield Header(show_clock=False)
-        with DialogShell(id="home-panel"):
-            yield Label("🏀  HOOP HIGHER", id="home-logo")
-            yield Label("Can you guess who scored more?", id="home-subtitle")
-            yield Button("▶  Play  [Enter]", id="start-game", variant="success", classes="home-btn")
-            yield Button(
-                "🏆  Leaderboard  [L]", id="open-leaderboard", variant="primary", classes="home-btn"
-            )
-            yield Button("📊  Stats  [S]", id="open-stats", variant="default", classes="home-btn")
-            yield Button("🕘  Run History  [H]", id="open-run-history", classes="home-btn")
-            yield Button("✕  Quit  [Q]", id="quit-game", variant="error", classes="home-btn")
-        yield Footer()
+        with Vertical(id="home-content"):
+            yield Static("HOOP HIGHER", id="home-title")
+            yield Rule(id="home-rule")
+            yield Static("higher / lower · guess who scored more", id="home-tagline")
+            yield Static("Two players, one hidden number. Back yourself.", id="home-hype")
+            yield ActionRow("Play", "enter", id="start-game")
+            yield ActionRow("Leaderboard", "[L]", id="open-leaderboard")
+            yield ActionRow("Stats", "[S]", id="open-stats")
+            yield ActionRow("Run History", "[H]", id="open-run-history")
+            yield ActionRow("Quit", "[Q]", id="quit-game")
+        footer = FooterHints(id="home-footer")
+        footer.set_hints(
+            hints(("↑/↓", "move"), ("enter", "select"), ("T", "theme"), ("", "letter = shortcut"))
+            + " [$accent blink]▍[/]"
+        )
+        yield footer
 
     def on_mount(self) -> None:
         self.query_one("#start-game", Button).focus()

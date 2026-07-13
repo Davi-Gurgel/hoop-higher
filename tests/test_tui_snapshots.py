@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from datetime import date, datetime, timezone
 
@@ -17,6 +18,7 @@ from hoophigher.data import (
     init_db,
 )
 from hoophigher.domain.enums import GameMode
+from hoophigher.tui.theme import LIGHT_THEME_NAME
 
 
 @pytest.fixture(autouse=True)
@@ -29,6 +31,60 @@ def _use_mock_provider(monkeypatch: pytest.MonkeyPatch) -> None:
 async def _open_mode_select(pilot: Pilot) -> None:
     await pilot.press("enter")
     await pilot.pause()
+
+
+async def _open_mode_select_loading(pilot: Pilot) -> None:
+    """Freeze Mode Select in its loading state by hanging the game start."""
+
+    async def hang_forever(mode) -> bool:
+        await asyncio.Event().wait()
+        return False
+
+    pilot.app.start_game = hang_forever
+    await pilot.press("enter")
+    await pilot.press("1")
+    await pilot.pause()
+
+
+async def _guess_key(pilot: Pilot, *, correct: bool) -> str:
+    question = pilot.app.gameplay_service.snapshot().current_question
+    assert question is not None
+    correct_key = "h" if question.correct_guess.value == "higher" else "l"
+    if correct:
+        return correct_key
+    return "l" if correct_key == "h" else "h"
+
+
+async def _open_reveal_correct(pilot: Pilot) -> None:
+    await _open_gameplay(pilot, "1")
+    await pilot.press(await _guess_key(pilot, correct=True))
+    await pilot.pause(0.05)
+
+
+async def _open_reveal_wrong(pilot: Pilot) -> None:
+    await _open_gameplay(pilot, "1")
+    await pilot.press(await _guess_key(pilot, correct=False))
+    await pilot.pause(0.05)
+
+
+async def _open_game_over(pilot: Pilot) -> None:
+    await _open_gameplay(pilot, "2")
+    await pilot.press(await _guess_key(pilot, correct=False))
+    for _ in range(30):
+        if type(pilot.app.screen).__name__ == "GameOverScreen":
+            break
+        await pilot.pause(0.1)
+    assert type(pilot.app.screen).__name__ == "GameOverScreen"
+
+
+async def _open_home_light(pilot: Pilot) -> None:
+    pilot.app.theme = LIGHT_THEME_NAME
+    await pilot.pause()
+
+
+async def _open_gameplay_light(pilot: Pilot) -> None:
+    pilot.app.theme = LIGHT_THEME_NAME
+    await _open_gameplay(pilot, "1")
 
 
 async def _open_gameplay(pilot: Pilot, mode_key: str = "1") -> None:
@@ -302,6 +358,54 @@ def test_gameplay_tiny_snapshot(snap_compare) -> None:
         snap_compare,
         terminal_size=(60, 20),
         run_before=_open_gameplay,
+    )
+
+
+def test_mode_select_loading_snapshot(snap_compare) -> None:
+    assert _compare_app(
+        snap_compare,
+        terminal_size=(110, 32),
+        run_before=_open_mode_select_loading,
+    )
+
+
+def test_gameplay_reveal_correct_snapshot(snap_compare) -> None:
+    assert _compare_app(
+        snap_compare,
+        terminal_size=(110, 36),
+        run_before=_open_reveal_correct,
+    )
+
+
+def test_gameplay_reveal_wrong_snapshot(snap_compare) -> None:
+    assert _compare_app(
+        snap_compare,
+        terminal_size=(110, 36),
+        run_before=_open_reveal_wrong,
+    )
+
+
+def test_game_over_snapshot(snap_compare) -> None:
+    assert _compare_app(
+        snap_compare,
+        terminal_size=(110, 32),
+        run_before=_open_game_over,
+    )
+
+
+def test_home_light_theme_snapshot(snap_compare) -> None:
+    assert _compare_app(
+        snap_compare,
+        terminal_size=(110, 32),
+        run_before=_open_home_light,
+    )
+
+
+def test_gameplay_light_theme_snapshot(snap_compare) -> None:
+    assert _compare_app(
+        snap_compare,
+        terminal_size=(110, 36),
+        run_before=_open_gameplay_light,
     )
 
 

@@ -6,116 +6,57 @@ from time import monotonic
 from textual import events
 from textual.app import ComposeResult
 from textual.containers import Vertical
-from textual.screen import ModalScreen, Screen
-from textual.widgets import Button, Footer, Header, Label
+from textual.content import Content
+from textual.screen import Screen
+from textual.widgets import Button
 
 from hoophigher.domain.enums import GuessDirection
-from hoophigher.domain.models import Question
+from hoophigher.domain.formatting import player_first_name, player_last_name
+from hoophigher.domain.models import Question, QuestionResult
 from hoophigher.services import GameplaySnapshot
+from hoophigher.tui.responsive import Tier, tier_for
+from hoophigher.tui.screens.game_over import GameOverScreen
+from hoophigher.tui.screens.round_summary import RoundSummary, RoundSummaryScreen
 from hoophigher.tui.widgets import (
-    DialogShell,
+    FooterHints,
     GameContextStrip,
-    GameStatusStrip,
     GuessBar,
     MatchupPanel,
+    Scorebug,
+    StatusStrip,
+    hints,
 )
+from hoophigher.tui.widgets.gameplay import LastGuess
 
-_MAX_HISTORY_ITEMS = 6
 _FEEDBACK_DURATION_SECONDS = 1.2
+_REVEAL_HELD_HINT = "[blink $warning]reveal held · next question in 1.2s…[/]"
+
+_FOOTER_HINTS: dict[Tier, str] = {
+    "full": hints(
+        ("H", "higher"),
+        ("L", "lower"),
+        ("←/→", "move"),
+        ("enter", "guess"),
+        ("esc", "abandon"),
+        ("Q", "quit"),
+    ),
+    "sm": hints(("H", ""), ("L", ""), ("←/→", ""), ("esc", ""), ("Q", "")),
+    "xs": hints(("H/L", ""), ("esc", "home")),
+}
 
 
-@dataclass(frozen=True, slots=True)
-class GuessHistoryItem:
-    index: int
-    is_correct: bool
-    score_delta: int
-    description: str
+@dataclass(slots=True)
+class RoundTally:
+    questions: int = 0
+    correct_answers: int = 0
+    wrong_answers: int = 0
+    score_delta: int = 0
 
-
-class GameOverScreen(ModalScreen[None]):
-    """Shown when the run ends (arcade miss or user exit)."""
-
-    DEFAULT_CSS = """
-    GameOverScreen {
-        align: center middle;
-    }
-
-    GameOverScreen #gameover-overlay {
-        width: 56;
-        border: heavy #f85149;
-    }
-
-    GameOverScreen #gameover-title {
-        text-align: center;
-        text-style: bold;
-        color: #f85149;
-        width: 100%;
-        margin-bottom: 1;
-    }
-
-    GameOverScreen .gameover-stat {
-        text-align: center;
-        width: 100%;
-        margin-bottom: 1;
-    }
-
-    GameOverScreen .gameover-stat-highlight {
-        text-align: center;
-        text-style: bold;
-        color: #f0883e;
-        width: 100%;
-        margin-bottom: 1;
-    }
-
-    GameOverScreen #gameover-home {
-        width: 100%;
-        margin-top: 1;
-    }
-    """
-
-    BINDINGS = [("enter", "go_home", "Home"), ("escape", "go_home", "Home")]
-
-    def __init__(self, snapshot: GameplaySnapshot) -> None:
-        super().__init__()
-        self._snapshot = snapshot
-
-    def compose(self) -> ComposeResult:
-        s = self._snapshot
-        with DialogShell(id="gameover-overlay"):
-            yield Label("GAME OVER", id="gameover-title")
-            yield Label(
-                f"Mode: {s.mode.value.upper()}",
-                classes="gameover-stat",
-            )
-            if s.source_date is not None:
-                yield Label(
-                    f"Date: {s.source_date:%d-%m-%Y}",
-                    classes="gameover-stat",
-                )
-            yield Label(f"Final Score: {s.score}", classes="gameover-stat-highlight")
-            yield Label(
-                f"✓ {s.correct_answers}  ✕ {s.wrong_answers}",
-                classes="gameover-stat",
-            )
-            yield Label(
-                f"Best Streak: {s.best_streak}",
-                classes="gameover-stat",
-            )
-            if s.end_reason is not None:
-                yield Label(
-                    f"Reason: {s.end_reason.label}",
-                    classes="gameover-stat",
-                )
-            yield Button("Return Home [Enter]", id="gameover-home", variant="error")
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "gameover-home":
-            self.action_go_home()
-
-    def action_go_home(self) -> None:
-        self.dismiss()
-        self.app.pop_screen()  # GameScreen
-        self.app.pop_screen()  # ModeSelectScreen
+    def record(self, result: QuestionResult) -> None:
+        self.questions += 1
+        self.correct_answers += int(result.is_correct)
+        self.wrong_answers += int(not result.is_correct)
+        self.score_delta += result.score_delta
 
 
 class GameScreen(Screen[None]):
@@ -131,30 +72,10 @@ class GameScreen(Screen[None]):
         overflow-y: hidden;
     }
 
-    GameScreen #feedback-bar {
-        height: 3;
-        width: 100%;
-        padding: 1 2;
-        text-align: center;
-        text-style: bold;
-        display: none;
-    }
-
-    GameScreen #feedback-bar.feedback-correct {
-        background: #1a3a1a;
-        color: #3fb950;
-        display: block;
-    }
-
-    GameScreen #feedback-bar.feedback-wrong {
-        background: #3a1a1a;
-        color: #f85149;
-        display: block;
-    }
-
     GameScreen.-h-sm #game-scroll,
     GameScreen.-h-xs #game-scroll {
         overflow-y: auto;
+        scrollbar-size-vertical: 0;
     }
     """
 
@@ -171,33 +92,33 @@ class GameScreen(Screen[None]):
     def __init__(self, snapshot: GameplaySnapshot) -> None:
         super().__init__()
         self._snapshot = snapshot
-        self._history: list[GuessHistoryItem] = []
-        self._round_history: list[GuessHistoryItem] = []
+        self._round_tally = RoundTally()
+        self._last_guess: LastGuess | None = None
         self._awaiting_feedback = False
         self._game_over_screen_visible = False
         self._question_started_at: float | None = None
-        self._status_strip = GameStatusStrip(id="status-bar")
+        self._scorebug = Scorebug(id="scorebug")
         self._context_strip = GameContextStrip(
             len(snapshot.games_today),
             id="day-games-panel",
         )
         self._matchup_panel = MatchupPanel(id="matchup-area")
         self._guess_bar = GuessBar(id="actions-panel")
+        self._footer = FooterHints(id="game-footer")
 
     # ── Layout ────────────────────────────────────────────────
 
     def compose(self) -> ComposeResult:
-        yield Header(show_clock=False)
-        yield self._status_strip
-        yield Label("", id="feedback-bar")
+        yield self._scorebug
 
         with Vertical(id="game-layout"):
             with Vertical(id="game-scroll"):
                 yield self._context_strip
                 yield self._matchup_panel
+            yield StatusStrip(id="verdict-strip")
             yield self._guess_bar
 
-        yield Footer()
+        yield self._footer
 
     # ── Lifecycle ──────────────────────────────────────────────
 
@@ -284,26 +205,21 @@ class GameScreen(Screen[None]):
             response_time_ms=response_time_ms,
         )
 
-        # Build history item
-        history_item = GuessHistoryItem(
-            index=previous_snapshot.question_index + 1,
+        self._round_tally.record(result)
+        self._last_guess = LastGuess(
+            player_a_name=result.question.player_a.player_name,
+            player_a_points=result.question.player_a.points,
+            guessed_over=guess is GuessDirection.HIGHER,
+            player_b_name=result.question.player_b.player_name,
+            player_b_points=result.revealed_points,
             is_correct=result.is_correct,
             score_delta=result.score_delta,
-            description=(
-                f"Q{previous_snapshot.question_index + 1}: "
-                f"{result.question.player_a.player_name} vs "
-                f"{result.question.player_b.player_name} "
-                f"→ {'✓' if result.is_correct else '✕'} ({result.score_delta:+d})"
-            ),
         )
-        self._history.append(history_item)
-        self._history = self._history[-_MAX_HISTORY_ITEMS:]
-        self._round_history.append(history_item)
 
         self._snapshot = self.app.gameplay_service.snapshot()
 
         # Show reveal + feedback
-        self._show_reveal(result.revealed_points, result.is_correct, result.score_delta)
+        self._show_reveal(result, guess)
 
         # After feedback delay, advance
         self.set_timer(
@@ -324,21 +240,21 @@ class GameScreen(Screen[None]):
             return
 
         if was_last_question and not self._snapshot.is_finished:
-            from hoophigher.tui.screens.round_summary import (
-                RoundSummary,
-                RoundSummaryScreen,
-            )
-
+            previous_game = previous_snapshot.current_game
             summary = RoundSummary(
                 round_index=self._snapshot.round_index - 1,
                 game_id=previous_snapshot.game_id,
-                source_date=previous_snapshot.current_game.source_date,
-                questions=len(self._round_history),
-                correct_answers=sum(1 for item in self._round_history if item.is_correct),
-                wrong_answers=sum(1 for item in self._round_history if not item.is_correct),
-                score_delta=sum(item.score_delta for item in self._round_history),
+                source_date=previous_game.source_date,
+                matchup=(
+                    f"{previous_game.away_team.abbreviation} @ "
+                    f"{previous_game.home_team.abbreviation}"
+                ),
+                questions=self._round_tally.questions,
+                correct_answers=self._round_tally.correct_answers,
+                wrong_answers=self._round_tally.wrong_answers,
+                score_delta=self._round_tally.score_delta,
             )
-            self._round_history.clear()
+            self._round_tally = RoundTally()
             self.app.push_screen(RoundSummaryScreen(summary))
             return
 
@@ -355,20 +271,14 @@ class GameScreen(Screen[None]):
     def _refresh_view(self) -> None:
         s = self._snapshot
 
-        self._status_strip.update_snapshot(s)
+        self._scorebug.update_snapshot(s)
         self._context_strip.update_snapshot(s)
-
-        if self._history:
-            last = self._history[-1]
-            self._context_strip.update_history(last.description)
-        else:
-            self._context_strip.update_history("")
+        self._context_strip.update_last_guess(self._last_guess)
 
         question = s.current_question
         if question is None:
             self._matchup_panel.clear()
             self._guess_bar.set_prompt("")
-            self._guess_bar.set_controls_hint("Use H/L or ←/→ + Enter")
             self._set_buttons_disabled(True)
             self._sync_responsive_copy(self.size.width, self.size.height)
             return
@@ -379,58 +289,77 @@ class GameScreen(Screen[None]):
         self.query_one("#guess-higher", Button).focus()
 
     def _sync_responsive_copy(self, width: int, height: int) -> None:
-        mode = "full"
-        if width < 72 or height < 24:
-            mode = "mini"
-        elif width < 80 and height < 26:
-            mode = "compact"
+        # Copy (labels, hints, scorebug) also degrades on short terminals so
+        # the pinned rows keep fitting; card layout is width-only — short-
+        # but-wide terminals keep full cards and scroll instead.
+        copy_tier = tier_for(width, height)
+        layout_tier = tier_for(width)
 
-        self._guess_bar.set_label_mode(mode)
+        self._guess_bar.set_tier(copy_tier)
+        self._scorebug.set_tier(copy_tier)
+        self._footer.set_hints(_FOOTER_HINTS[copy_tier])
+        self._matchup_panel.set_tier(layout_tier)
 
         question = self._snapshot.current_question
         if question is None:
             self._guess_bar.set_prompt("")
         else:
-            self._guess_bar.set_prompt(self._build_compare_prompt(question, mode))
+            self._guess_bar.set_prompt(self._build_compare_prompt(question, copy_tier))
 
-        controls_hint = {
-            "full": "Use H/L or ←/→ + Enter",
-            "compact": "H/L or ←/→ + Enter",
-            "mini": "H/L or ←/→",
-        }[mode]
-        self._guess_bar.set_controls_hint(controls_hint)
-
-    def _build_compare_prompt(self, question: Question, mode: str) -> str:
-        if mode == "mini":
-            return f"{question.player_b.player_name} vs {question.player_a.points} pts?"
-        if mode == "compact":
-            return (
-                f"Did {question.player_b.player_name} score above or below "
-                f"{question.player_a.points} pts?"
+    def _build_compare_prompt(self, question: Question, tier: Tier) -> Content:
+        points = question.player_a.points
+        if tier == "full":
+            return Content.from_markup(
+                "Did [bold]$b_name[/] score [bold]more[/] or [bold]fewer[/] "
+                f"than $a_name's [$warning]{points}[/]?",
+                b_name=player_last_name(question.player_b.player_name),
+                a_name=player_first_name(question.player_a.player_name),
             )
-        return (
-            f"Did {question.player_b.player_name} score more or fewer than "
-            f"{question.player_a.points} pts?"
+        return Content.from_markup(f"More or fewer than [$warning]{points}[/]?")
+
+    def _show_reveal(self, result: QuestionResult, guess: GuessDirection) -> None:
+        """Reveal B's number, drop the verdict strip, flash the scorebug."""
+        went_over = result.revealed_points > result.question.player_a.points
+        self._matchup_panel.reveal(
+            result.revealed_points,
+            is_correct=result.is_correct,
+            went_over=went_over,
         )
 
-    def _show_reveal(self, revealed_points: int, is_correct: bool, score_delta: int) -> None:
-        """Flash feedback bar and reveal Player B's points."""
-        feedback = self.query_one("#feedback-bar", Label)
-        feedback.remove_class("feedback-correct", "feedback-wrong")
-
-        if is_correct:
-            feedback.update(f"✓  CORRECT!  +{score_delta} pts")
-            feedback.add_class("feedback-correct")
+        signed_delta = f"{result.score_delta:+d}".replace("-", "−")
+        strip = self.query_one("#verdict-strip", StatusStrip)
+        if result.is_correct:
+            strip.show(
+                "-success",
+                Content.from_markup(
+                    "[bold $success]CALLED IT.[/]  $b_name went for "
+                    f"{result.revealed_points} — that's {'over' if went_over else 'under'}.",
+                    b_name=player_last_name(result.question.player_b.player_name),
+                ),
+                f"[bold $success]{signed_delta}[/]",
+            )
         else:
-            feedback.update(f"✕  WRONG!  {score_delta:+d} pts")
-            feedback.add_class("feedback-wrong")
+            strip.show(
+                "-danger",
+                Content.from_markup(
+                    f"[bold $error]ICE COLD.[/]  He dropped {result.revealed_points} "
+                    f"— you said {guess.value}.",
+                ),
+                f"[bold $error]{signed_delta}[/]",
+            )
+            losing_button = "guess-higher" if guess is GuessDirection.HIGHER else "guess-lower"
+            self._guess_bar.mark_wrong(losing_button)
 
-        self._matchup_panel.reveal_points(revealed_points)
+        # The service has already advanced to the next question (and may have
+        # started the next round), but the UI is still revealing this answer.
+        # Refresh only scoring here; _present_question advances the counters.
+        self._scorebug.update_scoring(self._snapshot)
+        self._scorebug.show_scoring_event(is_gain=result.is_correct)
+        self._footer.set_hints(_REVEAL_HELD_HINT)
 
     def _hide_feedback(self) -> None:
-        feedback = self.query_one("#feedback-bar", Label)
-        feedback.remove_class("feedback-correct", "feedback-wrong")
-        feedback.update("")
+        self.query_one("#verdict-strip", StatusStrip).hide()
+        self._guess_bar.clear_wrong()
 
     def _show_game_over_screen(self) -> None:
         if self._game_over_screen_visible:

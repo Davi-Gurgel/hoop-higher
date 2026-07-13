@@ -1,21 +1,10 @@
 /* ═══════════════════════════════════════════════════════════════
-   HOOP HIGHER – Arcade Terminal Theme
+   HOOP HIGHER theme
+   Every rule references a role token from tui/theme.py — never raw hex.
    ═══════════════════════════════════════════════════════════════ */
 
 /* ── BASE ───────────────────────────────────────────────────── */
 Screen {
-    background: #0d1117;
-    color: #e6edf3;
-}
-
-Header {
-    background: #161b22;
-    color: #f0883e;
-    dock: top;
-}
-
-Footer {
-    background: #161b22;
-    color: #8b949e;
-    dock: bottom;
+    background: $background;
+    color: $foreground;
 }

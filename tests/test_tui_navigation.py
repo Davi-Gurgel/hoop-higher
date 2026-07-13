@@ -5,7 +5,7 @@ from datetime import date, datetime, timezone
 
 import pytest
 from sqlmodel import Session
-from textual.widgets import Button, Label
+from textual.widgets import Button, Label, Static
 
 import hoophigher.tui.screens.game as game_screen_module
 from hoophigher.data import (
@@ -17,9 +17,10 @@ from hoophigher.data import (
     create_sqlite_engine,
     init_db,
 )
-from hoophigher.domain.enums import RunEndReason
+from hoophigher.domain.enums import GameMode, RunEndReason
 from hoophigher.domain.models import NBAGame, PlayerLine, TeamGameInfo
 from hoophigher.app import HoopHigherApp
+from hoophigher.tui.theme import LIGHT_THEME_NAME
 
 
 @pytest.fixture(autouse=True)
@@ -40,7 +41,7 @@ def _wrong_guess_key(app: HoopHigherApp) -> str:
 
 
 def _label_texts(app: HoopHigherApp) -> list[str]:
-    return [label.visual.plain for label in app.screen.query(Label)]
+    return [static.visual.plain for static in app.screen.query(Static)]
 
 
 def _enter_binding_description(app: HoopHigherApp) -> str | None:
@@ -114,6 +115,32 @@ def test_mode_select_supports_arrow_navigation() -> None:
     asyncio.run(scenario())
 
 
+def test_mode_select_enter_starts_focused_mode(monkeypatch) -> None:
+    started_modes = []
+
+    async def fake_start_game(self, mode) -> bool:
+        started_modes.append(mode)
+        return False
+
+    monkeypatch.setattr(HoopHigherApp, "start_game", fake_start_game)
+
+    async def scenario() -> None:
+        app = HoopHigherApp(database_url="sqlite://")
+
+        async with app.run_test() as pilot:
+            await pilot.press("enter")
+            await pilot.pause()
+            assert getattr(app.screen.focused, "id", None) == "mode-endless"
+
+            await pilot.press("down")
+            await pilot.press("enter")
+            await pilot.pause()
+
+            assert started_modes == [GameMode.ARCADE]
+
+    asyncio.run(scenario())
+
+
 def test_mode_select_shows_loading_state_while_starting_game(monkeypatch) -> None:
     started = asyncio.Event()
     release = asyncio.Event()
@@ -134,17 +161,15 @@ def test_mode_select_shows_loading_state_while_starting_game(monkeypatch) -> Non
             await asyncio.wait_for(started.wait(), timeout=1)
             await pilot.pause()
 
-            assert app.screen.query_one("#mode-loading-status", Label).has_class("-visible")
-            assert app.screen.query_one("#mode-endless", Button).disabled is True
+            assert app.screen.query_one("#mode-loading-status").has_class("-visible")
+            assert app.screen.query_one("#mode-endless", Button).disabled is False
             assert app.screen.query_one("#mode-arcade", Button).disabled is True
             assert app.screen.query_one("#mode-historical", Button).disabled is True
 
             release.set()
             await pilot.pause()
 
-            assert (
-                app.screen.query_one("#mode-loading-status", Label).has_class("-visible") is False
-            )
+            assert app.screen.query_one("#mode-loading-status").has_class("-visible") is False
             assert app.screen.query_one("#mode-endless", Button).disabled is False
 
     asyncio.run(scenario())
@@ -174,18 +199,17 @@ def test_mode_select_back_cancels_loading_worker(monkeypatch) -> None:
             await asyncio.wait_for(started.wait(), timeout=1)
             await pilot.pause()
 
-            assert app.screen.query_one("#mode-endless", Button).disabled is True
+            assert app.screen.query_one("#mode-arcade", Button).disabled is True
+            assert "CANCEL" in app.screen.query_one("#mode-footer").visual.plain
 
             await pilot.press("escape")
             await asyncio.wait_for(cancelled.wait(), timeout=1)
             await pilot.pause()
 
             assert type(app.screen).__name__ == "ModeSelectScreen"
-            assert app.screen.query_one("#mode-endless", Button).disabled is False
-            assert (
-                app.screen.query_one("#mode-loading-status", Label).has_class("-visible") is False
-            )
-            assert "Cancel" not in app.screen.query_one("#mode-back", Button).label.plain
+            assert app.screen.query_one("#mode-arcade", Button).disabled is False
+            assert app.screen.query_one("#mode-loading-status").has_class("-visible") is False
+            assert "CANCEL" not in app.screen.query_one("#mode-footer").visual.plain
 
     asyncio.run(scenario())
 
@@ -243,6 +267,23 @@ def test_home_screen_can_open_stats_and_return_home() -> None:
 
             await pilot.press("escape")
             await pilot.pause()
+            assert type(app.screen).__name__ == "HomeScreen"
+
+    asyncio.run(scenario())
+
+
+def test_header_back_control_returns_home_with_mouse() -> None:
+    async def scenario() -> None:
+        app = HoopHigherApp(database_url="sqlite://")
+
+        async with app.run_test() as pilot:
+            await pilot.press("s")
+            await pilot.pause()
+            assert type(app.screen).__name__ == "StatsScreen"
+
+            await pilot.click("#header-band-back")
+            await pilot.pause()
+
             assert type(app.screen).__name__ == "HomeScreen"
 
     asyncio.run(scenario())
@@ -425,8 +466,8 @@ def test_stats_screen_refreshes_after_a_run_is_played(tmp_path, monkeypatch) -> 
             await pilot.press("enter")
             await pilot.pause()
             assert type(app.screen).__name__ == "StatsScreen"
-            assert "Runs played: 0" in _label_texts(app)
-            assert "Questions answered: 0" in _label_texts(app)
+            assert app.screen.query_one("#stat-runs .stat-value").visual.plain == "0"
+            assert app.screen.query_one("#stat-questions .stat-value").visual.plain == "0"
 
             await pilot.press("escape")
             await pilot.pause()
@@ -451,8 +492,8 @@ def test_stats_screen_refreshes_after_a_run_is_played(tmp_path, monkeypatch) -> 
             await pilot.press("s")
             await pilot.pause()
             assert type(app.screen).__name__ == "StatsScreen"
-            assert "Runs played: 1" in _label_texts(app)
-            assert "Questions answered: 1" in _label_texts(app)
+            assert app.screen.query_one("#stat-runs .stat-value").visual.plain == "1"
+            assert app.screen.query_one("#stat-questions .stat-value").visual.plain == "1"
 
     asyncio.run(scenario())
 
@@ -472,7 +513,7 @@ def test_leaderboard_refreshes_after_a_run_is_played(tmp_path, monkeypatch) -> N
             await pilot.press("enter")
             await pilot.pause()
             assert type(app.screen).__name__ == "LeaderboardScreen"
-            assert "No runs recorded yet." in _label_texts(app)
+            assert app.screen.query_one("#leaderboard-empty").has_class("-visible")
 
             await pilot.press("escape")
             await pilot.pause()
@@ -495,11 +536,21 @@ def test_leaderboard_refreshes_after_a_run_is_played(tmp_path, monkeypatch) -> N
             await pilot.press("l")
             await pilot.pause()
             assert type(app.screen).__name__ == "LeaderboardScreen"
-            assert "No runs recorded yet." not in _label_texts(app)
-            assert any(
-                "RK  MODE         SCORE  STRK  CORR  DATE" in text for text in _label_texts(app)
-            )
-            assert any("Endless" in text for text in _label_texts(app))
+            assert not app.screen.query_one("#leaderboard-empty").has_class("-visible")
+
+            from textual.widgets import DataTable
+
+            table = app.screen.query_one("#leaderboard-table", DataTable)
+            assert table.row_count == 1
+            first_row = table.get_row_at(0)
+            assert first_row[1].plain == "endless"
+
+            dark_rank_style = first_row[0].style
+            app.theme = LIGHT_THEME_NAME
+            await pilot.pause()
+
+            light_rank_style = table.get_row_at(0)[0].style
+            assert light_rank_style != dark_rank_style
 
     asyncio.run(scenario())
 
@@ -534,7 +585,7 @@ def test_game_screen_surfaces_active_game_context() -> None:
             await pilot.pause()
 
             snapshot = app.gameplay_service.snapshot()
-            active_game = app.screen.query_one("#active-game-title", Label)
+            active_game = app.screen.query_one("#context-date")
             player_a_name = app.screen.query_one("#pa-name", Label)
             player_b_name = app.screen.query_one("#pb-name", Label)
 
@@ -545,9 +596,7 @@ def test_game_screen_surfaces_active_game_context() -> None:
                 for i, g in enumerate(snapshot.games_today)
                 if g.game_id == snapshot.current_game.game_id
             )
-            assert app.screen.query_one(f"#game-tab-{current_game_index}", Label).has_class(
-                "browser-tab-active"
-            )
+            assert app.screen.query_one(f"#game-tab-{current_game_index}").has_class("-active")
             assert player_a_name.visual.plain != ""
             assert player_b_name.visual.plain != ""
 
@@ -609,7 +658,7 @@ def test_game_screen_renders_provider_strings_as_plain_text(
 
             label_texts = _label_texts(app)
 
-            assert any("[RED]NAME[/RED]" in text for text in label_texts)
+            assert any("[red]Name[/red]" in text for text in label_texts)
             assert any("[red]X[/red]" in text for text in label_texts)
 
     asyncio.run(scenario())
@@ -763,8 +812,8 @@ def test_game_screen_active_tab_moves_after_round_end() -> None:
             )
 
             assert next_active_index != initial_active_index
-            active_tab = app.screen.query_one(f"#game-tab-{next_active_index}", Label)
-            assert active_tab.has_class("browser-tab-active")
+            active_tab = app.screen.query_one(f"#game-tab-{next_active_index}")
+            assert active_tab.has_class("-active")
 
     asyncio.run(scenario())
 
@@ -843,10 +892,10 @@ def test_round_summary_reports_completed_round_and_resets_for_next_round(monkeyp
                 await pilot.pause(0.05)
 
             assert type(app.screen).__name__ == "RoundSummaryScreen"
-            summary_labels = [label.visual.plain for label in app.screen.query(Label)]
-            assert "ROUND 1 COMPLETE" in summary_labels
-            assert "✓ 5   ✕ 0   (5 questions)" in summary_labels
-            assert "Score Delta: +500" in summary_labels
+            summary_labels = [static.visual.plain for static in app.screen.query(Static)]
+            assert "ROUND 1 · COMPLETE" in summary_labels
+            assert "✓ 5 right   ✗ 0 wrong" in summary_labels
+            assert "round +500" in summary_labels
 
             await pilot.press("enter")
             await pilot.pause()
@@ -863,9 +912,9 @@ def test_round_summary_reports_completed_round_and_resets_for_next_round(monkeyp
                 await pilot.pause(0.05)
 
             assert type(app.screen).__name__ == "RoundSummaryScreen"
-            summary_labels = [label.visual.plain for label in app.screen.query(Label)]
-            assert "ROUND 2 COMPLETE" in summary_labels
-            assert "✓ 4   ✕ 1   (5 questions)" in summary_labels
-            assert "Score Delta: +340" in summary_labels
+            summary_labels = [static.visual.plain for static in app.screen.query(Static)]
+            assert "ROUND 2 · COMPLETE" in summary_labels
+            assert "✓ 4 right   ✗ 1 wrong" in summary_labels
+            assert "round +340" in summary_labels
 
     asyncio.run(scenario())

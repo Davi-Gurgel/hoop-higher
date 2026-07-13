@@ -1,4 +1,5 @@
-from hoophigher.tui.screens.game import GameOverScreen, GameScreen
+from hoophigher.tui.screens.game import GameScreen
+from hoophigher.tui.screens.game_over import GameOverScreen
 from hoophigher.tui.screens.home import HomeScreen
 from hoophigher.tui.screens.leaderboard import LeaderboardScreen
 from hoophigher.tui.screens.mode_select import ModeSelectScreen

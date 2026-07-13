@@ -5,6 +5,8 @@ from datetime import date, timedelta
 
 from sqlalchemy.engine import Engine
 from textual.app import App
+from textual.binding import Binding
+from textual.theme import Theme
 
 from hoophigher.config import Settings
 from hoophigher.data import create_sqlite_engine, init_db
@@ -16,6 +18,7 @@ from hoophigher.services import (
     RunHistoryService,
     StatsService,
 )
+from hoophigher.tui.responsive import FULL_MIN_WIDTH, SM_MIN_HEIGHT, SM_MIN_WIDTH
 from hoophigher.tui.screens import (
     GameScreen,
     HomeScreen,
@@ -23,6 +26,15 @@ from hoophigher.tui.screens import (
     ModeSelectScreen,
     RunHistoryScreen,
     StatsScreen,
+)
+from hoophigher.tui.theme import (
+    DARK_THEME_NAME,
+    DEFAULT_THEME_NAME,
+    LIGHT_THEME_NAME,
+    HOOP_HIGHER_THEMES,
+    THEME_VARIABLE_DEFAULTS,
+    load_saved_theme_name,
+    save_theme_name,
 )
 
 MOCK_CANDIDATE_DATES = (
@@ -68,15 +80,16 @@ class HoopHigherApp(App[None]):
     CSS_PATH = "tui/styles.tcss"
     TITLE = "Hoop Higher"
     SUB_TITLE = "Local gameplay"
+    BINDINGS = [Binding("t", "toggle_theme", "Theme", priority=True, show=False)]
     HORIZONTAL_BREAKPOINTS = [
         (0, "-w-xs"),
-        (72, "-w-sm"),
-        (96, "-w-md"),
+        (SM_MIN_WIDTH, "-w-sm"),
+        (FULL_MIN_WIDTH, "-w-md"),
         (128, "-w-lg"),
     ]
     VERTICAL_BREAKPOINTS = [
         (0, "-h-xs"),
-        (24, "-h-sm"),
+        (SM_MIN_HEIGHT, "-h-sm"),
         (32, "-h-md"),
         (40, "-h-lg"),
     ]
@@ -88,7 +101,30 @@ class HoopHigherApp(App[None]):
         self._session_recent_date: date | None = None
         self._game_start_timeout_seconds = GAME_START_TIMEOUT_SECONDS
 
+    def get_theme_variable_defaults(self) -> dict[str, str]:
+        return THEME_VARIABLE_DEFAULTS
+
+    def _restore_theme(self) -> None:
+        for theme in HOOP_HIGHER_THEMES:
+            self.register_theme(theme)
+        saved_theme_name = None if self.is_headless else load_saved_theme_name()
+        if saved_theme_name in self.available_themes:
+            self.theme = saved_theme_name
+        else:
+            self.theme = DEFAULT_THEME_NAME
+        self.theme_changed_signal.subscribe(self, self._persist_theme_choice)
+
+    def _persist_theme_choice(self, theme: Theme) -> None:
+        if not self.is_headless:
+            save_theme_name(theme.name)
+
+    def action_toggle_theme(self) -> None:
+        going_light = self.current_theme.dark
+        self.theme = LIGHT_THEME_NAME if going_light else DARK_THEME_NAME
+        self.notify(f"Theme: {'light' if going_light else 'dark'}", timeout=2)
+
     def on_mount(self) -> None:
+        self._restore_theme()
         settings = Settings()
         engine = create_sqlite_engine(
             self._database_url or settings.database_url,
@@ -147,15 +183,15 @@ class HoopHigherApp(App[None]):
         except TimeoutError:
             self.notify(
                 (
-                    "NBA data is taking too long to respond. Try again, use cached data, "
-                    "or lower HOOPHIGHER_NBA_API_TIMEOUT_SECONDS for faster failures."
+                    "stats.nba.com timed out. Not on you this time — try again, use cached "
+                    "data, or lower HOOPHIGHER_NBA_API_TIMEOUT_SECONDS for faster failures."
                 ),
-                title="Unable to start game",
+                title="✗ Unable to start game",
                 severity="error",
             )
             return False
         except (LookupError, ValueError) as exc:
-            self.notify(str(exc), title="Unable to start game", severity="error")
+            self.notify(str(exc), title="✗ Unable to start game", severity="error")
             return False
         if not self._uses_mock_stats_source:
             self.clear_notifications()
