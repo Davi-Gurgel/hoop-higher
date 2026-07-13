@@ -67,7 +67,7 @@ class HomeScreen(Screen[None]):
             yield ActionRow("Quit", "[Q]", id="quit-game")
         footer = FooterHints(id="home-footer")
         footer.set_hints(
-            hints(("↑/↓", "move"), ("enter", "select"), ("", "letter = shortcut"))
+            hints(("↑/↓", "move"), ("enter", "select"), ("T", "theme"), ("", "letter = shortcut"))
             + " [$accent blink]▍[/]"
         )
         yield footer
