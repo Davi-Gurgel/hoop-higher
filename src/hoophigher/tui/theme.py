@@ -1,11 +1,11 @@
-"""STAT DESK design tokens.
+"""Hoop Higher design tokens.
 
 Two sibling themes (dark default, light "paper") mapping the handoff role
 table onto Textual theme variables. Widgets must reference a role variable
 ($accent, $success, $muted, $card-fill, ...) — never a raw hex — so a theme
 swap stays a one-table change.
 
-Role → Textual field mapping (per docs/design/stat-desk/RESOURCES.md):
+Role → Textual field mapping:
 accent→primary+accent, success→success, danger→error, highlight→warning,
 screen→background, panel→panel, raised→surface, text→foreground. The
 remaining roles and the extra surface fills ship as custom variables.
@@ -24,7 +24,7 @@ DARK_THEME_NAME = "hoop-higher-dark"
 LIGHT_THEME_NAME = "hoop-higher-light"
 DEFAULT_THEME_NAME = DARK_THEME_NAME
 
-STAT_DESK_DARK = Theme(
+HOOP_HIGHER_DARK_THEME = Theme(
     name=DARK_THEME_NAME,
     primary="#FF6A3D",
     accent="#FF6A3D",
@@ -60,7 +60,7 @@ STAT_DESK_DARK = Theme(
     },
 )
 
-STAT_DESK_LIGHT = Theme(
+HOOP_HIGHER_LIGHT_THEME = Theme(
     name=LIGHT_THEME_NAME,
     primary="#E0521F",
     accent="#E0521F",
@@ -95,12 +95,12 @@ STAT_DESK_LIGHT = Theme(
     },
 )
 
-STAT_DESK_THEMES = (STAT_DESK_DARK, STAT_DESK_LIGHT)
+HOOP_HIGHER_THEMES = (HOOP_HIGHER_DARK_THEME, HOOP_HIGHER_LIGHT_THEME)
 
 # Fallback values so TCSS referencing the custom tokens keeps resolving when a
-# non-STAT-DESK theme is active (e.g. the built-in ansi themes used for the
+# non-Hoop Higher theme is active (e.g. the built-in ansi themes used for the
 # 16-color validation harness).
-THEME_VARIABLE_DEFAULTS: dict[str, str] = dict(STAT_DESK_DARK.variables)
+THEME_VARIABLE_DEFAULTS: dict[str, str] = dict(HOOP_HIGHER_DARK_THEME.variables)
 
 
 def theme_settings_path() -> Path:

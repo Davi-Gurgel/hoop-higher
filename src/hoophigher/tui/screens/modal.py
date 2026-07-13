@@ -1,20 +1,20 @@
-"""Shared STAT DESK modal shell: a centered panel over the dimmed game."""
+"""Shared Hoop Higher modal shell: a centered panel over the dimmed game."""
 
 from __future__ import annotations
 
 from textual.screen import ModalScreen
 
 
-class DeskModalScreen(ModalScreen[None]):
-    """Base for STAT DESK modals; compose the panel with `.desk-modal-panel`."""
+class AppModalScreen(ModalScreen[None]):
+    """Base for Hoop Higher modals; compose the panel with `.app-modal-panel`."""
 
     DEFAULT_CSS = """
-    DeskModalScreen {
+    AppModalScreen {
         align: center middle;
         background: $void 60%;
     }
 
-    DeskModalScreen .desk-modal-panel {
+    AppModalScreen .app-modal-panel {
         width: 66;
         max-width: 90%;
         height: auto;

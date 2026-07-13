@@ -18,7 +18,7 @@ def _use_mock_provider(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("HOOPHIGHER_STATS_PROVIDER", "mock")
 
 
-def test_app_registers_and_defaults_to_stat_desk_dark() -> None:
+def test_app_registers_and_defaults_to_hoop_higher_dark() -> None:
     async def scenario() -> None:
         app = HoopHigherApp(database_url="sqlite://")
 

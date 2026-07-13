@@ -9,14 +9,14 @@ from __future__ import annotations
 
 from textual.content import Content
 
-from hoophigher.tui.widgets.desk_button import DeskButton
+from hoophigher.tui.widgets.app_button import AppButton
 
 
-class ActionRow(DeskButton):
-    """A Button restyled as a STAT DESK menu row.
+class ActionRow(AppButton):
+    """A Button restyled as a Hoop Higher menu row.
 
     Keeps Button's press/click/message semantics but renders its own
-    two-sided line (label left, shortcut right). The DeskButton reset is
+    two-sided line (label left, shortcut right). The AppButton reset is
     exactly this row's look, so it carries no CSS of its own.
     """
 

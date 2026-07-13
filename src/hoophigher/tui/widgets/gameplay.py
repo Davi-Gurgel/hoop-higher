@@ -18,7 +18,7 @@ from hoophigher.domain.formatting import player_last_name
 from hoophigher.domain.models import NBAGame, Question
 from hoophigher.services import GameplaySnapshot
 from hoophigher.tui.responsive import Tier
-from hoophigher.tui.widgets.desk_button import DeskButton
+from hoophigher.tui.widgets.app_button import AppButton
 
 
 @dataclass(frozen=True, slots=True)
@@ -446,7 +446,7 @@ class MatchupPanel(Vertical):
         self._player_b_card.reveal(points, is_correct=is_correct, went_over=went_over)
 
 
-class GuessButton(DeskButton):
+class GuessButton(AppButton):
     """Gameplay buttons keep focus, but let the screen own the Enter binding.
 
     Neither button carries green/red at rest — focus is the accent fill.

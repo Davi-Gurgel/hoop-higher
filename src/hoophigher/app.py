@@ -31,7 +31,7 @@ from hoophigher.tui.theme import (
     DARK_THEME_NAME,
     DEFAULT_THEME_NAME,
     LIGHT_THEME_NAME,
-    STAT_DESK_THEMES,
+    HOOP_HIGHER_THEMES,
     THEME_VARIABLE_DEFAULTS,
     load_saved_theme_name,
     save_theme_name,
@@ -105,7 +105,7 @@ class HoopHigherApp(App[None]):
         return THEME_VARIABLE_DEFAULTS
 
     def _restore_theme(self) -> None:
-        for theme in STAT_DESK_THEMES:
+        for theme in HOOP_HIGHER_THEMES:
             self.register_theme(theme)
         saved_theme_name = None if self.is_headless else load_saved_theme_name()
         if saved_theme_name in self.available_themes:

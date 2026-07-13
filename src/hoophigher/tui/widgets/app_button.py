@@ -1,7 +1,7 @@
-"""Shared reset for STAT DESK buttons.
+"""Shared reset for Hoop Higher buttons.
 
 Button's stock look (tall borders, surface fill, hover/focus tint) fights
-the desk language, and overriding it means matching the `.-style-default`
+the app's visual language, and overriding it means matching the `.-style-default`
 variant class Textual stamps on plain buttons. That fight lives here once:
 hairline outline at rest, muted outline on hover, solid accent fill with
 near-black text on focus. Subclasses and screen CSS state only their color
@@ -13,11 +13,11 @@ from __future__ import annotations
 from textual.widgets import Button
 
 
-class DeskButton(Button, inherit_bindings=False):
-    """Button with the STAT DESK reset; screens own the Enter binding."""
+class AppButton(Button, inherit_bindings=False):
+    """Button with the Hoop Higher reset; screens own the Enter binding."""
 
     DEFAULT_CSS = """
-    DeskButton, DeskButton.-style-default {
+    AppButton, AppButton.-style-default {
         width: 100%;
         height: 3;
         min-width: 0;

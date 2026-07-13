@@ -1,4 +1,4 @@
-"""Game Over modal: danger-toned STAT DESK panel over the dimmed game."""
+"""Game Over modal: danger-toned Hoop Higher panel over the dimmed game."""
 
 from __future__ import annotations
 
@@ -8,11 +8,11 @@ from textual.content import Content
 from textual.widgets import Button, Static
 
 from hoophigher.services import GameplaySnapshot
-from hoophigher.tui.screens.modal import DeskModalScreen
-from hoophigher.tui.widgets import DeskButton
+from hoophigher.tui.screens.modal import AppModalScreen
+from hoophigher.tui.widgets import AppButton
 
 
-class GameOverScreen(DeskModalScreen):
+class GameOverScreen(AppModalScreen):
     """Shown when the run ends (arcade miss or user exit)."""
 
     DEFAULT_CSS = """
@@ -69,7 +69,7 @@ class GameOverScreen(DeskModalScreen):
 
     def compose(self) -> ComposeResult:
         s = self._snapshot
-        with Vertical(id="gameover-overlay", classes="desk-modal-panel"):
+        with Vertical(id="gameover-overlay", classes="app-modal-panel"):
             with Horizontal(id="gameover-header"):
                 yield Static(
                     f"[bold $error]GAME OVER[/][$dim] · {s.mode.value}[/]",
@@ -91,7 +91,7 @@ class GameOverScreen(DeskModalScreen):
             )
             yield Static("[$warning]Cooked — but respectable.[/]", classes="gameover-stat")
             with Horizontal(id="gameover-actions"):
-                yield DeskButton(Content("▸ Return home [enter / esc]"), id="gameover-home")
+                yield AppButton(Content("▸ Return home [enter / esc]"), id="gameover-home")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "gameover-home":

@@ -1,6 +1,6 @@
 from hoophigher.tui.widgets.action_row import ActionRow
 from hoophigher.tui.widgets.chrome import FooterHints, HeaderBand, Scorebug, hints
-from hoophigher.tui.widgets.desk_button import DeskButton
+from hoophigher.tui.widgets.app_button import AppButton
 from hoophigher.tui.widgets.mode_card import ModeCard
 from hoophigher.tui.widgets.strips import StatusStrip
 from hoophigher.tui.widgets.gameplay import (
@@ -12,7 +12,7 @@ from hoophigher.tui.widgets.gameplay import (
 
 __all__ = [
     "ActionRow",
-    "DeskButton",
+    "AppButton",
     "FooterHints",
     "GameContextStrip",
     "GuessBar",

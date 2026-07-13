@@ -10,7 +10,7 @@ from __future__ import annotations
 from textual.content import Content
 
 from hoophigher.domain.enums import GameMode
-from hoophigher.tui.widgets.desk_button import DeskButton
+from hoophigher.tui.widgets.app_button import AppButton
 
 _SCORING_MARKUP = {
     GameMode.ENDLESS: ("[$success]+100[/][$dim] / [/][$error]−60[/]", "+100 / −60"),
@@ -25,7 +25,7 @@ _DESCRIPTIONS = {
 }
 
 
-class ModeCard(DeskButton):
+class ModeCard(AppButton):
     DEFAULT_CSS = """
     ModeCard, ModeCard.-style-default {
         height: 4;

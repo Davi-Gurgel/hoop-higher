@@ -1,4 +1,4 @@
-"""STAT DESK global chrome: Scorebug, HeaderBand, and FooterHints.
+"""Hoop Higher global chrome: Scorebug, HeaderBand, and FooterHints.
 
 These carry the shared visual language across screens: a panel band pinned
 to the top (Scorebug on Game, HeaderBand elsewhere) and a dim strip of live

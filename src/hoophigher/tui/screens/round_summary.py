@@ -8,8 +8,8 @@ from textual.containers import Horizontal, Vertical
 from textual.content import Content
 from textual.widgets import Button, Rule, Static
 
-from hoophigher.tui.screens.modal import DeskModalScreen
-from hoophigher.tui.widgets import DeskButton
+from hoophigher.tui.screens.modal import AppModalScreen
+from hoophigher.tui.widgets import AppButton
 
 
 @dataclass(frozen=True, slots=True)
@@ -24,7 +24,7 @@ class RoundSummary:
     score_delta: int
 
 
-class RoundSummaryScreen(DeskModalScreen):
+class RoundSummaryScreen(AppModalScreen):
     DEFAULT_CSS = """
     RoundSummaryScreen #summary-overlay {
         border: round $accent;
@@ -79,7 +79,7 @@ class RoundSummaryScreen(DeskModalScreen):
         s = self._summary
         signed_delta = f"{s.score_delta:+d}".replace("-", "−")
         delta_color = "$success" if s.score_delta >= 0 else "$error"
-        with Vertical(id="summary-overlay", classes="desk-modal-panel"):
+        with Vertical(id="summary-overlay", classes="app-modal-panel"):
             with Horizontal(classes="summary-split"):
                 yield Static(
                     f"[bold $accent]ROUND {s.round_index + 1} · COMPLETE[/]",
@@ -101,7 +101,7 @@ class RoundSummaryScreen(DeskModalScreen):
                     classes="split-right",
                 )
             yield Static("Next round pulls a different game. Stay hot.", id="summary-flavor")
-            yield DeskButton(Content("▸ Continue [enter]"), id="summary-continue")
+            yield AppButton(Content("▸ Continue [enter]"), id="summary-continue")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "summary-continue":
