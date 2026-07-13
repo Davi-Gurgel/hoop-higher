@@ -20,12 +20,6 @@ from hoophigher.domain.scoring import (
     is_guess_correct,
 )
 from hoophigher.services.playable_nba_game_resolver import (
-    DEFAULT_HISTORICAL_END_YEAR,
-    DEFAULT_HISTORICAL_MAX_DATE_PROBES,
-    DEFAULT_HISTORICAL_ROUNDS,
-    DEFAULT_HISTORICAL_START_YEAR,
-    DEFAULT_NON_HISTORICAL_STARTUP_GAMES,
-    DEFAULT_PLAYABLE_GAME_FETCH_CONCURRENCY,
     HistoricalEligibleSourceDatesFetcher,
     PlayableNBAGameResolver,
 )
@@ -73,14 +67,14 @@ class GameplayService:
         *,
         engine: Engine,
         stats_source: StatsSource,
+        historical_start_year: int,
+        historical_end_year: int,
+        historical_rounds: int,
+        historical_max_date_probes: int,
+        playable_game_fetch_concurrency: int,
+        non_historical_startup_games: int,
         rng: Random | None = None,
         nba_game_resolver: PlayableNBAGameResolver | None = None,
-        historical_start_year: int = DEFAULT_HISTORICAL_START_YEAR,
-        historical_end_year: int = DEFAULT_HISTORICAL_END_YEAR,
-        historical_rounds: int = DEFAULT_HISTORICAL_ROUNDS,
-        historical_max_date_probes: int = DEFAULT_HISTORICAL_MAX_DATE_PROBES,
-        playable_game_fetch_concurrency: int = DEFAULT_PLAYABLE_GAME_FETCH_CONCURRENCY,
-        non_historical_startup_games: int = DEFAULT_NON_HISTORICAL_STARTUP_GAMES,
         historical_eligible_dates_fetcher: HistoricalEligibleSourceDatesFetcher | None = None,
     ) -> None:
         self._engine = engine

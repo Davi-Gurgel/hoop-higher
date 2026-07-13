@@ -18,7 +18,7 @@ from pathlib import Path
 from platformdirs import user_data_path
 from textual.theme import Theme
 
-from hoophigher.data.db import APP_NAME
+from hoophigher.paths import APP_NAME
 
 DARK_THEME_NAME = "hoop-higher-dark"
 LIGHT_THEME_NAME = "hoop-higher-light"

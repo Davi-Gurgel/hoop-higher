@@ -91,6 +91,20 @@ class _NoShuffleRandom(Random):
         return list(population)[:k]
 
 
+def _make_resolver(stats_source, **kwargs):
+    values = {
+        "historical_start_year": 2010,
+        "historical_end_year": 2020,
+        "historical_rounds": 5,
+        "historical_max_date_probes": 10,
+        "playable_game_fetch_concurrency": 8,
+        "non_historical_startup_games": 5,
+        "rng": Random(1),
+    }
+    values.update(kwargs)
+    return PlayableNBAGameResolver(stats_source=stats_source, **values)
+
+
 class _ShellNBAGameStatsSource:
     def __init__(self, *, game_count: int, source_date: date) -> None:
         self.max_in_flight = 0
@@ -226,7 +240,7 @@ class _MixedCachedShellStatsSource:
 
 
 def test_resolver_selects_playable_games_without_run_persistence() -> None:
-    resolver = PlayableNBAGameResolver(stats_source=MockStatsSource(), rng=Random(1))
+    resolver = _make_resolver(stats_source=MockStatsSource(), rng=Random(1))
 
     selected_date, games = asyncio.run(
         resolver.resolve(
@@ -251,7 +265,7 @@ def test_resolver_tries_candidate_dates_until_playable_games_are_found() -> None
             second_date: (_make_game(game_id="playable", source_date=second_date),),
         }
     )
-    resolver = PlayableNBAGameResolver(stats_source=stats_source, rng=Random(1))
+    resolver = _make_resolver(stats_source=stats_source, rng=Random(1))
 
     selected_date, games = asyncio.run(
         resolver.resolve(
@@ -268,7 +282,7 @@ def test_resolver_tries_candidate_dates_until_playable_games_are_found() -> None
 
 def test_resolver_reports_dates_with_no_playable_games() -> None:
     source_date = date(2025, 2, 9)
-    resolver = PlayableNBAGameResolver(
+    resolver = _make_resolver(
         stats_source=_DateStatsSource(
             {source_date: (_make_game(game_id="unplayable", source_date=source_date, minutes=0),)}
         ),
@@ -287,7 +301,7 @@ def test_resolver_reports_dates_with_no_playable_games() -> None:
 
 
 def test_non_historical_resolution_requires_candidate_source_dates() -> None:
-    resolver = PlayableNBAGameResolver(stats_source=MockStatsSource(), rng=Random(1))
+    resolver = _make_resolver(stats_source=MockStatsSource(), rng=Random(1))
 
     with pytest.raises(ValueError, match="candidate_dates is required"):
         asyncio.run(
@@ -303,7 +317,7 @@ def test_non_historical_resolution_requires_candidate_source_dates() -> None:
 def test_resolution_tries_next_source_date_after_stats_source_error() -> None:
     first_date = date(2025, 2, 9)
     second_date = date(2025, 2, 10)
-    resolver = PlayableNBAGameResolver(
+    resolver = _make_resolver(
         stats_source=_DateStatsSource(
             {
                 first_date: RuntimeError("temporary failure"),
@@ -329,7 +343,7 @@ def test_resolution_tries_next_source_date_after_stats_source_error() -> None:
 def test_shell_nba_games_are_fetched_concurrently_with_source_date_fallbacks() -> None:
     source_date = date(2025, 2, 10)
     stats_source = _ShellNBAGameStatsSource(game_count=4, source_date=source_date)
-    resolver = PlayableNBAGameResolver(
+    resolver = _make_resolver(
         stats_source=stats_source,
         rng=_NoShuffleRandom(1),
     )
@@ -352,7 +366,7 @@ def test_shell_nba_games_are_fetched_concurrently_with_source_date_fallbacks() -
 def test_non_historical_resolution_caps_boxscore_fetches_for_fast_startup() -> None:
     source_date = date(2025, 2, 10)
     stats_source = _ShellNBAGameStatsSource(game_count=8, source_date=source_date)
-    resolver = PlayableNBAGameResolver(
+    resolver = _make_resolver(
         stats_source=stats_source,
         rng=_NoShuffleRandom(1),
         playable_game_fetch_concurrency=5,
@@ -375,7 +389,7 @@ def test_non_historical_resolution_caps_boxscore_fetches_for_fast_startup() -> N
 def test_resolution_continues_after_partial_shell_fetch_batch_fails() -> None:
     source_date = date(2025, 2, 10)
     stats_source = _MixedCachedShellStatsSource(source_date=source_date)
-    resolver = PlayableNBAGameResolver(
+    resolver = _make_resolver(
         stats_source=stats_source,
         rng=_NoShuffleRandom(1),
         playable_game_fetch_concurrency=5,
@@ -409,7 +423,7 @@ def test_resolution_continues_after_partial_shell_fetch_batch_fails() -> None:
 def test_resolution_cancels_slow_shell_after_enough_nba_games_load() -> None:
     source_date = date(2025, 2, 10)
     stats_source = _SlowFirstShellStatsSource(game_count=4, source_date=source_date)
-    resolver = PlayableNBAGameResolver(
+    resolver = _make_resolver(
         stats_source=stats_source,
         rng=_NoShuffleRandom(1),
         playable_game_fetch_concurrency=2,
@@ -447,7 +461,7 @@ def test_historical_resolution_uses_one_indexed_source_date() -> None:
         requested_windows.append((start_year, end_year, min_games))
         return (source_date,)
 
-    resolver = PlayableNBAGameResolver(
+    resolver = _make_resolver(
         stats_source=stats_source,
         rng=Random(4),
         historical_start_year=2010,
@@ -487,7 +501,7 @@ def test_historical_index_tries_next_source_date_after_resolution_error() -> Non
     async def eligible_source_dates(_start_year: int, _end_year: int, _min_games: int):
         return (first_date, second_date)
 
-    resolver = PlayableNBAGameResolver(
+    resolver = _make_resolver(
         stats_source=stats_source,
         rng=_NoShuffleRandom(),
         historical_eligible_source_dates_fetcher=eligible_source_dates,
@@ -514,7 +528,7 @@ def test_historical_probes_prefer_high_signal_source_dates() -> None:
         days=[1, 1, 1, 1, 1, 1, 1],
     )
     stats_source = _DateStatsSource({})
-    resolver = PlayableNBAGameResolver(
+    resolver = _make_resolver(
         stats_source=stats_source,
         rng=rng,
         historical_start_year=2023,
@@ -546,7 +560,7 @@ def test_historical_probes_prefer_high_signal_source_dates() -> None:
 def test_playability_probe_does_not_consume_resolver_rng_state() -> None:
     source_date = date(2025, 1, 12)
     rng = Random(11)
-    resolver = PlayableNBAGameResolver(
+    resolver = _make_resolver(
         stats_source=_DateStatsSource(
             {source_date: (_make_game(game_id="probe-game", source_date=source_date),)}
         ),

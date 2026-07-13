@@ -24,6 +24,19 @@ def _make_engine(tmp_path):
     return engine
 
 
+def _make_service(**kwargs):
+    values = {
+        "historical_start_year": 2010,
+        "historical_end_year": 2020,
+        "historical_rounds": 5,
+        "historical_max_date_probes": 10,
+        "playable_game_fetch_concurrency": 8,
+        "non_historical_startup_games": 5,
+    }
+    values.update(kwargs)
+    return GameplayService(**values)
+
+
 def _make_service_game(
     *,
     game_id: str,
@@ -98,7 +111,7 @@ class _NoShuffleRandom(Random):
 
 def test_endless_continues_after_wrong_answer_and_persists_progress(tmp_path) -> None:
     engine = _make_engine(tmp_path)
-    service = GameplayService(engine=engine, stats_source=MockStatsSource(), rng=Random(7))
+    service = _make_service(engine=engine, stats_source=MockStatsSource(), rng=Random(7))
 
     start_snapshot = asyncio.run(
         service.start_run(
@@ -136,7 +149,7 @@ def test_endless_continues_after_wrong_answer_and_persists_progress(tmp_path) ->
 
 def test_service_requires_active_run_for_snapshot_submit_and_end_run(tmp_path) -> None:
     engine = _make_engine(tmp_path)
-    service = GameplayService(engine=engine, stats_source=MockStatsSource(), rng=Random(1))
+    service = _make_service(engine=engine, stats_source=MockStatsSource(), rng=Random(1))
 
     with pytest.raises(ValueError, match="No active run"):
         service.snapshot()
@@ -150,7 +163,7 @@ def test_service_requires_active_run_for_snapshot_submit_and_end_run(tmp_path) -
 
 def test_arcade_ends_on_first_error(tmp_path) -> None:
     engine = _make_engine(tmp_path)
-    service = GameplayService(engine=engine, stats_source=MockStatsSource(), rng=Random(3))
+    service = _make_service(engine=engine, stats_source=MockStatsSource(), rng=Random(3))
 
     start_snapshot = asyncio.run(
         service.start_run(
@@ -173,7 +186,7 @@ def test_arcade_ends_on_first_error(tmp_path) -> None:
 
 def test_submit_answer_rejects_finished_run(tmp_path) -> None:
     engine = _make_engine(tmp_path)
-    service = GameplayService(engine=engine, stats_source=MockStatsSource(), rng=Random(3))
+    service = _make_service(engine=engine, stats_source=MockStatsSource(), rng=Random(3))
 
     start_snapshot = asyncio.run(
         service.start_run(
@@ -198,8 +211,14 @@ def test_start_run_delegates_source_date_and_playable_game_resolution(tmp_path) 
     resolver = PlayableNBAGameResolver(
         stats_source=_DateStatsSource({selected_date: (selected_game,)}),
         rng=Random(1),
+        historical_start_year=2010,
+        historical_end_year=2020,
+        historical_rounds=5,
+        historical_max_date_probes=10,
+        playable_game_fetch_concurrency=8,
+        non_historical_startup_games=5,
     )
-    service = GameplayService(
+    service = _make_service(
         engine=engine,
         stats_source=MockStatsSource(),
         rng=Random(1),
@@ -219,7 +238,7 @@ def test_start_run_delegates_source_date_and_playable_game_resolution(tmp_path) 
 
 def test_endless_starts_next_round_after_perfect_round_and_persists_rounds(tmp_path) -> None:
     engine = _make_engine(tmp_path)
-    service = GameplayService(engine=engine, stats_source=MockStatsSource(), rng=Random(1))
+    service = _make_service(engine=engine, stats_source=MockStatsSource(), rng=Random(1))
 
     start_snapshot = asyncio.run(
         service.start_run(
@@ -254,7 +273,7 @@ def test_endless_starts_next_round_after_perfect_round_and_persists_rounds(tmp_p
 
 def test_arcade_starts_next_round_after_perfect_round_and_persists_rounds(tmp_path) -> None:
     engine = _make_engine(tmp_path)
-    service = GameplayService(engine=engine, stats_source=MockStatsSource(), rng=Random(1))
+    service = _make_service(engine=engine, stats_source=MockStatsSource(), rng=Random(1))
 
     start_snapshot = asyncio.run(
         service.start_run(
@@ -290,7 +309,7 @@ def test_arcade_starts_next_round_after_perfect_round_and_persists_rounds(tmp_pa
 def test_non_historical_run_ends_after_each_fetched_game_is_played(tmp_path) -> None:
     source_date = date(2025, 2, 10)
     engine = _make_engine(tmp_path)
-    service = GameplayService(
+    service = _make_service(
         engine=engine,
         stats_source=_DateStatsSource(
             {
@@ -345,7 +364,7 @@ def test_non_historical_run_ends_after_each_fetched_game_is_played(tmp_path) -> 
 
 def test_end_run_persists_user_exit_and_is_idempotent(tmp_path) -> None:
     engine = _make_engine(tmp_path)
-    service = GameplayService(engine=engine, stats_source=MockStatsSource(), rng=Random(1))
+    service = _make_service(engine=engine, stats_source=MockStatsSource(), rng=Random(1))
 
     start_snapshot = asyncio.run(
         service.start_run(
@@ -491,7 +510,7 @@ def test_historical_uses_exactly_configured_rounds_even_when_date_has_more_games
     async def fake_eligible_dates_fetcher(_start_year: int, _end_year: int, _min_games: int):
         return (date(2018, 2, 14),)
 
-    service = GameplayService(
+    service = _make_service(
         engine=engine,
         stats_source=_ManyGamesStatsSource(),
         rng=Random(4),
@@ -526,7 +545,7 @@ def test_historical_caps_rounds_to_available_games_without_refetching_dates(tmp_
     async def fake_eligible_dates_fetcher(_start_year: int, _end_year: int, _min_games: int):
         return (date(2018, 2, 13), date(2018, 2, 14))
 
-    service = GameplayService(
+    service = _make_service(
         engine=engine,
         stats_source=stats_source,
         rng=_NoShuffleRandom(),
@@ -567,7 +586,7 @@ def test_historical_caps_rounds_to_available_games_without_refetching_dates(tmp_
 
 def test_historical_carries_configured_total_questions_into_next_round(tmp_path) -> None:
     engine = _make_engine(tmp_path)
-    service = GameplayService(engine=engine, stats_source=MockStatsSource(), rng=Random(1))
+    service = _make_service(engine=engine, stats_source=MockStatsSource(), rng=Random(1))
 
     start_snapshot = asyncio.run(
         service.start_run(
@@ -596,7 +615,7 @@ def test_historical_carries_configured_total_questions_into_next_round(tmp_path)
 
 def test_historical_wrong_answer_keeps_run_active_and_applies_score(tmp_path) -> None:
     engine = _make_engine(tmp_path)
-    service = GameplayService(engine=engine, stats_source=MockStatsSource(), rng=Random(5))
+    service = _make_service(engine=engine, stats_source=MockStatsSource(), rng=Random(5))
 
     start_snapshot = asyncio.run(
         service.start_run(
@@ -620,7 +639,7 @@ def test_historical_wrong_answer_keeps_run_active_and_applies_score(tmp_path) ->
 
 def test_historical_advances_to_next_game_after_round_completion(tmp_path) -> None:
     engine = _make_engine(tmp_path)
-    service = GameplayService(engine=engine, stats_source=MockStatsSource(), rng=Random(1))
+    service = _make_service(engine=engine, stats_source=MockStatsSource(), rng=Random(1))
 
     start_snapshot = asyncio.run(
         service.start_run(
@@ -645,7 +664,7 @@ def test_historical_advances_to_next_game_after_round_completion(tmp_path) -> No
 
 def test_historical_ends_after_all_games_for_date_are_consumed(tmp_path) -> None:
     engine = _make_engine(tmp_path)
-    service = GameplayService(engine=engine, stats_source=MockStatsSource(), rng=Random(1))
+    service = _make_service(engine=engine, stats_source=MockStatsSource(), rng=Random(1))
 
     start_snapshot = asyncio.run(
         service.start_run(
@@ -697,7 +716,7 @@ def _spy_on_generate_round(monkeypatch) -> list[object]:
 def test_start_run_generates_round_using_service_owned_rng(tmp_path, monkeypatch) -> None:
     engine = _make_engine(tmp_path)
     service_rng = Random(11)
-    service = GameplayService(engine=engine, stats_source=MockStatsSource(), rng=service_rng)
+    service = _make_service(engine=engine, stats_source=MockStatsSource(), rng=service_rng)
     recorded_rngs = _spy_on_generate_round(monkeypatch)
 
     asyncio.run(
@@ -717,7 +736,7 @@ def test_start_run_generates_round_using_service_owned_rng(tmp_path, monkeypatch
 def test_start_next_round_generates_round_using_service_owned_rng(tmp_path, monkeypatch) -> None:
     engine = _make_engine(tmp_path)
     service_rng = Random(11)
-    service = GameplayService(engine=engine, stats_source=MockStatsSource(), rng=service_rng)
+    service = _make_service(engine=engine, stats_source=MockStatsSource(), rng=service_rng)
 
     start_snapshot = asyncio.run(
         service.start_run(

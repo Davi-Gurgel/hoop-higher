@@ -42,15 +42,14 @@ MOCK_CANDIDATE_DATES = (
     date(2025, 1, 13),
 )
 RECENT_CANDIDATE_DAYS = 3
-GAME_START_TIMEOUT_SECONDS = 45.0
 
 
 def create_stats_source(
     source_kind: str,
     *,
-    timeout_seconds: int = 20,
-    max_retries: int = 1,
-    retry_delay_seconds: float = 1.0,
+    timeout_seconds: int,
+    max_retries: int,
+    retry_delay_seconds: float,
     engine: Engine | None = None,
 ) -> StatsSource:
     if source_kind == "mock":
@@ -94,12 +93,19 @@ class HoopHigherApp(App[None]):
         (40, "-h-lg"),
     ]
 
-    def __init__(self, *, database_url: str | None = None, **kwargs: object) -> None:
+    def __init__(
+        self,
+        *,
+        database_url: str | None = None,
+        settings: Settings | None = None,
+        **kwargs: object,
+    ) -> None:
         super().__init__(**kwargs)
+        self._settings = settings or Settings()
         self._database_url = database_url
         self._session_historical_date: date | None = None
         self._session_recent_date: date | None = None
-        self._game_start_timeout_seconds = GAME_START_TIMEOUT_SECONDS
+        self._game_start_timeout_seconds = self._settings.game_start_timeout_seconds
 
     def get_theme_variable_defaults(self) -> dict[str, str]:
         return THEME_VARIABLE_DEFAULTS
@@ -125,35 +131,32 @@ class HoopHigherApp(App[None]):
 
     def on_mount(self) -> None:
         self._restore_theme()
-        settings = Settings()
         engine = create_sqlite_engine(
-            self._database_url or settings.database_url,
-            sqlite_journal_mode=settings.sqlite_journal_mode,
-            sqlite_synchronous=settings.sqlite_synchronous,
-            sqlite_busy_timeout_ms=settings.sqlite_busy_timeout_ms,
+            self._database_url or self._settings.database_url,
+            sqlite_journal_mode=self._settings.sqlite_journal_mode,
+            sqlite_synchronous=self._settings.sqlite_synchronous,
+            sqlite_busy_timeout_ms=self._settings.sqlite_busy_timeout_ms,
         )
         init_db(engine)
         stats_source = create_stats_source(
-            settings.stats_provider,
-            timeout_seconds=settings.nba_api_timeout_seconds,
-            max_retries=settings.nba_api_max_retries,
-            retry_delay_seconds=settings.nba_api_retry_delay_seconds,
+            self._settings.stats_provider,
+            timeout_seconds=self._settings.nba_api_timeout_seconds,
+            max_retries=self._settings.nba_api_max_retries,
+            retry_delay_seconds=self._settings.nba_api_retry_delay_seconds,
             engine=engine,
         )
         self._uses_mock_stats_source = isinstance(stats_source, MockStatsSource)
         self._recent_candidate_dates = recent_candidate_dates()
-        self._game_start_timeout_seconds = settings.game_start_timeout_seconds
         gameplay_service_kwargs: dict[str, object] = {
             "engine": engine,
             "stats_source": stats_source,
-            "historical_start_year": settings.historical_start_year,
-            "historical_end_year": settings.historical_end_year,
-            "historical_rounds": settings.historical_rounds,
-            "historical_max_date_probes": settings.historical_max_date_probes,
-            "playable_game_fetch_concurrency": settings.nba_api_fetch_concurrency,
+            "historical_start_year": self._settings.historical_start_year,
+            "historical_end_year": self._settings.historical_end_year,
+            "historical_rounds": self._settings.historical_rounds,
+            "historical_max_date_probes": self._settings.historical_max_date_probes,
+            "playable_game_fetch_concurrency": self._settings.nba_api_fetch_concurrency,
+            "non_historical_startup_games": self._settings.nba_api_startup_games,
         }
-        if not self._uses_mock_stats_source:
-            gameplay_service_kwargs["non_historical_startup_games"] = settings.nba_api_startup_games
         self.gameplay_service = GameplayService(**gameplay_service_kwargs)
         self.leaderboard_service = LeaderboardService(engine=engine)
         self.stats_service = StatsService(engine=engine)

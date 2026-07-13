@@ -4,6 +4,7 @@ from datetime import date
 import pytest
 from sqlalchemy import text
 from sqlmodel import Session, select
+import hoophigher.paths as paths_module
 from hoophigher.data import (
     CachedGameRecord,
     CachedGameStatsRecord,
@@ -415,7 +416,8 @@ def test_create_sqlite_engine_creates_parent_directory_for_default_database(
     database_path = tmp_path / "user-data" / "hoop-higher" / "hoophigher.db"
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(
-        "hoophigher.data.db.user_data_path",
+        paths_module,
+        "user_data_path",
         lambda *_args, **_kwargs: database_path.parent,
     )
 
