@@ -1,11 +1,53 @@
+from dataclasses import dataclass
+from types import MappingProxyType
+from typing import Mapping
+
 from hoophigher.domain.enums import GameMode, GuessDirection, RunEndReason
 from hoophigher.domain.models import Question
 
-ENDLESS_CORRECT_POINTS = 100
-ENDLESS_WRONG_POINTS = -60
-ARCADE_CORRECT_POINTS = 150
-HISTORICAL_CORRECT_POINTS = 100
-HISTORICAL_WRONG_POINTS = -60
+
+@dataclass(frozen=True, slots=True)
+class ScoringPolicy:
+    correct_score_delta: int
+    wrong_score_delta: int
+    correct_guess_end_reason: RunEndReason | None = None
+    wrong_guess_end_reason: RunEndReason | None = None
+
+
+SCORING_POLICIES: Mapping[GameMode, ScoringPolicy] = MappingProxyType(
+    {
+        GameMode.ENDLESS: ScoringPolicy(
+            correct_score_delta=100,
+            wrong_score_delta=-60,
+            correct_guess_end_reason=None,
+        ),
+        GameMode.ARCADE: ScoringPolicy(
+            correct_score_delta=150,
+            wrong_score_delta=0,
+            correct_guess_end_reason=None,
+            wrong_guess_end_reason=RunEndReason.WRONG_GUESS,
+        ),
+        GameMode.HISTORICAL: ScoringPolicy(
+            correct_score_delta=100,
+            wrong_score_delta=-60,
+            correct_guess_end_reason=None,
+        ),
+    }
+)
+
+# Keep the named values available to callers while deriving them from the policy table.
+ENDLESS_CORRECT_POINTS = SCORING_POLICIES[GameMode.ENDLESS].correct_score_delta
+ENDLESS_WRONG_POINTS = SCORING_POLICIES[GameMode.ENDLESS].wrong_score_delta
+ARCADE_CORRECT_POINTS = SCORING_POLICIES[GameMode.ARCADE].correct_score_delta
+HISTORICAL_CORRECT_POINTS = SCORING_POLICIES[GameMode.HISTORICAL].correct_score_delta
+HISTORICAL_WRONG_POINTS = SCORING_POLICIES[GameMode.HISTORICAL].wrong_score_delta
+
+
+def _scoring_policy_for(mode: GameMode) -> ScoringPolicy:
+    try:
+        return SCORING_POLICIES[mode]
+    except KeyError as error:
+        raise ValueError(f"Scoring is not configured for mode: {mode.value}") from error
 
 
 def is_guess_correct(question: Question, guess: GuessDirection) -> bool:
@@ -13,29 +55,10 @@ def is_guess_correct(question: Question, guess: GuessDirection) -> bool:
 
 
 def calculate_score_delta(mode: GameMode, *, is_correct: bool) -> int:
-    if mode is GameMode.ENDLESS:
-        return ENDLESS_CORRECT_POINTS if is_correct else ENDLESS_WRONG_POINTS
-
-    if mode is GameMode.HISTORICAL:
-        return HISTORICAL_CORRECT_POINTS if is_correct else HISTORICAL_WRONG_POINTS
-
-    if mode is GameMode.ARCADE:
-        return ARCADE_CORRECT_POINTS if is_correct else 0
-
-    raise ValueError(f"Scoring is not configured for mode: {mode.value}")
+    policy = _scoring_policy_for(mode)
+    return policy.correct_score_delta if is_correct else policy.wrong_score_delta
 
 
 def get_run_end_reason_for_guess(mode: GameMode, *, is_correct: bool) -> RunEndReason | None:
-    if mode is GameMode.ARCADE and not is_correct:
-        return RunEndReason.WRONG_GUESS
-
-    if mode is GameMode.ENDLESS:
-        return None
-
-    if mode is GameMode.HISTORICAL:
-        return None
-
-    if mode is GameMode.ARCADE:
-        return None
-
-    raise ValueError(f"Run end behavior is not configured for mode: {mode.value}")
+    policy = _scoring_policy_for(mode)
+    return policy.correct_guess_end_reason if is_correct else policy.wrong_guess_end_reason

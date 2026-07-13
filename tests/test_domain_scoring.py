@@ -1,15 +1,13 @@
+import pytest
+
 from hoophigher.domain import (
-    ARCADE_CORRECT_POINTS,
-    ENDLESS_CORRECT_POINTS,
-    ENDLESS_WRONG_POINTS,
-    HISTORICAL_CORRECT_POINTS,
-    HISTORICAL_WRONG_POINTS,
     Difficulty,
     GameMode,
     GuessDirection,
     PlayerLine,
     Question,
     RunEndReason,
+    SCORING_POLICIES,
     calculate_score_delta,
     get_run_end_reason_for_guess,
     is_guess_correct,
@@ -45,30 +43,35 @@ def test_is_guess_correct_matches_question_correct_guess() -> None:
     assert is_guess_correct(question, GuessDirection.LOWER) is False
 
 
-def test_calculate_score_delta_for_endless_mode() -> None:
-    assert calculate_score_delta(GameMode.ENDLESS, is_correct=True) == ENDLESS_CORRECT_POINTS
-    assert calculate_score_delta(GameMode.ENDLESS, is_correct=False) == ENDLESS_WRONG_POINTS
+@pytest.mark.parametrize(
+    ("mode", "is_correct", "expected_delta"),
+    [
+        (GameMode.ENDLESS, True, 100),
+        (GameMode.ENDLESS, False, -60),
+        (GameMode.ARCADE, True, 150),
+        (GameMode.ARCADE, False, 0),
+        (GameMode.HISTORICAL, True, 100),
+        (GameMode.HISTORICAL, False, -60),
+    ],
+)
+def test_calculate_score_delta_for_each_mode(mode, is_correct, expected_delta) -> None:
+    assert calculate_score_delta(mode, is_correct=is_correct) == expected_delta
 
 
-def test_calculate_score_delta_for_arcade_mode() -> None:
-    assert calculate_score_delta(GameMode.ARCADE, is_correct=True) == ARCADE_CORRECT_POINTS
-    assert calculate_score_delta(GameMode.ARCADE, is_correct=False) == 0
+@pytest.mark.parametrize(
+    ("mode", "is_correct", "expected_end_reason"),
+    [
+        (GameMode.ENDLESS, True, None),
+        (GameMode.ENDLESS, False, None),
+        (GameMode.ARCADE, True, None),
+        (GameMode.ARCADE, False, RunEndReason.WRONG_GUESS),
+        (GameMode.HISTORICAL, True, None),
+        (GameMode.HISTORICAL, False, None),
+    ],
+)
+def test_get_run_end_reason_for_each_mode(mode, is_correct, expected_end_reason) -> None:
+    assert get_run_end_reason_for_guess(mode, is_correct=is_correct) is expected_end_reason
 
 
-def test_calculate_score_delta_for_historical_mode() -> None:
-    assert calculate_score_delta(GameMode.HISTORICAL, is_correct=True) == HISTORICAL_CORRECT_POINTS
-    assert calculate_score_delta(GameMode.HISTORICAL, is_correct=False) == HISTORICAL_WRONG_POINTS
-
-
-def test_get_run_end_reason_for_arcade_wrong_answer() -> None:
-    assert (
-        get_run_end_reason_for_guess(GameMode.ARCADE, is_correct=False) is RunEndReason.WRONG_GUESS
-    )
-
-
-def test_get_run_end_reason_for_non_ending_answers() -> None:
-    assert get_run_end_reason_for_guess(GameMode.ARCADE, is_correct=True) is None
-    assert get_run_end_reason_for_guess(GameMode.ENDLESS, is_correct=True) is None
-    assert get_run_end_reason_for_guess(GameMode.ENDLESS, is_correct=False) is None
-    assert get_run_end_reason_for_guess(GameMode.HISTORICAL, is_correct=True) is None
-    assert get_run_end_reason_for_guess(GameMode.HISTORICAL, is_correct=False) is None
+def test_scoring_policy_table_covers_every_mode() -> None:
+    assert set(SCORING_POLICIES) == set(GameMode)
