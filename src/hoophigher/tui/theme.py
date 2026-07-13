@@ -20,8 +20,8 @@ from textual.theme import Theme
 
 from hoophigher.data.db import APP_NAME
 
-DARK_THEME_NAME = "stat-desk-dark"
-LIGHT_THEME_NAME = "stat-desk-light"
+DARK_THEME_NAME = "hoop-higher-dark"
+LIGHT_THEME_NAME = "hoop-higher-light"
 DEFAULT_THEME_NAME = DARK_THEME_NAME
 
 STAT_DESK_DARK = Theme(

@@ -5,6 +5,7 @@ from datetime import date, timedelta
 
 from sqlalchemy.engine import Engine
 from textual.app import App
+from textual.binding import Binding
 from textual.theme import Theme
 
 from hoophigher.config import Settings
@@ -26,7 +27,9 @@ from hoophigher.tui.screens import (
     StatsScreen,
 )
 from hoophigher.tui.theme import (
+    DARK_THEME_NAME,
     DEFAULT_THEME_NAME,
+    LIGHT_THEME_NAME,
     STAT_DESK_THEMES,
     THEME_VARIABLE_DEFAULTS,
     load_saved_theme_name,
@@ -76,6 +79,7 @@ class HoopHigherApp(App[None]):
     CSS_PATH = "tui/styles.tcss"
     TITLE = "Hoop Higher"
     SUB_TITLE = "Local gameplay"
+    BINDINGS = [Binding("t", "toggle_theme", "Theme", priority=True, show=False)]
     HORIZONTAL_BREAKPOINTS = [
         (0, "-w-xs"),
         (72, "-w-sm"),
@@ -112,6 +116,11 @@ class HoopHigherApp(App[None]):
     def _persist_theme_choice(self, theme: Theme) -> None:
         if not self.is_headless:
             save_theme_name(theme.name)
+
+    def action_toggle_theme(self) -> None:
+        going_light = self.current_theme.dark
+        self.theme = LIGHT_THEME_NAME if going_light else DARK_THEME_NAME
+        self.notify(f"Theme: {'light' if going_light else 'dark'}", timeout=2)
 
     def on_mount(self) -> None:
         self._restore_theme()

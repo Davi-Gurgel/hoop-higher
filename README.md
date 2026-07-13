@@ -51,6 +51,10 @@ After every guess, Hoop Higher reveals the answer, updates your score, and moves
 | `Esc` | Go back |
 | `Q` | Quit |
 | `1`, `2`, `3` | Pick a game mode |
+| `T` | Toggle light/dark theme |
+
+Hoop Higher starts in its dark theme. Press `T` on any screen to switch between
+the dark and light palettes; the choice is saved and restored on the next run.
 
 ## Data
 

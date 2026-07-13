@@ -63,6 +63,42 @@ def test_app_stays_usable_under_ansi_fallback_theme() -> None:
     asyncio.run(scenario())
 
 
+def test_t_binding_toggles_theme_from_any_screen() -> None:
+    async def scenario() -> None:
+        app = HoopHigherApp(database_url="sqlite://")
+
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            assert app.theme == DARK_THEME_NAME
+
+            await pilot.press("t")
+            await pilot.pause()
+            assert app.theme == LIGHT_THEME_NAME
+
+            await pilot.press("t")
+            await pilot.pause()
+            assert app.theme == DARK_THEME_NAME
+
+    asyncio.run(scenario())
+
+
+def test_theme_toggle_works_during_gameplay() -> None:
+    async def scenario() -> None:
+        app = HoopHigherApp(database_url="sqlite://")
+
+        async with app.run_test() as pilot:
+            await pilot.press("enter")
+            await pilot.press("1")
+            await pilot.pause()
+            assert type(app.screen).__name__ == "GameScreen"
+
+            await pilot.press("t")
+            await pilot.pause()
+            assert app.theme == LIGHT_THEME_NAME
+
+    asyncio.run(scenario())
+
+
 def test_theme_name_round_trips_through_settings_file(tmp_path) -> None:
     settings_path = tmp_path / "theme"
     assert load_saved_theme_name(settings_path) is None

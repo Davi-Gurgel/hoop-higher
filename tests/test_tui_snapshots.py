@@ -18,6 +18,7 @@ from hoophigher.data import (
     init_db,
 )
 from hoophigher.domain.enums import GameMode
+from hoophigher.tui.theme import LIGHT_THEME_NAME
 
 
 @pytest.fixture(autouse=True)
@@ -77,12 +78,12 @@ async def _open_game_over(pilot: Pilot) -> None:
 
 
 async def _open_home_light(pilot: Pilot) -> None:
-    pilot.app.theme = "stat-desk-light"
+    pilot.app.theme = LIGHT_THEME_NAME
     await pilot.pause()
 
 
 async def _open_gameplay_light(pilot: Pilot) -> None:
-    pilot.app.theme = "stat-desk-light"
+    pilot.app.theme = LIGHT_THEME_NAME
     await _open_gameplay(pilot, "1")
 
 
