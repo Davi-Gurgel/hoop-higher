@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 import hoophigher.app as app_module
 import hoophigher.config as config_module
-import hoophigher.data.db as db_module
+import hoophigher.paths as paths_module
 from hoophigher.data import (
     CacheRepository,
     create_sqlite_engine,
@@ -34,12 +34,31 @@ def test_settings_defaults_to_nba_api_provider(monkeypatch) -> None:
     assert values.stats_provider == "nba_api"
 
 
+def test_settings_owns_runtime_defaults(monkeypatch, tmp_path) -> None:
+    monkeypatch.delenv("HOOPHIGHER_DATABASE_URL", raising=False)
+    monkeypatch.chdir(tmp_path)
+
+    values = config_module.Settings()
+
+    assert values.database_url.startswith("sqlite:///")
+    assert values.historical_start_year == 2010
+    assert values.historical_end_year == 2020
+    assert values.historical_rounds == 5
+    assert values.nba_api_timeout_seconds == 20
+    assert values.nba_api_max_retries == 1
+    assert values.nba_api_retry_delay_seconds == 1.0
+    assert values.nba_api_fetch_concurrency == 8
+    assert values.nba_api_startup_games == 5
+    assert values.game_start_timeout_seconds == 45.0
+    assert values.historical_max_date_probes == 10
+
+
 def test_settings_uses_per_user_database_path_by_default(monkeypatch, tmp_path) -> None:
     launch_directory = tmp_path / "empty-launch-directory"
     launch_directory.mkdir()
     data_directory = tmp_path / "user-data" / "hoop-higher"
     monkeypatch.chdir(launch_directory)
-    monkeypatch.setattr(db_module, "user_data_path", lambda *_args, **_kwargs: data_directory)
+    monkeypatch.setattr(paths_module, "user_data_path", lambda *_args, **_kwargs: data_directory)
 
     values = config_module.Settings()
 
@@ -53,7 +72,7 @@ def test_settings_uses_existing_legacy_database(monkeypatch, tmp_path) -> None:
     legacy_database_path.touch()
     monkeypatch.chdir(launch_directory)
     monkeypatch.setattr(
-        db_module,
+        paths_module,
         "user_data_path",
         lambda *_args, **_kwargs: tmp_path / "user-data" / "hoop-higher",
     )
@@ -151,9 +170,31 @@ def test_settings_rejects_game_start_timeout_below_one(monkeypatch) -> None:
         config_module.Settings()
 
 
+@pytest.mark.parametrize(
+    ("environment_name", "value", "field_name"),
+    [
+        ("HOOPHIGHER_NBA_API_RETRY_DELAY_SECONDS", "-0.1", "nba_api_retry_delay_seconds"),
+        ("HOOPHIGHER_NBA_API_FETCH_CONCURRENCY", "0", "nba_api_fetch_concurrency"),
+        ("HOOPHIGHER_HISTORICAL_MAX_DATE_PROBES", "0", "historical_max_date_probes"),
+    ],
+)
+def test_settings_rejects_invalid_runtime_limits(
+    monkeypatch, environment_name: str, value: str, field_name: str
+) -> None:
+    monkeypatch.setenv(environment_name, value)
+
+    with pytest.raises(ValidationError, match=field_name):
+        config_module.Settings()
+
+
 def test_create_stats_source_rejects_unknown_source_kind() -> None:
     with pytest.raises(ValueError, match="Unknown stats source"):
-        app_module.create_stats_source("invalid")
+        app_module.create_stats_source(
+            "invalid",
+            timeout_seconds=20,
+            max_retries=1,
+            retry_delay_seconds=1.0,
+        )
 
 
 def test_recent_candidate_dates_returns_today_first() -> None:
@@ -283,7 +324,7 @@ def test_app_uses_bounded_historical_probes_for_nba_api_provider(monkeypatch) ->
     asyncio.run(scenario())
 
 
-def test_app_keeps_mock_provider_startup_game_count_for_snapshots(monkeypatch) -> None:
+def test_app_wires_mock_provider_startup_game_count_from_settings(monkeypatch) -> None:
     monkeypatch.setenv("HOOPHIGHER_STATS_PROVIDER", "mock")
     monkeypatch.setenv("HOOPHIGHER_NBA_API_STARTUP_GAMES", "1")
     _reload_app_module()
@@ -291,7 +332,7 @@ def test_app_keeps_mock_provider_startup_game_count_for_snapshots(monkeypatch) -
     async def scenario() -> None:
         app = app_module.HoopHigherApp(database_url="sqlite://")
         async with app.run_test():
-            assert app.gameplay_service._nba_game_resolver._non_historical_startup_games == 5
+            assert app.gameplay_service._nba_game_resolver._non_historical_startup_games == 1
 
     asyncio.run(scenario())
 

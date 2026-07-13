@@ -53,6 +53,16 @@ def _make_cache_factory(engine):
     return factory
 
 
+def _make_stats_source(**kwargs):
+    values = {
+        "timeout_seconds": 5,
+        "max_retries": 1,
+        "retry_delay_seconds": 0,
+    }
+    values.update(kwargs)
+    return NBAApiStatsSource(**values)
+
+
 def test_get_games_by_date_uses_cache_before_fetchers(tmp_path) -> None:
     target_date = date(2025, 2, 10)
     cached_game = _make_game("0022500001", target_date)
@@ -74,7 +84,7 @@ def test_get_games_by_date_uses_cache_before_fetchers(tmp_path) -> None:
         boxscore_calls += 1
         return {}
 
-    stats_source = NBAApiStatsSource(
+    stats_source = _make_stats_source(
         cache_repository_factory=_make_cache_factory(engine),
         scoreboard_fetch=scoreboard_fetch,
         nba_game_fetch=nba_game_fetch,
@@ -184,7 +194,7 @@ def test_get_games_by_date_refetches_cached_unavailable_boxscore(tmp_path) -> No
             }
         }
 
-    stats_source = NBAApiStatsSource(
+    stats_source = _make_stats_source(
         cache_repository_factory=_make_cache_factory(engine),
         scoreboard_fetch=scoreboard_fetch,
         nba_game_fetch=nba_game_fetch,
@@ -242,7 +252,7 @@ def test_get_nba_game_caches_miss_then_hits_cache(tmp_path) -> None:
             }
         }
 
-    stats_source = NBAApiStatsSource(
+    stats_source = _make_stats_source(
         cache_repository_factory=_make_cache_factory(engine),
         nba_game_fetch=nba_game_fetch,
         timeout_seconds=5,
@@ -304,7 +314,7 @@ def test_get_nba_game_refetches_and_replaces_legacy_cached_boxscore(tmp_path) ->
             }
         }
 
-    stats_source = NBAApiStatsSource(
+    stats_source = _make_stats_source(
         cache_repository_factory=_make_cache_factory(engine),
         nba_game_fetch=nba_game_fetch,
         timeout_seconds=5,
@@ -362,7 +372,7 @@ def test_get_nba_game_accepts_date_fallback_for_v3_payload_without_game_date(tmp
             }
         }
 
-    stats_source = NBAApiStatsSource(
+    stats_source = _make_stats_source(
         cache_repository_factory=_make_cache_factory(engine),
         nba_game_fetch=nba_game_fetch,
         timeout_seconds=5,
@@ -451,7 +461,7 @@ def test_get_games_by_date_returns_shells_and_boxscore_caches_on_demand(tmp_path
             }
         }
 
-    stats_source = NBAApiStatsSource(
+    stats_source = _make_stats_source(
         cache_repository_factory=_make_cache_factory(engine),
         scoreboard_fetch=scoreboard_fetch,
         nba_game_fetch=nba_game_fetch,
@@ -514,7 +524,7 @@ def test_get_games_by_date_returns_shells_without_fetching_boxscores(tmp_path) -
         boxscore_calls += 1
         return {}
 
-    stats_source = NBAApiStatsSource(
+    stats_source = _make_stats_source(
         cache_repository_factory=_make_cache_factory(engine),
         scoreboard_fetch=scoreboard_fetch,
         nba_game_fetch=nba_game_fetch,
@@ -581,7 +591,7 @@ def test_mapping_parses_minutes_and_skips_blank_player_ids(tmp_path) -> None:
             }
         }
 
-    stats_source = NBAApiStatsSource(
+    stats_source = _make_stats_source(
         cache_repository_factory=_make_cache_factory(engine),
         nba_game_fetch=nba_game_fetch,
         timeout_seconds=5,
@@ -665,7 +675,7 @@ def test_get_games_by_date_parses_nested_v3_boxscore_shape(tmp_path) -> None:
             }
         }
 
-    stats_source = NBAApiStatsSource(
+    stats_source = _make_stats_source(
         cache_repository_factory=_make_cache_factory(engine),
         scoreboard_fetch=scoreboard_fetch,
         nba_game_fetch=nba_game_fetch,
@@ -760,7 +770,7 @@ def test_get_games_by_date_parses_v2_boxscore_without_game_summary(tmp_path) -> 
             ]
         }
 
-    stats_source = NBAApiStatsSource(
+    stats_source = _make_stats_source(
         cache_repository_factory=_make_cache_factory(engine),
         scoreboard_fetch=scoreboard_fetch,
         nba_game_fetch=nba_game_fetch,
@@ -807,7 +817,7 @@ def test_malformed_payload_raises_explicit_error(tmp_path) -> None:
             }
         }
 
-    stats_source = NBAApiStatsSource(
+    stats_source = _make_stats_source(
         cache_repository_factory=_make_cache_factory(engine),
         nba_game_fetch=malformed_nba_game_fetch,
         timeout_seconds=5,
@@ -856,7 +866,7 @@ def test_get_nba_game_retries_transient_fetch_error_then_succeeds(tmp_path) -> N
             }
         }
 
-    stats_source = NBAApiStatsSource(
+    stats_source = _make_stats_source(
         cache_repository_factory=_make_cache_factory(engine),
         nba_game_fetch=flaky_nba_game_fetch,
         timeout_seconds=5,
@@ -933,7 +943,7 @@ def test_get_games_by_date_retries_transient_scoreboard_error_then_succeeds(tmp_
             }
         }
 
-    stats_source = NBAApiStatsSource(
+    stats_source = _make_stats_source(
         cache_repository_factory=_make_cache_factory(engine),
         scoreboard_fetch=flaky_scoreboard_fetch,
         nba_game_fetch=nba_game_fetch,
@@ -959,7 +969,7 @@ def test_get_games_by_date_raises_lookup_error_when_transient_errors_exhausted(t
         calls += 1
         raise ConnectionError("upstream unavailable")
 
-    stats_source = NBAApiStatsSource(
+    stats_source = _make_stats_source(
         cache_repository_factory=_make_cache_factory(engine),
         scoreboard_fetch=always_failing_scoreboard_fetch,
         timeout_seconds=5,
@@ -982,7 +992,7 @@ def test_get_nba_game_raises_lookup_error_when_transient_errors_exhausted(tmp_pa
         calls += 1
         raise TimeoutError("boxscore timeout")
 
-    stats_source = NBAApiStatsSource(
+    stats_source = _make_stats_source(
         cache_repository_factory=_make_cache_factory(engine),
         nba_game_fetch=always_failing_nba_game_fetch,
         timeout_seconds=5,
@@ -993,39 +1003,6 @@ def test_get_nba_game_raises_lookup_error_when_transient_errors_exhausted(tmp_pa
         asyncio.run(stats_source.get_nba_game("0022500103"))
 
     assert calls == 3
-
-
-def test_timeout_seconds_below_one_raises_value_error(tmp_path) -> None:
-    engine = create_sqlite_engine(f"sqlite:///{tmp_path / 'hoophigher.db'}")
-    init_db(engine)
-
-    with pytest.raises(ValueError, match="at least 1"):
-        NBAApiStatsSource(
-            cache_repository_factory=_make_cache_factory(engine),
-            timeout_seconds=0,
-        )
-
-
-def test_max_retries_below_zero_raises_value_error(tmp_path) -> None:
-    engine = create_sqlite_engine(f"sqlite:///{tmp_path / 'hoophigher.db'}")
-    init_db(engine)
-
-    with pytest.raises(ValueError, match="max_retries"):
-        NBAApiStatsSource(
-            cache_repository_factory=_make_cache_factory(engine),
-            max_retries=-1,
-        )
-
-
-def test_retry_delay_seconds_below_zero_raises_value_error(tmp_path) -> None:
-    engine = create_sqlite_engine(f"sqlite:///{tmp_path / 'hoophigher.db'}")
-    init_db(engine)
-
-    with pytest.raises(ValueError, match="retry_delay_seconds"):
-        NBAApiStatsSource(
-            cache_repository_factory=_make_cache_factory(engine),
-            retry_delay_seconds=-0.1,
-        )
 
 
 def test_get_nba_game_raises_lookup_error_for_missing_expected_game_id(tmp_path) -> None:
@@ -1053,7 +1030,7 @@ def test_get_nba_game_raises_lookup_error_for_missing_expected_game_id(tmp_path)
             }
         }
 
-    stats_source = NBAApiStatsSource(
+    stats_source = _make_stats_source(
         cache_repository_factory=_make_cache_factory(engine),
         nba_game_fetch=nba_game_fetch,
         timeout_seconds=5,
@@ -1155,7 +1132,7 @@ def test_get_games_by_date_returns_games_sorted_by_game_id(tmp_path) -> None:
             }
         }
 
-    stats_source = NBAApiStatsSource(
+    stats_source = _make_stats_source(
         cache_repository_factory=_make_cache_factory(engine),
         scoreboard_fetch=scoreboard_fetch,
         nba_game_fetch=nba_game_fetch,
@@ -1460,7 +1437,7 @@ def test_get_games_by_date_excludes_live_and_scheduled_v3_games(tmp_path) -> Non
     def boxscore_fetch(game_id: str, _timeout_seconds: int):
         return {}
 
-    stats_source = NBAApiStatsSource(
+    stats_source = _make_stats_source(
         cache_repository_factory=_make_cache_factory(engine),
         scoreboard_fetch=scoreboard_fetch,
         nba_game_fetch=boxscore_fetch,
@@ -1529,7 +1506,7 @@ def test_get_games_by_date_does_not_cache_incomplete_day(tmp_path) -> None:
     def boxscore_fetch(game_id: str, _timeout_seconds: int):
         return {}
 
-    stats_source = NBAApiStatsSource(
+    stats_source = _make_stats_source(
         cache_repository_factory=_make_cache_factory(engine),
         scoreboard_fetch=scoreboard_fetch,
         nba_game_fetch=boxscore_fetch,
@@ -1604,7 +1581,7 @@ def test_get_games_by_date_excludes_live_and_scheduled_v2_games(tmp_path) -> Non
     def boxscore_fetch(game_id: str, _timeout_seconds: int):
         return {}
 
-    stats_source = NBAApiStatsSource(
+    stats_source = _make_stats_source(
         cache_repository_factory=_make_cache_factory(engine),
         scoreboard_fetch=scoreboard_fetch,
         nba_game_fetch=boxscore_fetch,
@@ -1653,7 +1630,7 @@ def test_get_games_by_date_treats_missing_status_fields_as_final(tmp_path) -> No
     def boxscore_fetch(game_id: str, _timeout_seconds: int):
         return {}
 
-    stats_source = NBAApiStatsSource(
+    stats_source = _make_stats_source(
         cache_repository_factory=_make_cache_factory(engine),
         scoreboard_fetch=scoreboard_fetch,
         nba_game_fetch=boxscore_fetch,
@@ -1727,7 +1704,7 @@ def test_get_games_by_date_refetches_legacy_cache_rows_written_before_status_fil
     def boxscore_fetch(game_id: str, _timeout_seconds: int):
         return {}
 
-    stats_source = NBAApiStatsSource(
+    stats_source = _make_stats_source(
         cache_repository_factory=_make_cache_factory(engine),
         scoreboard_fetch=scoreboard_fetch,
         nba_game_fetch=boxscore_fetch,

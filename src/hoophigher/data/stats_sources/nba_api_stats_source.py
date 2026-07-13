@@ -61,17 +61,10 @@ class NBAApiStatsSource(StatsSource):
         engine: Engine | None = None,
         scoreboard_fetch: ScoreboardFetch | None = None,
         nba_game_fetch: NBAGameFetch | None = None,
-        timeout_seconds: int = 20,
-        max_retries: int = 2,
-        retry_delay_seconds: float = 1.0,
+        timeout_seconds: int,
+        max_retries: int,
+        retry_delay_seconds: float,
     ) -> None:
-        if timeout_seconds < 1:
-            raise ValueError("timeout_seconds must be at least 1.")
-        if max_retries < 0:
-            raise ValueError("max_retries must be greater than or equal to 0.")
-        if retry_delay_seconds < 0:
-            raise ValueError("retry_delay_seconds must be greater than or equal to 0.")
-
         if cache_repository_factory is not None:
             self._cache_repository_factory = cache_repository_factory
         else:

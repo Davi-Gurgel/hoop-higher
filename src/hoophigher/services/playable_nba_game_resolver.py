@@ -12,12 +12,6 @@ from hoophigher.domain.models import NBAGame
 from hoophigher.domain.round_generator import generate_round
 
 MIN_HISTORICAL_GAMES = 5
-DEFAULT_HISTORICAL_START_YEAR = 2010
-DEFAULT_HISTORICAL_END_YEAR = 2020
-DEFAULT_HISTORICAL_ROUNDS = 5
-DEFAULT_HISTORICAL_MAX_DATE_PROBES = 10
-DEFAULT_PLAYABLE_GAME_FETCH_CONCURRENCY = 8
-DEFAULT_NON_HISTORICAL_STARTUP_GAMES = 5
 
 _NBA_HISTORICAL_PROBE_MONTHS = (
     10,
@@ -50,28 +44,16 @@ class PlayableNBAGameResolver:
         self,
         *,
         stats_source: StatsSource,
+        historical_start_year: int,
+        historical_end_year: int,
+        historical_rounds: int,
+        historical_max_date_probes: int,
+        playable_game_fetch_concurrency: int,
+        non_historical_startup_games: int,
         rng: Random | None = None,
-        historical_start_year: int = DEFAULT_HISTORICAL_START_YEAR,
-        historical_end_year: int = DEFAULT_HISTORICAL_END_YEAR,
-        historical_rounds: int = DEFAULT_HISTORICAL_ROUNDS,
-        historical_max_date_probes: int = DEFAULT_HISTORICAL_MAX_DATE_PROBES,
-        playable_game_fetch_concurrency: int = DEFAULT_PLAYABLE_GAME_FETCH_CONCURRENCY,
-        non_historical_startup_games: int = DEFAULT_NON_HISTORICAL_STARTUP_GAMES,
         historical_eligible_source_dates_fetcher: HistoricalEligibleSourceDatesFetcher
         | None = None,
     ) -> None:
-        if historical_start_year > historical_end_year:
-            raise ValueError(
-                "historical_start_year must be less than or equal to historical_end_year."
-            )
-        if historical_rounds < 1:
-            raise ValueError("historical_rounds must be at least 1.")
-        if historical_max_date_probes < 1:
-            raise ValueError("historical_max_date_probes must be at least 1.")
-        if playable_game_fetch_concurrency < 1:
-            raise ValueError("playable_game_fetch_concurrency must be at least 1.")
-        if non_historical_startup_games < 1:
-            raise ValueError("non_historical_startup_games must be at least 1.")
         self._stats_source = stats_source
         self._rng = rng or Random()
         self._historical_start_year = historical_start_year
