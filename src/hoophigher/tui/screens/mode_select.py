@@ -173,8 +173,4 @@ class ModeSelectScreen(Screen[None]):
             message = f"stats.nba.com is slow; press Esc to cancel ({elapsed_seconds}s)."
         spinner = _SPINNER_FRAMES[self._spinner_frame % len(_SPINNER_FRAMES)]
         self._spinner_frame += 1
-        strip.show(
-            "-loading",
-            f"[$warning]{spinner}[/] {message}\n"
-            "[$dim]stats.nba.com can be slow. Press esc to bail.[/]",
-        )
+        strip.show("-loading", f"[$warning]{spinner}[/] {message}")

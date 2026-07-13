@@ -6,8 +6,10 @@ from datetime import date
 from textual.app import ComposeResult
 from textual.containers import Horizontal, Vertical
 from textual.content import Content
-from textual.screen import ModalScreen
 from textual.widgets import Button, Rule, Static
+
+from hoophigher.tui.screens.modal import DeskModalScreen
+from hoophigher.tui.widgets import DeskButton
 
 
 @dataclass(frozen=True, slots=True)
@@ -22,18 +24,9 @@ class RoundSummary:
     score_delta: int
 
 
-class RoundSummaryScreen(ModalScreen[None]):
+class RoundSummaryScreen(DeskModalScreen):
     DEFAULT_CSS = """
-    RoundSummaryScreen {
-        align: center middle;
-        background: $void 60%;
-    }
-
     RoundSummaryScreen #summary-overlay {
-        width: 64;
-        max-width: 90%;
-        height: auto;
-        padding: 1 2;
         border: round $accent;
         background: $accent-fill;
     }
@@ -65,18 +58,14 @@ class RoundSummaryScreen(ModalScreen[None]):
         margin-top: 1;
     }
 
-    RoundSummaryScreen #summary-continue,
-    RoundSummaryScreen #summary-continue.-style-default {
+    /* The single action stays a solid accent fill in every state. */
+    RoundSummaryScreen #summary-continue {
         width: auto;
-        height: 3;
-        min-width: 0;
         margin-top: 1;
-        padding: 0 2;
         border: round $accent;
         background: $accent;
         color: $void;
         text-style: bold;
-        background-tint: transparent;
     }
     """
 
@@ -90,7 +79,7 @@ class RoundSummaryScreen(ModalScreen[None]):
         s = self._summary
         signed_delta = f"{s.score_delta:+d}".replace("-", "−")
         delta_color = "$success" if s.score_delta >= 0 else "$error"
-        with Vertical(id="summary-overlay"):
+        with Vertical(id="summary-overlay", classes="desk-modal-panel"):
             with Horizontal(classes="summary-split"):
                 yield Static(
                     f"[bold $accent]ROUND {s.round_index + 1} · COMPLETE[/]",
@@ -112,7 +101,7 @@ class RoundSummaryScreen(ModalScreen[None]):
                     classes="split-right",
                 )
             yield Static("Next round pulls a different game. Stay hot.", id="summary-flavor")
-            yield Button(Content("▸ Continue [enter]"), id="summary-continue")
+            yield DeskButton(Content("▸ Continue [enter]"), id="summary-continue")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "summary-continue":

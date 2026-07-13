@@ -18,6 +18,7 @@ from hoophigher.services import (
     RunHistoryService,
     StatsService,
 )
+from hoophigher.tui.responsive import FULL_MIN_WIDTH, SM_MIN_HEIGHT, SM_MIN_WIDTH
 from hoophigher.tui.screens import (
     GameScreen,
     HomeScreen,
@@ -82,13 +83,13 @@ class HoopHigherApp(App[None]):
     BINDINGS = [Binding("t", "toggle_theme", "Theme", priority=True, show=False)]
     HORIZONTAL_BREAKPOINTS = [
         (0, "-w-xs"),
-        (72, "-w-sm"),
-        (96, "-w-md"),
+        (SM_MIN_WIDTH, "-w-sm"),
+        (FULL_MIN_WIDTH, "-w-md"),
         (128, "-w-lg"),
     ]
     VERTICAL_BREAKPOINTS = [
         (0, "-h-xs"),
-        (24, "-h-sm"),
+        (SM_MIN_HEIGHT, "-h-sm"),
         (32, "-h-md"),
         (40, "-h-lg"),
     ]

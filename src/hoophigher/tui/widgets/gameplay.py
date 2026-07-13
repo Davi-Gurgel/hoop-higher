@@ -14,13 +14,11 @@ from textual.containers import CenterMiddle, Horizontal, Vertical
 from textual.content import Content
 from textual.widgets import Button, Label, Static
 
+from hoophigher.domain.formatting import player_last_name
 from hoophigher.domain.models import NBAGame, Question
 from hoophigher.services import GameplaySnapshot
-
-
-def _last_name(full_name: str) -> str:
-    parts = full_name.split()
-    return parts[-1] if parts else full_name
+from hoophigher.tui.responsive import Tier
+from hoophigher.tui.widgets.desk_button import DeskButton
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,9 +149,9 @@ class GameContextStrip(Vertical):
             Content.from_markup(
                 f"[$dim]last  $a_name $a_points [/][$accent]›{direction}›[/]"
                 f"[$dim] $b_name $b_points  [/]{verdict}",
-                a_name=_last_name(last_guess.player_a_name),
+                a_name=player_last_name(last_guess.player_a_name),
                 a_points=str(last_guess.player_a_points),
-                b_name=_last_name(last_guess.player_b_name),
+                b_name=player_last_name(last_guess.player_b_name),
                 b_points=str(last_guess.player_b_points),
             )
         )
@@ -269,7 +267,7 @@ class PlayerCard(Vertical):
         super().__init__(**kwargs)
         self._prefix = prefix
         self._hidden_side = hidden_side
-        self._tier = "full"
+        self._tier: Tier = "full"
         self._name = "—"
         self._team = ""
         self._minutes: int | None = None
@@ -312,7 +310,7 @@ class PlayerCard(Vertical):
         self._reveal_state = None
         self._render_card()
 
-    def set_tier(self, tier: str) -> None:
+    def set_tier(self, tier: Tier) -> None:
         if tier != self._tier:
             self._tier = tier
             self.set_class(tier == "xs", "-compact")
@@ -425,7 +423,7 @@ class MatchupPanel(Vertical):
         self._player_a_card.clear()
         self._player_b_card.clear()
 
-    def set_tier(self, tier: str) -> None:
+    def set_tier(self, tier: Tier) -> None:
         self.set_class(tier == "xs", "-compact")
         self._player_a_card.set_tier(tier)
         self._player_b_card.set_tier(tier)
@@ -448,45 +446,18 @@ class MatchupPanel(Vertical):
         self._player_b_card.reveal(points, is_correct=is_correct, went_over=went_over)
 
 
-class GuessButton(Button, inherit_bindings=False):
+class GuessButton(DeskButton):
     """Gameplay buttons keep focus, but let the screen own the Enter binding.
 
     Neither button carries green/red at rest — focus is the accent fill.
     """
 
-    BINDINGS = []
-
     DEFAULT_CSS = """
     GuessButton, GuessButton.-style-default {
         width: 1fr;
-        height: 3;
-        min-width: 0;
-        border: round $border;
-        background: transparent;
         color: $muted;
         text-align: center;
         content-align: center middle;
-        text-style: none;
-
-        &:hover {
-            border: round $muted;
-            background: transparent;
-        }
-
-        &:focus {
-            border: round $accent;
-            background: $accent;
-            color: $void;
-            text-style: bold;
-            background-tint: transparent;
-        }
-
-        &:disabled {
-            border: round $border;
-            background: transparent;
-            color: $disabled-text;
-            text-opacity: 1;
-        }
 
         &.-wrong, &.-wrong:disabled {
             border: round $error;
@@ -522,15 +493,15 @@ class GuessBar(Vertical):
     }
     """
 
-    _LABELS = {
+    _LABELS: dict[Tier, tuple[str, str]] = {
         "full": ("▲ HIGHER [H]", "▼ LOWER [L]"),
-        "compact": ("▲ HIGHER", "▼ LOWER"),
-        "mini": ("▲ HI · H", "▼ LO · L"),
+        "sm": ("▲ HIGHER", "▼ LOWER"),
+        "xs": ("▲ HI · H", "▼ LO · L"),
     }
 
     def __init__(self, **kwargs: object) -> None:
         super().__init__(**kwargs)
-        self._label_mode = "full"
+        self._tier: Tier = "full"
 
     def compose(self) -> ComposeResult:
         yield Static("", id="pb-compare")
@@ -541,9 +512,9 @@ class GuessBar(Vertical):
     def set_prompt(self, prompt: Content | str) -> None:
         self.query_one("#pb-compare", Static).update(prompt)
 
-    def set_label_mode(self, mode: str) -> None:
-        self._label_mode = mode
-        higher_text, lower_text = self._LABELS[mode]
+    def set_tier(self, tier: Tier) -> None:
+        self._tier = tier
+        higher_text, lower_text = self._LABELS[tier]
         self.query_one("#guess-higher", Button).label = Content(higher_text)
         self.query_one("#guess-lower", Button).label = Content(lower_text)
 
@@ -556,7 +527,7 @@ class GuessBar(Vertical):
     def clear_wrong(self) -> None:
         for button in self.query(GuessButton):
             button.remove_class("-wrong")
-        self.set_label_mode(self._label_mode)
+        self.set_tier(self._tier)
 
     def set_buttons_disabled(self, disabled: bool) -> None:
         self.query_one("#guess-higher", Button).disabled = disabled

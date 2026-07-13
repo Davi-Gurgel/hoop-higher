@@ -14,8 +14,7 @@ from textual.containers import Horizontal
 from textual.widgets import Button, Static
 
 from hoophigher.services import GameplaySnapshot
-
-ChromeTier = Literal["full", "sm", "xs"]
+from hoophigher.tui.responsive import Tier
 
 _SCORE_FLASH_SECONDS = 0.8
 
@@ -64,7 +63,7 @@ class Scorebug(Horizontal):
     def __init__(self, **kwargs: object) -> None:
         super().__init__(**kwargs)
         self._snapshot: GameplaySnapshot | None = None
-        self._tier: ChromeTier = "full"
+        self._tier: Tier = "full"
         self._flash: Literal["gain", "loss", None] = None
 
     def compose(self) -> ComposeResult:
@@ -75,7 +74,7 @@ class Scorebug(Horizontal):
         self._snapshot = snapshot
         self._render_band()
 
-    def set_tier(self, tier: ChromeTier) -> None:
+    def set_tier(self, tier: Tier) -> None:
         if tier != self._tier:
             self._tier = tier
             self._render_band()

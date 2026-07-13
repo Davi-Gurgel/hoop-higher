@@ -48,15 +48,17 @@ class StatCard(Vertical):
     }
     """
 
-    def __init__(self, label: str, *, value_id: str, tone: str = "", **kwargs: object) -> None:
+    def __init__(self, label: str, *, tone: str = "", **kwargs: object) -> None:
         classes = f"-value-{tone}" if tone else ""
         super().__init__(classes=classes, **kwargs)
         self._label = label
-        self._value_id = value_id
 
     def compose(self) -> ComposeResult:
         yield Static(self._label, classes="stat-label")
-        yield Static("0", id=self._value_id, classes="stat-value")
+        yield Static("0", classes="stat-value")
+
+    def set_value(self, value: str) -> None:
+        self.query_one(".stat-value", Static).update(value)
 
 
 class StatsScreen(Screen[None]):
@@ -116,17 +118,26 @@ class StatsScreen(Screen[None]):
         ("q", "quit", "Quit"),
     ]
 
+    def __init__(self) -> None:
+        super().__init__()
+        self._runs_card = StatCard("RUNS", id="stat-runs")
+        self._questions_card = StatCard("QUESTIONS", id="stat-questions")
+        self._correct_card = StatCard("CORRECT", tone="success", id="stat-correct")
+        self._accuracy_card = StatCard("ACCURACY", tone="success", id="stat-accuracy")
+        self._best_score_card = StatCard("BEST SCORE", tone="highlight", id="stat-best-score")
+        self._best_streak_card = StatCard("BEST STREAK", tone="highlight", id="stat-best-streak")
+
     def compose(self) -> ComposeResult:
         yield HeaderBand("STATS", "every run you've saved", id="stats-header")
         with Vertical(id="stats-content"):
             with Horizontal(id="stats-cards"):
-                yield StatCard("RUNS", value_id="stat-runs-value")
-                yield StatCard("QUESTIONS", value_id="stat-questions-value")
-                yield StatCard("CORRECT", value_id="stat-correct-value", tone="success")
-                yield StatCard("ACCURACY", value_id="stat-accuracy-value", tone="success")
+                yield self._runs_card
+                yield self._questions_card
+                yield self._correct_card
+                yield self._accuracy_card
             with Horizontal(id="stats-best"):
-                yield StatCard("BEST SCORE", value_id="stat-best-score-value", tone="highlight")
-                yield StatCard("BEST STREAK", value_id="stat-best-streak-value", tone="highlight")
+                yield self._best_score_card
+                yield self._best_streak_card
             yield Static("BY MODE", id="stats-modes-title")
             yield Vertical(id="stats-modes")
         footer = FooterHints(id="stats-footer")
@@ -150,16 +161,12 @@ class StatsScreen(Screen[None]):
 
     async def _refresh_stats_view(self) -> None:
         result: StatsResult = self.app.stats_service.get_stats()
-        values_by_id = {
-            "stat-runs-value": str(result.total_runs),
-            "stat-questions-value": str(result.total_answered_questions),
-            "stat-correct-value": str(result.total_correct_answers),
-            "stat-accuracy-value": _format_rate(result.accuracy_rate),
-            "stat-best-score-value": f"{result.best_score:,}",
-            "stat-best-streak-value": str(result.best_streak),
-        }
-        for value_id, value in values_by_id.items():
-            self.query_one(f"#{value_id}", Static).update(value)
+        self._runs_card.set_value(str(result.total_runs))
+        self._questions_card.set_value(str(result.total_answered_questions))
+        self._correct_card.set_value(str(result.total_correct_answers))
+        self._accuracy_card.set_value(_format_rate(result.accuracy_rate))
+        self._best_score_card.set_value(f"{result.best_score:,}")
+        self._best_streak_card.set_value(str(result.best_streak))
 
         modes_container = self.query_one("#stats-modes", Vertical)
         await modes_container.remove_children()

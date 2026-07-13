@@ -8,9 +8,9 @@ other cards render disabled (dim text and border, non-focusable).
 from __future__ import annotations
 
 from textual.content import Content
-from textual.widgets import Button
 
 from hoophigher.domain.enums import GameMode
+from hoophigher.tui.widgets.desk_button import DeskButton
 
 _SCORING_MARKUP = {
     GameMode.ENDLESS: ("[$success]+100[/][$dim] / [/][$error]−60[/]", "+100 / −60"),
@@ -25,38 +25,26 @@ _DESCRIPTIONS = {
 }
 
 
-class ModeCard(Button, inherit_bindings=False):
+class ModeCard(DeskButton):
     DEFAULT_CSS = """
     ModeCard, ModeCard.-style-default {
-        width: 100%;
         height: 4;
-        min-width: 0;
-        padding: 0 2;
-        border: round $border;
         background: $card-fill;
-        color: $foreground;
-        text-align: left;
         content-align: left top;
-        text-style: none;
         margin-bottom: 1;
 
         &:hover {
-            border: round $muted;
             background: $card-fill;
         }
 
         &:focus {
-            border: round $accent;
             background: $accent-fill;
+            color: $foreground;
             text-style: none;
-            background-tint: transparent;
         }
 
         &:disabled {
-            border: round $border;
             background: $card-fill;
-            color: $disabled-text;
-            text-opacity: 1;
         }
     }
     """

@@ -5,14 +5,18 @@ from time import monotonic
 
 from textual import events
 from textual.app import ComposeResult
-from textual.containers import Horizontal, Vertical
+from textual.containers import Vertical
 from textual.content import Content
-from textual.screen import ModalScreen, Screen
-from textual.widgets import Button, Static
+from textual.screen import Screen
+from textual.widgets import Button
 
 from hoophigher.domain.enums import GuessDirection
+from hoophigher.domain.formatting import player_first_name, player_last_name
 from hoophigher.domain.models import Question, QuestionResult
 from hoophigher.services import GameplaySnapshot
+from hoophigher.tui.responsive import Tier, tier_for
+from hoophigher.tui.screens.game_over import GameOverScreen
+from hoophigher.tui.screens.round_summary import RoundSummary, RoundSummaryScreen
 from hoophigher.tui.widgets import (
     FooterHints,
     GameContextStrip,
@@ -27,7 +31,7 @@ from hoophigher.tui.widgets.gameplay import LastGuess
 _FEEDBACK_DURATION_SECONDS = 1.2
 _REVEAL_HELD_HINT = "[blink $warning]reveal held · next question in 1.2s…[/]"
 
-_FOOTER_HINTS = {
+_FOOTER_HINTS: dict[Tier, str] = {
     "full": hints(
         ("H", "higher"),
         ("L", "lower"),
@@ -36,8 +40,8 @@ _FOOTER_HINTS = {
         ("esc", "abandon"),
         ("Q", "quit"),
     ),
-    "compact": hints(("H", ""), ("L", ""), ("←/→", ""), ("esc", ""), ("Q", "")),
-    "mini": hints(("H/L", ""), ("esc", "home")),
+    "sm": hints(("H", ""), ("L", ""), ("←/→", ""), ("esc", ""), ("Q", "")),
+    "xs": hints(("H/L", ""), ("esc", "home")),
 }
 
 
@@ -53,114 +57,6 @@ class RoundTally:
         self.correct_answers += int(result.is_correct)
         self.wrong_answers += int(not result.is_correct)
         self.score_delta += result.score_delta
-
-
-class GameOverScreen(ModalScreen[None]):
-    """Shown when the run ends (arcade miss or user exit)."""
-
-    DEFAULT_CSS = """
-    GameOverScreen {
-        align: center middle;
-        background: $void 60%;
-    }
-
-    GameOverScreen #gameover-overlay {
-        width: 66;
-        max-width: 90%;
-        height: auto;
-        padding: 1 2;
-        border: round $error;
-        background: $danger-fill;
-    }
-
-    GameOverScreen #gameover-actions {
-        width: 100%;
-        height: auto;
-        align-horizontal: center;
-    }
-
-    GameOverScreen #gameover-header {
-        width: 100%;
-        height: 1;
-        margin-bottom: 1;
-    }
-
-    GameOverScreen #gameover-title {
-        width: 1fr;
-    }
-
-    GameOverScreen #gameover-reason {
-        width: auto;
-        color: $error;
-    }
-
-    GameOverScreen .gameover-stat {
-        text-align: center;
-        width: 100%;
-        margin-bottom: 1;
-    }
-
-    GameOverScreen #gameover-home,
-    GameOverScreen #gameover-home.-style-default {
-        width: auto;
-        height: 3;
-        min-width: 0;
-        padding: 0 2;
-        border: round $border;
-        background: transparent;
-        color: $foreground;
-        text-style: none;
-
-        &:focus {
-            border: round $muted;
-            background: transparent;
-            color: $foreground;
-            text-style: bold;
-            background-tint: transparent;
-        }
-    }
-    """
-
-    BINDINGS = [("enter", "go_home", "Home"), ("escape", "go_home", "Home")]
-
-    def __init__(self, snapshot: GameplaySnapshot) -> None:
-        super().__init__()
-        self._snapshot = snapshot
-
-    def compose(self) -> ComposeResult:
-        s = self._snapshot
-        with Vertical(id="gameover-overlay"):
-            with Horizontal(id="gameover-header"):
-                yield Static(
-                    f"[bold $error]GAME OVER[/][$dim] · {s.mode.value}[/]",
-                    id="gameover-title",
-                )
-                # Display follows the glossary term ("Wrong Guess"), while the
-                # persisted enum value stays "wrong_answer".
-                yield Static(
-                    "" if s.end_reason is None else s.end_reason.name.replace("_", " ").title(),
-                    id="gameover-reason",
-                )
-            yield Static("[$dim]FINAL SCORE[/]", classes="gameover-stat")
-            yield Static(f"[bold $warning]{s.score:,}[/]", classes="gameover-stat")
-            yield Static(
-                f"[$success]✓ {s.correct_answers} right[/][$dim] · [/]"
-                f"[$error]✗ {s.wrong_answers} wrong[/][$dim] · [/]"
-                f"best streak [bold]{s.best_streak}[/]",
-                classes="gameover-stat",
-            )
-            yield Static("[$warning]Cooked — but respectable.[/]", classes="gameover-stat")
-            with Horizontal(id="gameover-actions"):
-                yield Button(Content("▸ Return home [enter / esc]"), id="gameover-home")
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "gameover-home":
-            self.action_go_home()
-
-    def action_go_home(self) -> None:
-        self.dismiss()
-        self.app.pop_screen()  # GameScreen
-        self.app.pop_screen()  # ModeSelectScreen
 
 
 class GameScreen(Screen[None]):
@@ -344,11 +240,6 @@ class GameScreen(Screen[None]):
             return
 
         if was_last_question and not self._snapshot.is_finished:
-            from hoophigher.tui.screens.round_summary import (
-                RoundSummary,
-                RoundSummaryScreen,
-            )
-
             previous_game = previous_snapshot.current_game
             summary = RoundSummary(
                 round_index=self._snapshot.round_index - 1,
@@ -398,36 +289,31 @@ class GameScreen(Screen[None]):
         self.query_one("#guess-higher", Button).focus()
 
     def _sync_responsive_copy(self, width: int, height: int) -> None:
-        # Width tiers per the handoff (xs <72 / sm 72-95 / md+ ≥96); very
-        # short terminals also drop to the tightest copy so the pinned rows
-        # keep fitting.
-        mode = "full"
-        if width < 72 or height < 24:
-            mode = "mini"
-        elif width < 96:
-            mode = "compact"
+        # Copy (labels, hints, scorebug) also degrades on short terminals so
+        # the pinned rows keep fitting; card layout is width-only — short-
+        # but-wide terminals keep full cards and scroll instead.
+        copy_tier = tier_for(width, height)
+        layout_tier = tier_for(width)
 
-        self._guess_bar.set_label_mode(mode)
-        self._scorebug.set_tier({"full": "full", "compact": "sm", "mini": "xs"}[mode])
-        self._footer.set_hints(_FOOTER_HINTS[mode])
-        self._matchup_panel.set_tier("xs" if width < 72 else ("sm" if width < 96 else "full"))
+        self._guess_bar.set_tier(copy_tier)
+        self._scorebug.set_tier(copy_tier)
+        self._footer.set_hints(_FOOTER_HINTS[copy_tier])
+        self._matchup_panel.set_tier(layout_tier)
 
         question = self._snapshot.current_question
         if question is None:
             self._guess_bar.set_prompt("")
         else:
-            self._guess_bar.set_prompt(self._build_compare_prompt(question, mode))
+            self._guess_bar.set_prompt(self._build_compare_prompt(question, copy_tier))
 
-    def _build_compare_prompt(self, question: Question, mode: str) -> Content:
+    def _build_compare_prompt(self, question: Question, tier: Tier) -> Content:
         points = question.player_a.points
-        if mode == "full":
-            first_name = question.player_a.player_name.split()
-            last_name = question.player_b.player_name.split()
+        if tier == "full":
             return Content.from_markup(
                 "Did [bold]$b_name[/] score [bold]more[/] or [bold]fewer[/] "
                 f"than $a_name's [$warning]{points}[/]?",
-                b_name=last_name[-1] if last_name else question.player_b.player_name,
-                a_name=first_name[0] if first_name else question.player_a.player_name,
+                b_name=player_last_name(question.player_b.player_name),
+                a_name=player_first_name(question.player_a.player_name),
             )
         return Content.from_markup(f"More or fewer than [$warning]{points}[/]?")
 
@@ -448,7 +334,7 @@ class GameScreen(Screen[None]):
                 Content.from_markup(
                     "[bold $success]CALLED IT.[/]  $b_name went for "
                     f"{result.revealed_points} — that's {'over' if went_over else 'under'}.",
-                    b_name=(result.question.player_b.player_name.split() or ["—"])[-1],
+                    b_name=player_last_name(result.question.player_b.player_name),
                 ),
                 f"[bold $success]{signed_delta}[/]",
             )

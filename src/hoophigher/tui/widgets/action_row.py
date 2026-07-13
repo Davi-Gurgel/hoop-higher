@@ -8,45 +8,16 @@ fill change first, color second, so it survives 16-color terminals.
 from __future__ import annotations
 
 from textual.content import Content
-from textual.widgets import Button
+
+from hoophigher.tui.widgets.desk_button import DeskButton
 
 
-class ActionRow(Button, inherit_bindings=False):
+class ActionRow(DeskButton):
     """A Button restyled as a STAT DESK menu row.
 
     Keeps Button's press/click/message semantics but renders its own
-    two-sided line (label left, shortcut right). Screens own the Enter
-    binding, matching the existing navigation behavior.
-    """
-
-    DEFAULT_CSS = """
-    /* Match Button's `.-style-default` specificity so its tall borders and
-       surface fill never bleed through. */
-    ActionRow, ActionRow.-style-default {
-        width: 100%;
-        height: 3;
-        min-width: 0;
-        padding: 0 2;
-        border: round $border;
-        background: transparent;
-        color: $foreground;
-        text-align: left;
-        content-align: left middle;
-        text-style: none;
-
-        &:hover {
-            border: round $muted;
-            background: transparent;
-        }
-
-        &:focus {
-            border: round $accent;
-            background: $accent;
-            color: $void;
-            text-style: bold;
-            background-tint: transparent;
-        }
-    }
+    two-sided line (label left, shortcut right). The DeskButton reset is
+    exactly this row's look, so it carries no CSS of its own.
     """
 
     def __init__(self, text: str, shortcut: str, **kwargs: object) -> None:

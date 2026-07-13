@@ -7,12 +7,16 @@ Used by Mode Select (loading, amber) and the Game reveal verdict
 
 from __future__ import annotations
 
+from typing import Literal
+
 from textual.app import ComposeResult
 from textual.containers import Horizontal
 from textual.content import Content
 from textual.widgets import Static
 
-STATUS_STRIP_TONES = ("-loading", "-success", "-danger")
+StripTone = Literal["-loading", "-success", "-danger"]
+
+STATUS_STRIP_TONES: tuple[StripTone, ...] = ("-loading", "-success", "-danger")
 
 
 class StatusStrip(Horizontal):
@@ -58,10 +62,13 @@ class StatusStrip(Horizontal):
         yield Static("", id="strip-body")
         yield Static("", id="strip-value")
 
-    def show(self, tone: str, body_markup: str | Content, value_markup: str | Content = "") -> None:
+    def show(
+        self,
+        tone: StripTone,
+        body_markup: str | Content,
+        value_markup: str | Content = "",
+    ) -> None:
         """Reveal the strip with the given tone, body, and right-aligned value."""
-        if tone not in STATUS_STRIP_TONES:
-            raise ValueError(f"Unknown StatusStrip tone {tone!r}.")
         for existing in STATUS_STRIP_TONES:
             self.remove_class(existing)
         self.add_class(tone, "-visible")
