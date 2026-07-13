@@ -39,6 +39,7 @@ class ModeSelectScreen(Screen[None]):
     BINDINGS = [
         ("up", "focus_previous_button", "Prev"),
         ("down", "focus_next_button", "Next"),
+        ("enter", "start_focused_mode", "Start"),
         ("1", "select_endless", "Endless"),
         ("2", "select_arcade", "Arcade"),
         ("3", "select_historical", "Historical"),
@@ -79,6 +80,11 @@ class ModeSelectScreen(Screen[None]):
 
     def action_select_historical(self) -> None:
         self._begin_start_game(GameMode.HISTORICAL)
+
+    def action_start_focused_mode(self) -> None:
+        focused = self.focused
+        if isinstance(focused, ModeCard):
+            self._begin_start_game(focused.mode)
 
     def action_back(self) -> None:
         if self._loading_mode is not None:

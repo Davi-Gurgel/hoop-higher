@@ -41,11 +41,18 @@ _FOOTER_HINTS = {
 }
 
 
-@dataclass(frozen=True, slots=True)
-class GuessHistoryItem:
-    index: int
-    is_correct: bool
-    score_delta: int
+@dataclass(slots=True)
+class RoundTally:
+    questions: int = 0
+    correct_answers: int = 0
+    wrong_answers: int = 0
+    score_delta: int = 0
+
+    def record(self, result: QuestionResult) -> None:
+        self.questions += 1
+        self.correct_answers += int(result.is_correct)
+        self.wrong_answers += int(not result.is_correct)
+        self.score_delta += result.score_delta
 
 
 class GameOverScreen(ModalScreen[None]):
@@ -172,6 +179,7 @@ class GameScreen(Screen[None]):
     GameScreen.-h-sm #game-scroll,
     GameScreen.-h-xs #game-scroll {
         overflow-y: auto;
+        scrollbar-size-vertical: 0;
     }
     """
 
@@ -188,8 +196,7 @@ class GameScreen(Screen[None]):
     def __init__(self, snapshot: GameplaySnapshot) -> None:
         super().__init__()
         self._snapshot = snapshot
-        self._history: list[GuessHistoryItem] = []
-        self._round_history: list[GuessHistoryItem] = []
+        self._round_tally = RoundTally()
         self._last_guess: LastGuess | None = None
         self._awaiting_feedback = False
         self._game_over_screen_visible = False
@@ -302,13 +309,7 @@ class GameScreen(Screen[None]):
             response_time_ms=response_time_ms,
         )
 
-        history_item = GuessHistoryItem(
-            index=previous_snapshot.question_index + 1,
-            is_correct=result.is_correct,
-            score_delta=result.score_delta,
-        )
-        self._history.append(history_item)
-        self._round_history.append(history_item)
+        self._round_tally.record(result)
         self._last_guess = LastGuess(
             player_a_name=result.question.player_a.player_name,
             player_a_points=result.question.player_a.points,
@@ -357,12 +358,12 @@ class GameScreen(Screen[None]):
                     f"{previous_game.away_team.abbreviation} @ "
                     f"{previous_game.home_team.abbreviation}"
                 ),
-                questions=len(self._round_history),
-                correct_answers=sum(1 for item in self._round_history if item.is_correct),
-                wrong_answers=sum(1 for item in self._round_history if not item.is_correct),
-                score_delta=sum(item.score_delta for item in self._round_history),
+                questions=self._round_tally.questions,
+                correct_answers=self._round_tally.correct_answers,
+                wrong_answers=self._round_tally.wrong_answers,
+                score_delta=self._round_tally.score_delta,
             )
-            self._round_history.clear()
+            self._round_tally = RoundTally()
             self.app.push_screen(RoundSummaryScreen(summary))
             return
 

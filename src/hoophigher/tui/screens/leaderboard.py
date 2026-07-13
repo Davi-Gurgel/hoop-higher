@@ -5,6 +5,7 @@ from textual import events
 from textual.app import ComposeResult
 from textual.containers import Vertical
 from textual.screen import Screen
+from textual.theme import Theme
 from textual.widgets import DataTable, Static
 
 from hoophigher.services import LeaderboardResult
@@ -58,6 +59,10 @@ class LeaderboardScreen(Screen[None]):
         ("q", "quit", "Quit"),
     ]
 
+    def __init__(self) -> None:
+        super().__init__()
+        self._result: LeaderboardResult | None = None
+
     def compose(self) -> ComposeResult:
         yield HeaderBand("LEADERBOARD", "top 10 · this machine", id="leaderboard-header")
         with Vertical(id="leaderboard-content"):
@@ -75,6 +80,7 @@ class LeaderboardScreen(Screen[None]):
         table.add_column(Text("streak", justify="right"), key="streak")
         table.add_column(Text("acc", justify="right"), key="acc")
         table.add_column("date", key="date")
+        self.app.theme_changed_signal.subscribe(self, self._on_theme_changed)
 
     def on_screen_resume(self, _: events.ScreenResume) -> None:
         """Reload rows whenever this screen becomes active.
@@ -84,7 +90,12 @@ class LeaderboardScreen(Screen[None]):
         appear without restarting the app.
         """
         result = self.app.leaderboard_service.get_leaderboard()
+        self._result = result
         self._populate(result)
+
+    def _on_theme_changed(self, _theme: Theme) -> None:
+        if self._result is not None:
+            self._populate(self._result)
 
     def _populate(self, result: LeaderboardResult) -> None:
         table = self.query_one("#leaderboard-table", DataTable)

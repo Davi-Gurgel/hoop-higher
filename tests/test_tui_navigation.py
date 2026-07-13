@@ -17,9 +17,10 @@ from hoophigher.data import (
     create_sqlite_engine,
     init_db,
 )
-from hoophigher.domain.enums import RunEndReason
+from hoophigher.domain.enums import GameMode, RunEndReason
 from hoophigher.domain.models import NBAGame, PlayerLine, TeamGameInfo
 from hoophigher.app import HoopHigherApp
+from hoophigher.tui.theme import LIGHT_THEME_NAME
 
 
 @pytest.fixture(autouse=True)
@@ -110,6 +111,32 @@ def test_mode_select_supports_arrow_navigation() -> None:
             await pilot.press("up")
             await pilot.pause()
             assert getattr(app.screen.focused, "id", None) == "mode-arcade"
+
+    asyncio.run(scenario())
+
+
+def test_mode_select_enter_starts_focused_mode(monkeypatch) -> None:
+    started_modes = []
+
+    async def fake_start_game(self, mode) -> bool:
+        started_modes.append(mode)
+        return False
+
+    monkeypatch.setattr(HoopHigherApp, "start_game", fake_start_game)
+
+    async def scenario() -> None:
+        app = HoopHigherApp(database_url="sqlite://")
+
+        async with app.run_test() as pilot:
+            await pilot.press("enter")
+            await pilot.pause()
+            assert getattr(app.screen.focused, "id", None) == "mode-endless"
+
+            await pilot.press("down")
+            await pilot.press("enter")
+            await pilot.pause()
+
+            assert started_modes == [GameMode.ARCADE]
 
     asyncio.run(scenario())
 
@@ -240,6 +267,23 @@ def test_home_screen_can_open_stats_and_return_home() -> None:
 
             await pilot.press("escape")
             await pilot.pause()
+            assert type(app.screen).__name__ == "HomeScreen"
+
+    asyncio.run(scenario())
+
+
+def test_header_back_control_returns_home_with_mouse() -> None:
+    async def scenario() -> None:
+        app = HoopHigherApp(database_url="sqlite://")
+
+        async with app.run_test() as pilot:
+            await pilot.press("s")
+            await pilot.pause()
+            assert type(app.screen).__name__ == "StatsScreen"
+
+            await pilot.click("#header-band-back")
+            await pilot.pause()
+
             assert type(app.screen).__name__ == "HomeScreen"
 
     asyncio.run(scenario())
@@ -500,6 +544,13 @@ def test_leaderboard_refreshes_after_a_run_is_played(tmp_path, monkeypatch) -> N
             assert table.row_count == 1
             first_row = table.get_row_at(0)
             assert first_row[1].plain == "endless"
+
+            dark_rank_style = first_row[0].style
+            app.theme = LIGHT_THEME_NAME
+            await pilot.pause()
+
+            light_rank_style = table.get_row_at(0)[0].style
+            assert light_rank_style != dark_rank_style
 
     asyncio.run(scenario())
 

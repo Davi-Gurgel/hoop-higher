@@ -137,6 +137,28 @@ def test_game_screen_enables_scroll_before_cards_clip_on_mid_height_terminal() -
     asyncio.run(scenario())
 
 
+def test_game_reveal_keeps_tiny_layout_scrollable_without_visible_scrollbar() -> None:
+    async def scenario() -> None:
+        app = HoopHigherApp(database_url="sqlite://")
+
+        async with app.run_test(size=(TARGET_TINY_SIZE.width, TARGET_TINY_SIZE.height)) as pilot:
+            await pilot.press("enter")
+            await pilot.press("1")
+            await pilot.pause()
+
+            question = app.gameplay_service.snapshot().current_question
+            assert question is not None
+            guess = "h" if question.correct_guess.value == "higher" else "l"
+            await pilot.press(guess)
+            await pilot.pause(0.05)
+
+            game_scroll = app.screen.query_one("#game-scroll", Widget)
+            assert game_scroll.max_scroll_y > 0
+            assert game_scroll.scrollbar_size_vertical == 0
+
+    asyncio.run(scenario())
+
+
 def test_game_over_modal_return_action_renders_on_small_terminal() -> None:
     async def scenario() -> None:
         app = HoopHigherApp(database_url="sqlite://")

@@ -4,7 +4,7 @@ import asyncio
 from datetime import date
 
 from textual.app import App, ComposeResult
-from textual.widgets import Static
+from textual.widgets import Button, Static
 
 from hoophigher.domain.enums import GameMode
 from hoophigher.domain.models import NBAGame, TeamGameInfo
@@ -124,8 +124,9 @@ def test_header_band_shows_back_hint_title_and_subtitle() -> None:
         app = _ChromeApp()
         async with app.run_test() as pilot:
             await pilot.pause()
+            back_text = app.query_one("#header-band-back", Button).label.plain
             band_text = app.query_one("#header-band-text", Static).visual.plain
-            assert "‹ back" in band_text
+            assert back_text == "‹ back"
             assert "LEADERBOARD" in band_text
             assert "top 10 · this machine" in band_text
 

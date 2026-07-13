@@ -11,7 +11,7 @@ from typing import Literal
 
 from textual.app import ComposeResult
 from textual.containers import Horizontal
-from textual.widgets import Static
+from textual.widgets import Button, Static
 
 from hoophigher.services import GameplaySnapshot
 
@@ -43,11 +43,11 @@ class Scorebug(Horizontal):
     DEFAULT_CSS = """
     Scorebug {
         dock: top;
-        height: 2;
+        height: 3;
         width: 100%;
         background: $band-fill;
         border-bottom: solid $border;
-        padding: 0 2;
+        padding: 1 2 0 2;
     }
 
     Scorebug #scorebug-run {
@@ -132,17 +132,42 @@ class Scorebug(Horizontal):
         self.query_one("#scorebug-score", Static).update(score_part)
 
 
+class _HeaderBackButton(Button, inherit_bindings=False):
+    """Mouse target that stays out of keyboard focus navigation."""
+
+    can_focus = False
+
+
 class HeaderBand(Horizontal):
     """Non-Game screen header: `‹ back  TITLE · subtitle` on a panel band."""
 
     DEFAULT_CSS = """
     HeaderBand {
         dock: top;
-        height: 2;
+        height: 3;
         width: 100%;
         background: $band-fill;
         border-bottom: solid $border;
-        padding: 0 2;
+        padding: 1 2 0 2;
+    }
+
+    HeaderBand #header-band-back,
+    HeaderBand #header-band-back.-style-default {
+        width: auto;
+        min-width: 0;
+        height: 1;
+        padding: 0;
+        margin-right: 2;
+        border: none;
+        background: transparent;
+        color: $dim;
+        text-style: none;
+
+        &:hover {
+            background: transparent;
+            color: $foreground;
+            text-style: underline;
+        }
     }
 
     HeaderBand #header-band-text {
@@ -157,13 +182,19 @@ class HeaderBand(Horizontal):
         self._subtitle = subtitle
 
     def compose(self) -> ComposeResult:
+        yield _HeaderBackButton("‹ back", id="header-band-back")
         yield Static(self._band_markup(), id="header-band-text")
 
     def _band_markup(self) -> str:
-        band = f"[$dim]‹ back[/]  [bold]{self._title}[/]"
+        band = f"[bold]{self._title}[/]"
         if self._subtitle:
             band += f"[$muted] · {self._subtitle}[/]"
         return band
+
+    async def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "header-band-back":
+            event.stop()
+            await self.screen.run_action("back")
 
 
 class FooterHints(Static):

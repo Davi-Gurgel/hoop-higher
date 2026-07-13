@@ -58,9 +58,6 @@ class StatCard(Vertical):
         yield Static(self._label, classes="stat-label")
         yield Static("0", id=self._value_id, classes="stat-value")
 
-    def set_value(self, value: str) -> None:
-        self.query_one(f"#{self._value_id}", Static).update(value)
-
 
 class StatsScreen(Screen[None]):
     DEFAULT_CSS = """
@@ -153,17 +150,16 @@ class StatsScreen(Screen[None]):
 
     async def _refresh_stats_view(self) -> None:
         result: StatsResult = self.app.stats_service.get_stats()
-        cards = list(self.query(StatCard))
-        values = (
-            str(result.total_runs),
-            str(result.total_answered_questions),
-            str(result.total_correct_answers),
-            _format_rate(result.accuracy_rate),
-            f"{result.best_score:,}",
-            str(result.best_streak),
-        )
-        for card, value in zip(cards, values, strict=True):
-            card.set_value(value)
+        values_by_id = {
+            "stat-runs-value": str(result.total_runs),
+            "stat-questions-value": str(result.total_answered_questions),
+            "stat-correct-value": str(result.total_correct_answers),
+            "stat-accuracy-value": _format_rate(result.accuracy_rate),
+            "stat-best-score-value": f"{result.best_score:,}",
+            "stat-best-streak-value": str(result.best_streak),
+        }
+        for value_id, value in values_by_id.items():
+            self.query_one(f"#{value_id}", Static).update(value)
 
         modes_container = self.query_one("#stats-modes", Vertical)
         await modes_container.remove_children()
