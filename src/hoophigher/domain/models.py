@@ -71,8 +71,10 @@ class QuestionResult:
     guess: GuessDirection
     is_correct: bool
     score_delta: int
-    revealed_points: int
-    response_time_ms: int | None = None
+
+    @property
+    def player_b_points(self) -> int:
+        return self.question.player_b.points
 
 
 @dataclass(frozen=True, slots=True)

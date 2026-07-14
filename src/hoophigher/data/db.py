@@ -101,8 +101,44 @@ def _validate_busy_timeout_ms(value: int | None) -> int | None:
     return value
 
 
+# Columns removed from the schema but present in databases created by older
+# versions. create_all never drops columns, and the NOT NULL ones would reject
+# inserts once the model stops providing values, so they are dropped on startup.
+_STALE_COLUMNS: Final[tuple[tuple[str, str], ...]] = (
+    ("rounds", "total_questions"),
+    ("questions", "player_a_id"),
+    ("questions", "player_a_team_id"),
+    ("questions", "player_a_minutes"),
+    ("questions", "player_b_id"),
+    ("questions", "player_b_team_id"),
+    ("questions", "player_b_minutes"),
+    ("questions", "revealed_points"),
+    ("questions", "response_time_ms"),
+)
+
+
 def init_db(engine: Engine) -> None:
     SQLModel.metadata.create_all(engine)
+    _drop_stale_columns(engine)
+
+
+def _drop_stale_columns(engine: Engine) -> None:
+    if engine.dialect.name != "sqlite":
+        return
+    with engine.begin() as connection:
+        for table, column in _STALE_COLUMNS:
+            column_rows = connection.exec_driver_sql(f'PRAGMA table_info("{table}")')
+            if column not in {row[1] for row in column_rows}:
+                continue
+            index_rows = connection.exec_driver_sql(
+                "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = ?",
+                (table,),
+            )
+            for (index_name,) in index_rows:
+                indexed_columns = connection.exec_driver_sql(f'PRAGMA index_info("{index_name}")')
+                if column in {row[2] for row in indexed_columns}:
+                    connection.exec_driver_sql(f'DROP INDEX IF EXISTS "{index_name}"')
+            connection.exec_driver_sql(f'ALTER TABLE "{table}" DROP COLUMN "{column}"')
 
 
 @contextmanager

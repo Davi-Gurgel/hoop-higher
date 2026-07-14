@@ -139,7 +139,6 @@ class GameplayService:
                     round_index=0,
                     game_id=selected_game.game_id,
                     game_date=selected_game.source_date,
-                    total_questions=len(round_definition.questions),
                     correct_answers=0,
                     wrong_answers=0,
                     score_delta=0,
@@ -162,12 +161,7 @@ class GameplayService:
         )
         return self.snapshot()
 
-    async def submit_guess(
-        self,
-        guess: GuessDirection,
-        *,
-        response_time_ms: int | None = None,
-    ) -> QuestionResult:
+    async def submit_guess(self, guess: GuessDirection) -> QuestionResult:
         active_run = self._require_active_run()
         if active_run.run_state.is_finished:
             raise ValueError("Cannot submit a guess for a finished run.")
@@ -189,8 +183,6 @@ class GameplayService:
             guess=guess,
             is_correct=is_correct,
             score_delta=score_delta,
-            revealed_points=question.player_b.points,
-            response_time_ms=response_time_ms,
         )
         active_run.run_state.apply_result(result, end_reason=end_reason)
         self._persist_guess(
@@ -262,24 +254,16 @@ class GameplayService:
                     run_id=active_run.run_id,
                     round_id=active_run.round_id,
                     question_index=question_index,
-                    player_a_id=result.question.player_a.player_id,
                     player_a_name=result.question.player_a.player_name,
-                    player_a_team_id=result.question.player_a.team_id,
                     player_a_team_abbreviation=result.question.player_a.team_abbreviation,
                     player_a_points=result.question.player_a.points,
-                    player_a_minutes=result.question.player_a.minutes,
-                    player_b_id=result.question.player_b.player_id,
                     player_b_name=result.question.player_b.player_name,
-                    player_b_team_id=result.question.player_b.team_id,
                     player_b_team_abbreviation=result.question.player_b.team_abbreviation,
                     player_b_points=result.question.player_b.points,
-                    player_b_minutes=result.question.player_b.minutes,
                     difficulty=result.question.difficulty.value,
                     guess=result.guess.value,
                     is_correct=result.is_correct,
                     score_delta=result.score_delta,
-                    revealed_points=result.revealed_points,
-                    response_time_ms=result.response_time_ms,
                 )
             )
 
@@ -331,7 +315,6 @@ class GameplayService:
                     round_index=round_index,
                     game_id=game.game_id,
                     game_date=game.source_date,
-                    total_questions=len(round_definition.questions),
                     correct_answers=0,
                     wrong_answers=0,
                     score_delta=0,

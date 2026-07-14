@@ -116,7 +116,6 @@ def test_run_state_tracks_score_and_streaks() -> None:
         guess=GuessDirection.HIGHER,
         is_correct=True,
         score_delta=100,
-        revealed_points=11,
     )
     run_state.apply_result(first_result)
 
@@ -127,7 +126,6 @@ def test_run_state_tracks_score_and_streaks() -> None:
         guess=GuessDirection.LOWER,
         is_correct=False,
         score_delta=-60,
-        revealed_points=12,
     )
     run_state.apply_result(second_result, end_reason=RunEndReason.WRONG_GUESS)
 
@@ -152,7 +150,6 @@ def test_run_state_requires_active_round_before_applying_result() -> None:
         guess=GuessDirection.HIGHER,
         is_correct=True,
         score_delta=150,
-        revealed_points=12,
     )
 
     with pytest.raises(ValueError, match="active round"):
@@ -168,7 +165,6 @@ def test_round_progress_rejects_result_for_wrong_question() -> None:
         guess=wrong_question.correct_guess,
         is_correct=True,
         score_delta=100,
-        revealed_points=wrong_question.player_b.points,
     )
 
     with pytest.raises(ValueError, match="does not match the current question"):
@@ -186,7 +182,6 @@ def test_round_progress_rejects_result_after_completion() -> None:
                 guess=question.correct_guess,
                 is_correct=True,
                 score_delta=100,
-                revealed_points=question.player_b.points,
             )
         )
 
@@ -197,7 +192,6 @@ def test_round_progress_rejects_result_after_completion() -> None:
                 guess=round_definition.questions[-1].correct_guess,
                 is_correct=True,
                 score_delta=100,
-                revealed_points=round_definition.questions[-1].player_b.points,
             )
         )
 
@@ -215,7 +209,6 @@ def test_run_state_cannot_start_round_after_finish() -> None:
             guess=question.correct_guess,
             is_correct=True,
             score_delta=150,
-            revealed_points=question.player_b.points,
         ),
         end_reason=RunEndReason.WRONG_GUESS,
     )

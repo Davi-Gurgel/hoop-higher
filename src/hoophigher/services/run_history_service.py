@@ -30,7 +30,7 @@ class QuestionHistory:
     player_a_points: int
     player_b_name: str
     player_b_team_abbreviation: str
-    revealed_points: int
+    player_b_points: int
     guess: str | None
     is_correct: bool
     score_delta: int
@@ -119,7 +119,7 @@ class RunHistoryService:
             player_a_points=question.player_a_points,
             player_b_name=question.player_b_name,
             player_b_team_abbreviation=question.player_b_team_abbreviation,
-            revealed_points=question.revealed_points,
+            player_b_points=question.player_b_points,
             guess=question.guess,
             is_correct=question.is_correct,
             score_delta=question.score_delta,

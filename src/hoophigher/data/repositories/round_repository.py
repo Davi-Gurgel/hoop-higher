@@ -15,11 +15,6 @@ class RoundRepository:
         self.session.flush()
         return round_record
 
-    def update(self, round_record: RoundRecord) -> RoundRecord:
-        round_record = self.session.merge(round_record)
-        self.session.flush()
-        return round_record
-
     def update_progress(
         self,
         round_id: int,

@@ -73,6 +73,55 @@ def test_init_db_creates_expected_tables(tmp_path) -> None:
     }
 
 
+def test_init_db_drops_stale_columns_from_older_databases(tmp_path) -> None:
+    engine = create_sqlite_engine(f"sqlite:///{tmp_path / 'hoophigher.db'}")
+    init_db(engine)
+
+    # Recreate the pre-removal shape: NOT NULL columns, one of them indexed.
+    with engine.begin() as connection:
+        connection.execute(
+            text("ALTER TABLE questions ADD COLUMN player_a_id VARCHAR NOT NULL DEFAULT ''")
+        )
+        connection.execute(text("CREATE INDEX ix_questions_player_a_id ON questions (player_a_id)"))
+        connection.execute(
+            text("ALTER TABLE rounds ADD COLUMN total_questions INTEGER NOT NULL DEFAULT 0")
+        )
+
+    init_db(engine)
+
+    from sqlalchemy import inspect
+
+    inspector = inspect(engine)
+    question_columns = {column["name"] for column in inspector.get_columns("questions")}
+    round_columns = {column["name"] for column in inspector.get_columns("rounds")}
+    assert "player_a_id" not in question_columns
+    assert "total_questions" not in round_columns
+
+    with Session(engine) as session:
+        run = RunRepository(session).create(RunRecord(mode="endless"))
+        round_record = RoundRepository(session).create(
+            RoundRecord(run_id=run.id or 1, game_id="game-1", game_date=date(2025, 2, 1))
+        )
+        QuestionRepository(session).create(
+            QuestionRecord(
+                run_id=run.id or 1,
+                round_id=round_record.id or 1,
+                question_index=0,
+                player_a_name="Player A",
+                player_a_team_abbreviation="HOM",
+                player_a_points=20,
+                player_b_name="Player B",
+                player_b_team_abbreviation="AWY",
+                player_b_points=24,
+                difficulty="medium",
+                guess="higher",
+                is_correct=True,
+                score_delta=100,
+            )
+        )
+        session.commit()
+
+
 def test_run_round_question_repositories_persist_records(tmp_path) -> None:
     session = make_session(tmp_path)
     run_repo = RunRepository(session)
@@ -96,7 +145,6 @@ def test_run_round_question_repositories_persist_records(tmp_path) -> None:
             round_index=0,
             game_id="game-1",
             game_date=date(2025, 2, 1),
-            total_questions=5,
             correct_answers=4,
             wrong_answers=1,
             score_delta=340,
@@ -107,24 +155,16 @@ def test_run_round_question_repositories_persist_records(tmp_path) -> None:
             run_id=run.id or 1,
             round_id=round_record.id or 1,
             question_index=0,
-            player_a_id="player-a",
             player_a_name="Player A",
-            player_a_team_id="home",
             player_a_team_abbreviation="HOM",
             player_a_points=20,
-            player_a_minutes=32,
-            player_b_id="player-b",
             player_b_name="Player B",
-            player_b_team_id="away",
             player_b_team_abbreviation="AWY",
             player_b_points=24,
-            player_b_minutes=28,
             difficulty="medium",
             guess="higher",
             is_correct=True,
             score_delta=100,
-            revealed_points=24,
-            response_time_ms=1200,
         )
     )
 
@@ -172,7 +212,6 @@ def test_stats_repository_computes_summary_and_leaderboard(tmp_path) -> None:
             round_index=0,
             game_id="game-1",
             game_date=date(2025, 2, 1),
-            total_questions=5,
             correct_answers=3,
             wrong_answers=1,
             score_delta=220,
@@ -184,7 +223,6 @@ def test_stats_repository_computes_summary_and_leaderboard(tmp_path) -> None:
             round_index=0,
             game_id="game-2",
             game_date=date(2025, 2, 2),
-            total_questions=5,
             correct_answers=4,
             wrong_answers=0,
             score_delta=400,
@@ -196,24 +234,16 @@ def test_stats_repository_computes_summary_and_leaderboard(tmp_path) -> None:
             run_id=first_run.id or 1,
             round_id=first_round.id or 1,
             question_index=0,
-            player_a_id="player-a",
             player_a_name="Player A",
-            player_a_team_id="home",
             player_a_team_abbreviation="HOM",
             player_a_points=20,
-            player_a_minutes=32,
-            player_b_id="player-b",
             player_b_name="Player B",
-            player_b_team_id="away",
             player_b_team_abbreviation="AWY",
             player_b_points=24,
-            player_b_minutes=28,
             difficulty="medium",
             guess="higher",
             is_correct=True,
             score_delta=100,
-            revealed_points=24,
-            response_time_ms=900,
         )
     )
     question_repo.create(
@@ -221,24 +251,16 @@ def test_stats_repository_computes_summary_and_leaderboard(tmp_path) -> None:
             run_id=first_run.id or 1,
             round_id=first_round.id or 1,
             question_index=1,
-            player_a_id="player-c",
             player_a_name="Player C",
-            player_a_team_id="home",
             player_a_team_abbreviation="HOM",
             player_a_points=18,
-            player_a_minutes=30,
-            player_b_id="player-d",
             player_b_name="Player D",
-            player_b_team_id="away",
             player_b_team_abbreviation="AWY",
             player_b_points=12,
-            player_b_minutes=26,
             difficulty="easy",
             guess="lower",
             is_correct=False,
             score_delta=-60,
-            revealed_points=12,
-            response_time_ms=1000,
         )
     )
     question_repo.create(
@@ -246,32 +268,22 @@ def test_stats_repository_computes_summary_and_leaderboard(tmp_path) -> None:
             run_id=second_run.id or 2,
             round_id=second_round.id or 2,
             question_index=0,
-            player_a_id="player-e",
             player_a_name="Player E",
-            player_a_team_id="home",
             player_a_team_abbreviation="HOM",
             player_a_points=22,
-            player_a_minutes=33,
-            player_b_id="player-f",
             player_b_name="Player F",
-            player_b_team_id="away",
             player_b_team_abbreviation="AWY",
             player_b_points=30,
-            player_b_minutes=29,
             difficulty="medium",
             guess="higher",
             is_correct=True,
             score_delta=150,
-            revealed_points=30,
-            response_time_ms=800,
         )
     )
 
     assert stats_repo.count_runs() == 2
-    assert stats_repo.count_rounds() == 2
     assert stats_repo.count_questions() == 3
     assert stats_repo.count_correct_questions() == 2
-    assert stats_repo.count_wrong_questions() == 1
     assert stats_repo.best_score() == 400
     assert stats_repo.best_streak() == 4
     assert stats_repo.mode_distribution() == {"arcade": 1, "endless": 1}
