@@ -134,15 +134,15 @@ def test_endless_continues_after_wrong_answer_and_persists_progress(tmp_path) ->
 
     with Session(engine) as session:
         run_record = RunRepository(session).get(start_snapshot.run_id)
-        round_record = RoundRepository(session).get(start_snapshot.round_id)
+        rounds = RoundRepository(session).list_by_run(start_snapshot.run_id)
         questions = QuestionRepository(session).list_by_round(start_snapshot.round_id)
 
     assert run_record is not None
     assert run_record.final_score == -60
     assert run_record.wrong_answers == 1
     assert run_record.end_reason is None
-    assert round_record is not None
-    assert round_record.wrong_answers == 1
+    assert len(rounds) == 1
+    assert rounds[0].wrong_answers == 1
     assert len(questions) == 1
     assert questions[0].is_correct is False
 

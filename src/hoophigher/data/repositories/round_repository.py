@@ -37,9 +37,6 @@ class RoundRepository:
         if result.rowcount == 0:
             raise RuntimeError(f"Round record not found for update: {round_id}")
 
-    def get(self, round_id: int) -> RoundRecord | None:
-        return self.session.get(RoundRecord, round_id)
-
     def list_by_run(self, run_id: int) -> list[RoundRecord]:
         statement = (
             select(RoundRecord)
