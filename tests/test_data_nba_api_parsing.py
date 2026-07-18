@@ -33,7 +33,7 @@ def test_parse_game_status_classifies_numeric_and_text_signals(
     assert parse_game_status(status_code=status_code, status_text=status_text) == expected
 
 
-def testparse_scoreboard_payload_preserves_missing_status_as_unknown() -> None:
+def test_parse_scoreboard_payload_preserves_missing_status_as_unknown() -> None:
     source_date = date(2025, 2, 10)
     seeds = parse_scoreboard_payload(
         {
