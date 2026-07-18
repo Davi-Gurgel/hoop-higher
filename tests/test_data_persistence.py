@@ -2,7 +2,7 @@ import json
 from datetime import date
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 from sqlmodel import Session, select
 import hoophigher.paths as paths_module
 from hoophigher.data import (
@@ -61,8 +61,6 @@ def test_init_db_creates_expected_tables(tmp_path) -> None:
     engine = create_sqlite_engine(f"sqlite:///{tmp_path / 'hoophigher.db'}")
     init_db(engine)
 
-    from sqlalchemy import inspect
-
     inspector = inspect(engine)
     assert set(inspector.get_table_names()) == {
         "cached_game_stats",
@@ -77,25 +75,31 @@ def test_init_db_drops_stale_columns_from_older_databases(tmp_path) -> None:
     engine = create_sqlite_engine(f"sqlite:///{tmp_path / 'hoophigher.db'}")
     init_db(engine)
 
-    # Recreate the pre-removal shape: NOT NULL columns, one of them indexed.
+    # Recreate the pre-removal shape: multiple NOT NULL columns on `questions`,
+    # each indexed, plus a stale column on `rounds` -- modeling a real old
+    # database so the migration must read each table's schema only once.
+    stale_indexed_columns = ("player_a_id", "player_b_id", "player_a_team_id")
     with engine.begin() as connection:
-        connection.execute(
-            text("ALTER TABLE questions ADD COLUMN player_a_id VARCHAR NOT NULL DEFAULT ''")
-        )
-        connection.execute(text("CREATE INDEX ix_questions_player_a_id ON questions (player_a_id)"))
+        for column in stale_indexed_columns:
+            connection.execute(
+                text(f"ALTER TABLE questions ADD COLUMN {column} VARCHAR NOT NULL DEFAULT ''")
+            )
+            connection.execute(text(f"CREATE INDEX ix_questions_{column} ON questions ({column})"))
         connection.execute(
             text("ALTER TABLE rounds ADD COLUMN total_questions INTEGER NOT NULL DEFAULT 0")
         )
 
     init_db(engine)
 
-    from sqlalchemy import inspect
-
     inspector = inspect(engine)
     question_columns = {column["name"] for column in inspector.get_columns("questions")}
     round_columns = {column["name"] for column in inspector.get_columns("rounds")}
-    assert "player_a_id" not in question_columns
+    for column in stale_indexed_columns:
+        assert column not in question_columns
     assert "total_questions" not in round_columns
+
+    question_indexes = {index["name"] for index in inspector.get_indexes("questions")}
+    assert not any(name.startswith("ix_questions_player_") for name in question_indexes)
 
     with Session(engine) as session:
         run = RunRepository(session).create(RunRecord(mode="endless"))

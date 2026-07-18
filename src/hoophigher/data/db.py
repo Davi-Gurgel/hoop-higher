@@ -125,20 +125,46 @@ def init_db(engine: Engine) -> None:
 def _drop_stale_columns(engine: Engine) -> None:
     if engine.dialect.name != "sqlite":
         return
+
+    stale_columns_by_table: dict[str, list[str]] = {}
+    for table, column in _STALE_COLUMNS:
+        stale_columns_by_table.setdefault(table, []).append(column)
+
     with engine.begin() as connection:
-        for table, column in _STALE_COLUMNS:
-            column_rows = connection.exec_driver_sql(f'PRAGMA table_info("{table}")')
-            if column not in {row[1] for row in column_rows}:
+        for table, candidate_columns in stale_columns_by_table.items():
+            table_info_rows = list(connection.exec_driver_sql(f'PRAGMA table_info("{table}")'))
+            existing_columns = {row[1] for row in table_info_rows}
+            stale_columns = [c for c in candidate_columns if c in existing_columns]
+            if not stale_columns:
                 continue
-            index_rows = connection.exec_driver_sql(
-                "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = ?",
-                (table,),
+
+            index_rows = list(
+                connection.exec_driver_sql(
+                    "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = ?",
+                    (table,),
+                )
             )
-            for (index_name,) in index_rows:
-                indexed_columns = connection.exec_driver_sql(f'PRAGMA index_info("{index_name}")')
-                if column in {row[2] for row in indexed_columns}:
-                    connection.exec_driver_sql(f'DROP INDEX IF EXISTS "{index_name}"')
-            connection.exec_driver_sql(f'ALTER TABLE "{table}" DROP COLUMN "{column}"')
+            index_names = [
+                name for (name,) in index_rows if not name.startswith("sqlite_autoindex_")
+            ]
+
+            stale_columns_set = set(stale_columns)
+            stale_index_names = [
+                index_name
+                for index_name in index_names
+                if {
+                    row[2]
+                    for row in list(
+                        connection.exec_driver_sql(f'PRAGMA index_info("{index_name}")')
+                    )
+                }
+                & stale_columns_set
+            ]
+
+            for index_name in stale_index_names:
+                connection.exec_driver_sql(f'DROP INDEX IF EXISTS "{index_name}"')
+            for column in stale_columns:
+                connection.exec_driver_sql(f'ALTER TABLE "{table}" DROP COLUMN "{column}"')
 
 
 @contextmanager
