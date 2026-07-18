@@ -15,19 +15,17 @@ from hoophigher.data.db import create_sqlite_engine, default_sqlite_url, init_db
 from hoophigher.data.stats_sources import nba_api_parsing
 from hoophigher.data.stats_sources.nba_api_parsing import (
     NON_FINAL_GAME_STATUSES,
-    _has_available_player_stats,
-    _is_game_shell,
-    _looks_like_scoreboard_v3_payload,
-    _merge_game_seed,
-    _parse_nba_game_payload,
-    _parse_scoreboard_payload,
+    ScoreboardSeed,
+    looks_like_scoreboard_v3_payload,
+    parse_nba_game_payload,
+    parse_scoreboard_payload,
 )
-from hoophigher.domain.models import NBAGame
+from hoophigher.domain.models import NBAGame, PlayerLine, TeamGameInfo
 
 # Compatibility aliases for callers that imported these parser details from
 # this module before parsing moved to ``nba_api_parsing``.
 GameStatus = nba_api_parsing.GameStatus
-_parse_game_status = nba_api_parsing._parse_game_status
+_parse_game_status = nba_api_parsing.parse_game_status
 
 ScoreboardFetch = Callable[[date, float], Mapping[str, object]]
 NBAGameFetch = Callable[[str, float], Mapping[str, object]]
@@ -79,7 +77,7 @@ class NBAApiStatsSource(StatsSource):
             operation_name="scoreboard",
             operation_context=f"source_date={source_date.isoformat()}",
         )
-        seeds = _parse_scoreboard_payload(payload, expected_date=source_date)
+        seeds = parse_scoreboard_payload(payload, expected_date=source_date)
 
         # Only final games are Playable NBA Games. Live and scheduled games
         # are excluded before shells are built. A payload with no status
@@ -147,7 +145,7 @@ class NBAApiStatsSource(StatsSource):
             operation_name="boxscore",
             operation_context=f"game_id={game_id}",
         )
-        game = _parse_nba_game_payload(
+        game = parse_nba_game_payload(
             payload,
             expected_game_id=game_id,
             source_date_fallback=source_date_fallback,
@@ -215,7 +213,7 @@ def _default_scoreboard_fetch(source_date: date, timeout_seconds: float) -> Mapp
                 timeout=timeout_seconds,
             )
             payload = endpoint.get_dict()
-            if _looks_like_scoreboard_v3_payload(payload):
+            if looks_like_scoreboard_v3_payload(payload):
                 return payload
         except Exception:
             pass
@@ -272,3 +270,35 @@ def _remaining_timeout_seconds(
     if remaining <= 0:
         raise TimeoutError(f"No timeout budget remaining for {operation_name} fallback request.")
     return remaining
+
+
+def _has_available_player_stats(players: tuple[PlayerLine, ...]) -> bool:
+    return any(player.minutes > 0 for player in players)
+
+
+def _is_game_shell(game: NBAGame) -> bool:
+    return not game.player_lines
+
+
+def _merge_game_seed(*, seed: ScoreboardSeed, game: NBAGame) -> NBAGame:
+    if game.game_id != seed.game_id:
+        raise LookupError(f"Game id '{seed.game_id}' not found in fetched payload.")
+    home_team = TeamGameInfo(
+        team_id=game.home_team.team_id,
+        name=game.home_team.name,
+        abbreviation=seed.home_team.abbreviation or game.home_team.abbreviation,
+        score=seed.home_team.score if seed.home_team.score is not None else game.home_team.score,
+    )
+    away_team = TeamGameInfo(
+        team_id=game.away_team.team_id,
+        name=game.away_team.name,
+        abbreviation=seed.away_team.abbreviation or game.away_team.abbreviation,
+        score=seed.away_team.score if seed.away_team.score is not None else game.away_team.score,
+    )
+    return NBAGame(
+        game_id=game.game_id,
+        source_date=seed.source_date,
+        home_team=home_team,
+        away_team=away_team,
+        player_lines=game.player_lines,
+    )

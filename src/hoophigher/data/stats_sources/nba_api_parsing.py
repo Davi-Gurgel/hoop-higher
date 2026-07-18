@@ -39,7 +39,7 @@ class ScoreboardSeed:
     status: GameStatus | None = None
 
 
-def _looks_like_scoreboard_v3_payload(payload: object) -> bool:
+def looks_like_scoreboard_v3_payload(payload: object) -> bool:
     if not isinstance(payload, Mapping):
         return False
     scoreboard = payload.get("scoreboard")
@@ -49,7 +49,7 @@ def _looks_like_scoreboard_v3_payload(payload: object) -> bool:
     return isinstance(games, list)
 
 
-def _parse_scoreboard_payload(
+def parse_scoreboard_payload(
     payload: Mapping[str, object], *, expected_date: date
 ) -> list[ScoreboardSeed]:
     v3_seeds = _parse_scoreboard_v3_payload(payload, expected_date=expected_date)
@@ -87,7 +87,7 @@ def _parse_scoreboard_v3_payload(
         )
         home_raw = _require_mapping(raw_game.get("homeTeam"), field="scoreboard.games[].homeTeam")
         away_raw = _require_mapping(raw_game.get("awayTeam"), field="scoreboard.games[].awayTeam")
-        status = _parse_game_status(
+        status = parse_game_status(
             status_code=raw_game.get("gameStatus"),
             status_text=_optional_str(raw_game.get("gameStatusText")),
         )
@@ -152,7 +152,7 @@ def _parse_scoreboard_v2_payload(
         )
         home_abbrev = tricode_by_game_and_team.get((game_id, home_team_id), "UNK")
         away_abbrev = tricode_by_game_and_team.get((game_id, away_team_id), "UNK")
-        status = _parse_game_status(
+        status = parse_game_status(
             status_code=row.get("GAME_STATUS_ID"),
             status_text=_optional_str(row.get("GAME_STATUS_TEXT")),
         )
@@ -208,7 +208,7 @@ def _parse_v2_result_set(
     raise ValueError(f"Malformed payload: missing result set '{set_name}'.")
 
 
-def _parse_nba_game_payload(
+def parse_nba_game_payload(
     payload: Mapping[str, object],
     *,
     expected_game_id: str,
@@ -502,16 +502,12 @@ def _parse_player_name(row: Mapping[str, object]) -> str | None:
 
 
 def _require_available_player_stats(players: Sequence[PlayerLine], *, field: str) -> None:
-    if _has_available_player_stats(players):
+    if any(player.minutes > 0 for player in players):
         return
     raise LookupError(f"Boxscore stats are unavailable in {field}.")
 
 
-def _has_available_player_stats(players: Sequence[PlayerLine]) -> bool:
-    return any(player.minutes > 0 for player in players)
-
-
-def _parse_game_status(*, status_code: object, status_text: str | None) -> GameStatus | None:
+def parse_game_status(*, status_code: object, status_text: str | None) -> GameStatus | None:
     """Classify a scoreboard game's status as final, live, or scheduled.
 
     Both supported scoreboard payload shapes (V3's ``gameStatus`` and V2's
@@ -542,34 +538,6 @@ def _parse_game_status(*, status_code: object, status_text: str | None) -> GameS
     if lowered:
         return GameStatus.FINAL if "final" in lowered else GameStatus.LIVE
     return None if status_code is None else GameStatus.LIVE
-
-
-def _is_game_shell(game: NBAGame) -> bool:
-    return not game.player_lines
-
-
-def _merge_game_seed(*, seed: ScoreboardSeed, game: NBAGame) -> NBAGame:
-    if game.game_id != seed.game_id:
-        raise LookupError(f"Game id '{seed.game_id}' not found in fetched payload.")
-    home_team = TeamGameInfo(
-        team_id=game.home_team.team_id,
-        name=game.home_team.name,
-        abbreviation=seed.home_team.abbreviation or game.home_team.abbreviation,
-        score=seed.home_team.score if seed.home_team.score is not None else game.home_team.score,
-    )
-    away_team = TeamGameInfo(
-        team_id=game.away_team.team_id,
-        name=game.away_team.name,
-        abbreviation=seed.away_team.abbreviation or game.away_team.abbreviation,
-        score=seed.away_team.score if seed.away_team.score is not None else game.away_team.score,
-    )
-    return NBAGame(
-        game_id=game.game_id,
-        source_date=seed.source_date,
-        home_team=home_team,
-        away_team=away_team,
-        player_lines=game.player_lines,
-    )
 
 
 def _first_value(payload: Mapping[str, object], keys: Sequence[str]) -> object | None:

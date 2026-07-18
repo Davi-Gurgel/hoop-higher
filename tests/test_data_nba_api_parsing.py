@@ -4,9 +4,9 @@ import pytest
 
 from hoophigher.data.stats_sources.nba_api_parsing import (
     GameStatus,
-    _parse_game_status,
-    _parse_nba_game_payload,
-    _parse_scoreboard_payload,
+    parse_game_status,
+    parse_nba_game_payload,
+    parse_scoreboard_payload,
 )
 
 
@@ -30,12 +30,12 @@ from hoophigher.data.stats_sources.nba_api_parsing import (
 def test_parse_game_status_classifies_numeric_and_text_signals(
     status_code, status_text, expected
 ) -> None:
-    assert _parse_game_status(status_code=status_code, status_text=status_text) == expected
+    assert parse_game_status(status_code=status_code, status_text=status_text) == expected
 
 
-def test_parse_scoreboard_payload_preserves_missing_status_as_unknown() -> None:
+def testparse_scoreboard_payload_preserves_missing_status_as_unknown() -> None:
     source_date = date(2025, 2, 10)
-    seeds = _parse_scoreboard_payload(
+    seeds = parse_scoreboard_payload(
         {
             "scoreboard": {
                 "games": [
@@ -67,7 +67,7 @@ def test_parse_scoreboard_payload_preserves_missing_status_as_unknown() -> None:
 
 
 def test_parse_v2_scoreboard_maps_team_scores_and_status() -> None:
-    seeds = _parse_scoreboard_payload(
+    seeds = parse_scoreboard_payload(
         {
             "resultSets": [
                 {
@@ -109,11 +109,11 @@ def test_parse_v2_scoreboard_maps_team_scores_and_status() -> None:
 )
 def test_parse_scoreboard_rejects_malformed_payloads(payload, message) -> None:
     with pytest.raises(ValueError, match=message):
-        _parse_scoreboard_payload(payload, expected_date=date(2025, 2, 10))
+        parse_scoreboard_payload(payload, expected_date=date(2025, 2, 10))
 
 
 def test_parse_flat_v3_boxscore_parses_minutes_and_skips_blank_player_ids() -> None:
-    game = _parse_nba_game_payload(
+    game = parse_nba_game_payload(
         {
             "boxScoreTraditional": {
                 "gameId": "0022500004",
@@ -167,7 +167,7 @@ def test_parse_flat_v3_boxscore_parses_minutes_and_skips_blank_player_ids() -> N
 
 
 def test_parse_nested_v3_boxscore() -> None:
-    game = _parse_nba_game_payload(
+    game = parse_nba_game_payload(
         {
             "boxScoreTraditional": {
                 "gameId": "0022500104",
@@ -218,7 +218,7 @@ def test_parse_nested_v3_boxscore() -> None:
 
 def test_parse_v2_boxscore() -> None:
     game_id = "0022500105"
-    game = _parse_nba_game_payload(
+    game = parse_nba_game_payload(
         {
             "resultSets": [
                 {
@@ -280,7 +280,7 @@ def test_parse_v2_boxscore() -> None:
 
 def test_parse_v2_boxscore_uses_date_fallback_without_game_summary() -> None:
     game_id = "0022500105"
-    game = _parse_nba_game_payload(
+    game = parse_nba_game_payload(
         {
             "resultSets": [
                 {
@@ -390,4 +390,4 @@ def test_parse_v2_boxscore_uses_date_fallback_without_game_summary() -> None:
 )
 def test_parse_boxscore_rejects_malformed_payloads(payload, error_type, message) -> None:
     with pytest.raises(error_type, match=message):
-        _parse_nba_game_payload(payload, expected_game_id="0022500005")
+        parse_nba_game_payload(payload, expected_game_id="0022500005")
