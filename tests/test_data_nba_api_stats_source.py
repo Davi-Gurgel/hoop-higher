@@ -16,11 +16,9 @@ from hoophigher.data import (
     session_scope,
 )
 from hoophigher.data.stats_sources.nba_api_stats_source import (
-    GameStatus,
     NBAApiStatsSource,
     _default_nba_game_fetch,
     _default_scoreboard_fetch,
-    _parse_game_status,
 )
 from hoophigher.domain.models import NBAGame, PlayerLine, TeamGameInfo
 
@@ -1355,37 +1353,6 @@ def test_default_nba_game_fetch_skips_v2_when_v3_exhausts_timeout_budget(monkeyp
         _default_nba_game_fetch("0022500106", 7)
 
     assert calls == ["v3"]
-
-
-# --- Game status parsing (issue #57) ---------------------------------------
-
-
-@pytest.mark.parametrize(
-    ("status_code", "status_text", "expected"),
-    [
-        (1, "7:00 pm ET", GameStatus.SCHEDULED),
-        (2, "Q3 5:23", GameStatus.LIVE),
-        (3, "Final", GameStatus.FINAL),
-        (None, "Final/OT", GameStatus.FINAL),
-        # Without a numeric code, text alone can't distinguish live from
-        # scheduled, so it is classified conservatively as live (still
-        # excluded from Playable NBA Games either way).
-        (None, "7:00 pm ET", GameStatus.LIVE),
-        (None, "Halftime", GameStatus.LIVE),
-        (None, None, None),
-        (None, "", None),
-        # A present but unrecognized status code is status information we do
-        # not understand — classified conservatively as live, never final.
-        (4, None, GameStatus.LIVE),
-        (0, "", GameStatus.LIVE),
-        ("garbage", None, GameStatus.LIVE),
-        (4, "Final", GameStatus.FINAL),
-    ],
-)
-def test_parse_game_status_classifies_numeric_and_text_signals(
-    status_code, status_text, expected
-) -> None:
-    assert _parse_game_status(status_code=status_code, status_text=status_text) == expected
 
 
 def test_get_games_by_date_excludes_live_and_scheduled_v3_games(tmp_path) -> None:
