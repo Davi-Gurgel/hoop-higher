@@ -37,6 +37,19 @@ _NBA_HISTORICAL_PREFERRED_WEEKDAYS = (1, 2, 3, 4, 5)
 HistoricalEligibleSourceDatesFetcher = Callable[[int, int, int], Awaitable[Sequence[date]]]
 
 
+class _CandidateSourceDatesExhausted(LookupError):
+    def __init__(
+        self,
+        message: str,
+        *,
+        saw_games: bool,
+        last_error: Exception | None,
+    ) -> None:
+        super().__init__(message)
+        self.saw_games = saw_games
+        self.last_error = last_error
+
+
 class PlayableNBAGameResolver:
     """Resolve one Source Date and its Playable NBA Games for a new Run."""
 
@@ -73,11 +86,20 @@ class PlayableNBAGameResolver:
         total_questions: int,
     ) -> tuple[date, tuple[NBAGame, ...]]:
         if source_date is not None:
-            return await self._resolve_nba_games_for_source_date(
-                mode=mode,
-                source_date=source_date,
-                total_questions=total_questions,
-            )
+            try:
+                return await self._resolve_nba_games_from_candidate_source_dates(
+                    mode=mode,
+                    candidate_dates=(source_date,),
+                    total_questions=total_questions,
+                    minimum_game_shells=0,
+                )
+            except _CandidateSourceDatesExhausted as exc:
+                if exc.last_error is not None:
+                    raise exc.last_error from None
+                qualifier = "playable games" if exc.saw_games else "games"
+                raise LookupError(
+                    f"No {qualifier} found for source date: {source_date.isoformat()}"
+                ) from None
 
         if candidate_dates is None:
             if mode is GameMode.HISTORICAL:
@@ -88,38 +110,8 @@ class PlayableNBAGameResolver:
             mode=mode,
             candidate_dates=candidate_dates,
             total_questions=total_questions,
+            minimum_game_shells=0,
         )
-
-    async def _resolve_nba_games_for_source_date(
-        self,
-        *,
-        mode: GameMode,
-        source_date: date,
-        total_questions: int,
-    ) -> tuple[date, tuple[NBAGame, ...]]:
-        game_shells = tuple(
-            sorted(
-                await self._stats_source.get_games_by_date(source_date),
-                key=lambda game: game.game_id,
-            )
-        )
-        if not game_shells:
-            raise LookupError(f"No games found for source date: {source_date.isoformat()}")
-
-        full_games = await self._fetch_playable_nba_games(
-            game_shells,
-            total_questions=total_questions,
-            max_games=(
-                self._historical_rounds
-                if mode is GameMode.HISTORICAL
-                else self._non_historical_startup_games
-            ),
-        )
-        if not full_games:
-            raise LookupError(f"No playable games found for source date: {source_date.isoformat()}")
-        if mode is GameMode.HISTORICAL:
-            return source_date, self._sample_historical_nba_games(source_date, full_games)
-        return source_date, full_games
 
     async def _resolve_nba_games_from_candidate_source_dates(
         self,
@@ -127,8 +119,7 @@ class PlayableNBAGameResolver:
         mode: GameMode,
         candidate_dates: Sequence[date],
         total_questions: int,
-        minimum_game_shells: int = 0,
-        terminal_error: str | None = None,
+        minimum_game_shells: int,
     ) -> tuple[date, tuple[NBAGame, ...]]:
         last_error: Exception | None = None
         saw_games = False
@@ -161,16 +152,23 @@ class PlayableNBAGameResolver:
                     return current_date, self._sample_historical_nba_games(current_date, full_games)
                 return current_date, full_games
 
-        if terminal_error is not None:
-            error = LookupError(terminal_error)
-            if last_error is not None:
-                raise error from last_error
-            raise error
         if saw_games:
-            raise LookupError("No playable games found for provided candidate dates.")
+            raise _CandidateSourceDatesExhausted(
+                "No playable games found for provided candidate dates.",
+                saw_games=True,
+                last_error=last_error,
+            )
         if last_error is not None:
-            raise LookupError("No games found for provided candidate dates.") from last_error
-        raise LookupError("No games found for provided candidate dates.")
+            raise _CandidateSourceDatesExhausted(
+                "No games found for provided candidate dates.",
+                saw_games=False,
+                last_error=last_error,
+            ) from last_error
+        raise _CandidateSourceDatesExhausted(
+            "No games found for provided candidate dates.",
+            saw_games=False,
+            last_error=None,
+        )
 
     async def _resolve_historical_nba_games(
         self,
@@ -199,15 +197,20 @@ class PlayableNBAGameResolver:
             )
             enforce_min_games = True
 
-        return await self._resolve_nba_games_from_candidate_source_dates(
-            mode=GameMode.HISTORICAL,
-            candidate_dates=probe_dates,
-            total_questions=total_questions,
-            minimum_game_shells=(self._required_historical_games if enforce_min_games else 0),
-            terminal_error=(
+        try:
+            return await self._resolve_nba_games_from_candidate_source_dates(
+                mode=GameMode.HISTORICAL,
+                candidate_dates=probe_dates,
+                total_questions=total_questions,
+                minimum_game_shells=(self._required_historical_games if enforce_min_games else 0),
+            )
+        except _CandidateSourceDatesExhausted as exc:
+            error = LookupError(
                 f"No historical date with playable games was found after {len(probe_dates)} probes."
-            ),
-        )
+            )
+            if exc.last_error is not None:
+                raise error from exc.last_error
+            raise error from None
 
     async def _fetch_playable_nba_games(
         self,
@@ -230,12 +233,12 @@ class PlayableNBAGameResolver:
 
         self._rng.shuffle(needs_fetch)
         remaining = None if max_games is None else max_games - len(playable)
-        if remaining is not None and remaining <= 0:
+        if not needs_fetch:
             return tuple(playable)
 
         concurrency = min(
             self._playable_game_fetch_concurrency,
-            remaining if remaining is not None else len(needs_fetch),
+            len(needs_fetch),
         )
         semaphore = asyncio.Semaphore(concurrency)
 
@@ -265,7 +268,7 @@ class PlayableNBAGameResolver:
             if tasks:
                 await asyncio.gather(*tasks, return_exceptions=True)
 
-        playable.extend(game for _, game in sorted(fetched))
+        playable.extend(game for _, game in sorted(fetched, key=lambda item: item[0]))
         return tuple(playable)
 
     async def _fetch_playable_nba_game(

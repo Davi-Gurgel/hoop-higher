@@ -188,6 +188,8 @@ class _SlowFirstShellStatsSource:
 
 class _MixedCachedShellStatsSource:
     def __init__(self, *, source_date: date) -> None:
+        self.in_flight = 0
+        self.max_in_flight = 0
         self.requested_ids: list[str] = []
         self._games = (
             _make_game(game_id="cached-1", source_date=source_date),
@@ -233,10 +235,16 @@ class _MixedCachedShellStatsSource:
         source_date_fallback: date | None = None,
     ) -> NBAGame:
         self.requested_ids.append(game_id)
-        if game_id.startswith("shell-fail"):
-            raise LookupError(f"Boxscore unavailable: {game_id}")
-        shell = next(game for game in self._games if game.game_id == game_id)
-        return _make_game(game_id=shell.game_id, source_date=shell.source_date)
+        self.in_flight += 1
+        self.max_in_flight = max(self.max_in_flight, self.in_flight)
+        try:
+            await asyncio.sleep(0.01)
+            if game_id.startswith("shell-fail"):
+                raise LookupError(f"Boxscore unavailable: {game_id}")
+            shell = next(game for game in self._games if game.game_id == game_id)
+            return _make_game(game_id=shell.game_id, source_date=shell.source_date)
+        finally:
+            self.in_flight -= 1
 
 
 def test_resolver_selects_playable_games_without_run_persistence() -> None:
@@ -254,6 +262,56 @@ def test_resolver_selects_playable_games_without_run_persistence() -> None:
     assert selected_date == date(2025, 1, 12)
     assert games
     assert {game.source_date for game in games} == {selected_date}
+
+
+@pytest.mark.parametrize(
+    ("has_unplayable_game", "message"),
+    [
+        (False, "No games found for source date: 2025-02-09"),
+        (True, "No playable games found for source date: 2025-02-09"),
+    ],
+)
+def test_source_date_resolution_preserves_specific_exhaustion_errors(
+    has_unplayable_game: bool,
+    message: str,
+) -> None:
+    source_date = date(2025, 2, 9)
+    games = (
+        (_make_game(game_id="unplayable", source_date=source_date, minutes=0),)
+        if has_unplayable_game
+        else ()
+    )
+    resolver = _make_resolver(stats_source=_DateStatsSource({source_date: games}))
+
+    with pytest.raises(LookupError, match=message):
+        asyncio.run(
+            resolver.resolve(
+                mode=GameMode.ENDLESS,
+                source_date=source_date,
+                candidate_dates=None,
+                total_questions=5,
+            )
+        )
+
+
+def test_source_date_resolution_preserves_stats_source_error() -> None:
+    source_date = date(2025, 2, 9)
+    source_error = RuntimeError("temporary Source Date failure")
+    resolver = _make_resolver(
+        stats_source=_DateStatsSource({source_date: source_error}),
+    )
+
+    with pytest.raises(RuntimeError) as exc_info:
+        asyncio.run(
+            resolver.resolve(
+                mode=GameMode.ENDLESS,
+                source_date=source_date,
+                candidate_dates=None,
+                total_questions=5,
+            )
+        )
+
+    assert exc_info.value is source_error
 
 
 def test_resolver_tries_candidate_dates_until_playable_games_are_found() -> None:
@@ -418,6 +476,7 @@ def test_resolution_continues_after_partial_shell_fetch_batch_fails() -> None:
         "shell-ok-1",
         "shell-ok-2",
     ]
+    assert stats_source.max_in_flight == 4
 
 
 def test_resolution_cancels_slow_shell_after_enough_nba_games_load() -> None:
@@ -519,6 +578,45 @@ def test_historical_index_tries_next_source_date_after_resolution_error() -> Non
     assert stats_source.requested_dates == [first_date, second_date]
     assert selected_date == second_date
     assert len(games) == 5
+
+
+def test_historical_resolution_preserves_last_source_error_as_cause() -> None:
+    failed_date = date(2018, 2, 13)
+    unplayable_date = date(2018, 2, 14)
+    source_error = RuntimeError("temporary Source Date failure")
+    stats_source = _DateStatsSource(
+        {
+            failed_date: source_error,
+            unplayable_date: (
+                _make_game(
+                    game_id="historical-unplayable",
+                    source_date=unplayable_date,
+                    minutes=0,
+                ),
+            ),
+        }
+    )
+
+    async def eligible_source_dates(_start_year: int, _end_year: int, _min_games: int):
+        return (failed_date, unplayable_date)
+
+    resolver = _make_resolver(
+        stats_source=stats_source,
+        rng=_NoShuffleRandom(),
+        historical_eligible_source_dates_fetcher=eligible_source_dates,
+    )
+
+    with pytest.raises(LookupError, match="after 2 probes") as exc_info:
+        asyncio.run(
+            resolver.resolve(
+                mode=GameMode.HISTORICAL,
+                source_date=None,
+                candidate_dates=None,
+                total_questions=5,
+            )
+        )
+
+    assert exc_info.value.__cause__ is source_error
 
 
 def test_historical_probes_prefer_high_signal_source_dates() -> None:
