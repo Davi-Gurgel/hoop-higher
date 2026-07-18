@@ -305,7 +305,7 @@ class GameScreen(Screen[None]):
 
     def _show_reveal(self, result: QuestionResult, guess: GuessDirection) -> None:
         """Reveal B's number, drop the verdict strip, flash the scorebug."""
-        went_over = result.player_b_points > result.question.player_a.points
+        went_over = result.question.correct_guess is GuessDirection.HIGHER
         self._matchup_panel.reveal(
             result.player_b_points,
             is_correct=result.is_correct,
@@ -338,7 +338,7 @@ class GameScreen(Screen[None]):
 
         # The service has already advanced to the next question (and may have
         # started the next round), but the UI is still revealing this answer.
-        # Refresh only scoring here; _present_question advances the counters.
+        # Refresh only scoring here; _refresh_view advances the counters.
         self._scorebug.update_scoring(self._snapshot)
         self._scorebug.show_scoring_event(is_gain=result.is_correct)
         self._footer.set_hints(_REVEAL_HELD_HINT)

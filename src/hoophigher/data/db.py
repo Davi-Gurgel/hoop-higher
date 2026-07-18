@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Final
 
 from sqlalchemy import event
-from sqlalchemy.engine import Engine, make_url
+from sqlalchemy.engine import Connection, Engine, make_url
 from sqlmodel import Session, SQLModel, create_engine
 
 from hoophigher.data import (  # noqa: F401 - ensure tables are registered
@@ -122,6 +122,24 @@ def init_db(engine: Engine) -> None:
     _drop_stale_columns(engine)
 
 
+def _existing_columns(connection: Connection, table: str) -> set[str]:
+    rows = connection.exec_driver_sql(f'PRAGMA table_info("{table}")')
+    return {row[1] for row in rows}
+
+
+def _droppable_index_names(connection: Connection, table: str) -> list[str]:
+    rows = connection.exec_driver_sql(
+        "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = ?",
+        (table,),
+    )
+    return [name for (name,) in rows if not name.startswith("sqlite_autoindex_")]
+
+
+def _index_columns(connection: Connection, index_name: str) -> set[str]:
+    rows = connection.exec_driver_sql(f'PRAGMA index_info("{index_name}")')
+    return {row[2] for row in rows}
+
+
 def _drop_stale_columns(engine: Engine) -> None:
     if engine.dialect.name != "sqlite":
         return
@@ -132,35 +150,21 @@ def _drop_stale_columns(engine: Engine) -> None:
 
     with engine.begin() as connection:
         for table, candidate_columns in stale_columns_by_table.items():
-            table_info_rows = list(connection.exec_driver_sql(f'PRAGMA table_info("{table}")'))
-            existing_columns = {row[1] for row in table_info_rows}
-            stale_columns = [c for c in candidate_columns if c in existing_columns]
+            existing_columns = _existing_columns(connection, table)
+            stale_columns = [column for column in candidate_columns if column in existing_columns]
             if not stale_columns:
                 continue
-
-            index_rows = list(
-                connection.exec_driver_sql(
-                    "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = ?",
-                    (table,),
-                )
-            )
-            index_names = [
-                name for (name,) in index_rows if not name.startswith("sqlite_autoindex_")
-            ]
 
             stale_columns_set = set(stale_columns)
             stale_index_names = [
                 index_name
-                for index_name in index_names
-                if {
-                    row[2]
-                    for row in list(
-                        connection.exec_driver_sql(f'PRAGMA index_info("{index_name}")')
-                    )
-                }
-                & stale_columns_set
+                for index_name in _droppable_index_names(connection, table)
+                if _index_columns(connection, index_name) & stale_columns_set
             ]
 
+            # The helpers above return fully materialized containers; issuing
+            # DDL while a schema-reading cursor is still open locks the
+            # connection ("database table is locked").
             for index_name in stale_index_names:
                 connection.exec_driver_sql(f'DROP INDEX IF EXISTS "{index_name}"')
             for column in stale_columns:
