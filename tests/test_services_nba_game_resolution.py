@@ -145,6 +145,22 @@ class _ShellNBAGameStatsSource:
             self.in_flight -= 1
 
 
+class _ImmediateShellStatsSource(_ShellNBAGameStatsSource):
+    def __init__(self, *, game_count: int, source_date: date) -> None:
+        super().__init__(game_count=game_count, source_date=source_date)
+        self.requested_ids: list[str] = []
+
+    async def get_nba_game(
+        self,
+        game_id: str,
+        *,
+        source_date_fallback: date | None = None,
+    ) -> NBAGame:
+        self.requested_ids.append(game_id)
+        shell = next(game for game in self._games if game.game_id == game_id)
+        return _make_game(game_id=shell.game_id, source_date=shell.source_date)
+
+
 class _SlowFirstShellStatsSource:
     def __init__(self, *, game_count: int, source_date: date) -> None:
         self.requested_ids: list[str] = []
@@ -442,6 +458,29 @@ def test_non_historical_resolution_caps_boxscore_fetches_for_fast_startup() -> N
 
     assert len(games) == 5
     assert len(stats_source.requested_fallback_dates) == 5
+
+
+def test_fast_boxscore_fetches_stop_after_initial_concurrency_window() -> None:
+    source_date = date(2025, 2, 10)
+    stats_source = _ImmediateShellStatsSource(game_count=8, source_date=source_date)
+    resolver = _make_resolver(
+        stats_source=stats_source,
+        rng=_NoShuffleRandom(1),
+        playable_game_fetch_concurrency=5,
+        non_historical_startup_games=5,
+    )
+
+    _, games = asyncio.run(
+        resolver.resolve(
+            mode=GameMode.ENDLESS,
+            source_date=None,
+            candidate_dates=[source_date],
+            total_questions=5,
+        )
+    )
+
+    assert [game.game_id for game in games] == [f"shell-game-{index}" for index in range(1, 6)]
+    assert stats_source.requested_ids == [f"shell-game-{index}" for index in range(1, 6)]
 
 
 def test_resolution_continues_after_partial_shell_fetch_batch_fails() -> None:

@@ -240,33 +240,53 @@ class PlayableNBAGameResolver:
             self._playable_game_fetch_concurrency,
             len(needs_fetch),
         )
-        semaphore = asyncio.Semaphore(concurrency)
 
         async def fetch(index: int, game_shell: NBAGame) -> tuple[int, NBAGame | None]:
-            async with semaphore:
-                return index, await self._fetch_playable_nba_game(
-                    game_shell,
-                    total_questions=total_questions,
-                )
+            return index, await self._fetch_playable_nba_game(
+                game_shell,
+                total_questions=total_questions,
+            )
 
-        tasks = [
+        indexed_shells = iter(enumerate(needs_fetch))
+        pending = {
             asyncio.create_task(fetch(index, game_shell))
-            for index, game_shell in enumerate(needs_fetch)
-        ]
+            for index, game_shell in (next(indexed_shells) for _ in range(concurrency))
+        }
         fetched: list[tuple[int, NBAGame]] = []
+        quota_reached = False
 
         try:
-            for completed in asyncio.as_completed(tasks):
-                index, full_game = await completed
-                if full_game is not None:
+            while pending and not quota_reached:
+                done, pending = await asyncio.wait(
+                    pending,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+                completed = sorted(
+                    (task.result() for task in done),
+                    key=lambda item: item[0],
+                )
+                for index, full_game in completed:
+                    if full_game is None:
+                        continue
                     fetched.append((index, full_game))
                     if remaining is not None and len(fetched) >= remaining:
+                        quota_reached = True
                         break
+
+                if quota_reached:
+                    continue
+
+                for _ in done:
+                    try:
+                        index, game_shell = next(indexed_shells)
+                    except StopIteration:
+                        break
+                    pending.add(asyncio.create_task(fetch(index, game_shell)))
         finally:
-            for task in tasks:
+            for task in pending:
                 task.cancel()
-            if tasks:
-                await asyncio.gather(*tasks, return_exceptions=True)
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
 
         playable.extend(game for _, game in sorted(fetched, key=lambda item: item[0]))
         return tuple(playable)
