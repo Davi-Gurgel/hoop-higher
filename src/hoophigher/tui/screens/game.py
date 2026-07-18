@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from time import monotonic
 
 from textual import events
 from textual.app import ComposeResult
@@ -96,7 +95,6 @@ class GameScreen(Screen[None]):
         self._last_guess: LastGuess | None = None
         self._awaiting_feedback = False
         self._game_over_screen_visible = False
-        self._question_started_at: float | None = None
         self._scorebug = Scorebug(id="scorebug")
         self._context_strip = GameContextStrip(
             len(snapshot.games_today),
@@ -129,11 +127,10 @@ class GameScreen(Screen[None]):
         """Present the current Question whenever this screen becomes active.
 
         Textual sends ScreenResume on the initial push and again when a
-        covering screen (the Round Summary) pops, so time spent reading the
-        summary never counts toward a response time.
+        covering screen (the Round Summary) pops.
         """
         if not self._awaiting_feedback and not self._snapshot.is_finished:
-            self._present_question()
+            self._refresh_view()
 
     def on_resize(self, event: events.Resize) -> None:
         self._sync_responsive_copy(event.size.width, event.size.height)
@@ -192,18 +189,13 @@ class GameScreen(Screen[None]):
 
         self._awaiting_feedback = True
         self._set_buttons_disabled(True)
-        response_time_ms = self._response_time_ms()
-        self._question_started_at = None
 
         previous_snapshot = self._snapshot
         was_last_question = (
             previous_snapshot.question_index == previous_snapshot.total_questions - 1
         )
 
-        result = await self.app.gameplay_service.submit_guess(
-            guess,
-            response_time_ms=response_time_ms,
-        )
+        result = await self.app.gameplay_service.submit_guess(guess)
 
         self._round_tally.record(result)
         self._last_guess = LastGuess(
@@ -211,7 +203,7 @@ class GameScreen(Screen[None]):
             player_a_points=result.question.player_a.points,
             guessed_over=guess is GuessDirection.HIGHER,
             player_b_name=result.question.player_b.player_name,
-            player_b_points=result.revealed_points,
+            player_b_points=result.player_b_points,
             is_correct=result.is_correct,
             score_delta=result.score_delta,
         )
@@ -258,15 +250,9 @@ class GameScreen(Screen[None]):
             self.app.push_screen(RoundSummaryScreen(summary))
             return
 
-        self._present_question()
+        self._refresh_view()
 
     # ── View helpers ──────────────────────────────────────────
-
-    def _present_question(self) -> None:
-        """Repaint the screen and start timing the answerable Question, if any."""
-        self._refresh_view()
-        question = self._snapshot.current_question
-        self._question_started_at = None if question is None else monotonic()
 
     def _refresh_view(self) -> None:
         s = self._snapshot
@@ -319,9 +305,9 @@ class GameScreen(Screen[None]):
 
     def _show_reveal(self, result: QuestionResult, guess: GuessDirection) -> None:
         """Reveal B's number, drop the verdict strip, flash the scorebug."""
-        went_over = result.revealed_points > result.question.player_a.points
+        went_over = result.question.correct_guess is GuessDirection.HIGHER
         self._matchup_panel.reveal(
-            result.revealed_points,
+            result.player_b_points,
             is_correct=result.is_correct,
             went_over=went_over,
         )
@@ -333,7 +319,7 @@ class GameScreen(Screen[None]):
                 "-success",
                 Content.from_markup(
                     "[bold $success]CALLED IT.[/]  $b_name went for "
-                    f"{result.revealed_points} — that's {'over' if went_over else 'under'}.",
+                    f"{result.player_b_points} — that's {'over' if went_over else 'under'}.",
                     b_name=player_last_name(result.question.player_b.player_name),
                 ),
                 f"[bold $success]{signed_delta}[/]",
@@ -342,7 +328,7 @@ class GameScreen(Screen[None]):
             strip.show(
                 "-danger",
                 Content.from_markup(
-                    f"[bold $error]ICE COLD.[/]  He dropped {result.revealed_points} "
+                    f"[bold $error]ICE COLD.[/]  He dropped {result.player_b_points} "
                     f"— you said {guess.value}.",
                 ),
                 f"[bold $error]{signed_delta}[/]",
@@ -352,7 +338,7 @@ class GameScreen(Screen[None]):
 
         # The service has already advanced to the next question (and may have
         # started the next round), but the UI is still revealing this answer.
-        # Refresh only scoring here; _present_question advances the counters.
+        # Refresh only scoring here; _refresh_view advances the counters.
         self._scorebug.update_scoring(self._snapshot)
         self._scorebug.show_scoring_event(is_gain=result.is_correct)
         self._footer.set_hints(_REVEAL_HELD_HINT)
@@ -369,12 +355,6 @@ class GameScreen(Screen[None]):
 
     def _set_buttons_disabled(self, disabled: bool) -> None:
         self._guess_bar.set_buttons_disabled(disabled)
-
-    def _response_time_ms(self) -> int | None:
-        """Elapsed answer time, or None when no Question timing was running."""
-        if self._question_started_at is None:
-            return None
-        return int((monotonic() - self._question_started_at) * 1000)
 
     def _leave_run(self) -> None:
         self._snapshot = self.app.gameplay_service.end_run()

@@ -15,11 +15,6 @@ class RunRepository:
         self.session.flush()
         return run
 
-    def update(self, run: RunRecord) -> RunRecord:
-        run = self.session.merge(run)
-        self.session.flush()
-        return run
-
     def update_progress(
         self,
         run_id: int,

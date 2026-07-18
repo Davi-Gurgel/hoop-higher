@@ -124,7 +124,7 @@ def test_endless_continues_after_wrong_answer_and_persists_progress(tmp_path) ->
     assert question is not None
 
     wrong_guess = _opposite_guess(question.correct_guess)
-    result = asyncio.run(service.submit_guess(wrong_guess, response_time_ms=900))
+    result = asyncio.run(service.submit_guess(wrong_guess))
     snapshot = service.snapshot()
 
     assert result.is_correct is False
@@ -134,15 +134,15 @@ def test_endless_continues_after_wrong_answer_and_persists_progress(tmp_path) ->
 
     with Session(engine) as session:
         run_record = RunRepository(session).get(start_snapshot.run_id)
-        round_record = RoundRepository(session).get(start_snapshot.round_id)
-        questions = QuestionRepository(session).list_by_run(start_snapshot.run_id)
+        rounds = RoundRepository(session).list_by_run(start_snapshot.run_id)
+        questions = QuestionRepository(session).list_by_round(start_snapshot.round_id)
 
     assert run_record is not None
     assert run_record.final_score == -60
     assert run_record.wrong_answers == 1
     assert run_record.end_reason is None
-    assert round_record is not None
-    assert round_record.wrong_answers == 1
+    assert len(rounds) == 1
+    assert rounds[0].wrong_answers == 1
     assert len(questions) == 1
     assert questions[0].is_correct is False
 
@@ -268,7 +268,6 @@ def test_endless_starts_next_round_after_perfect_round_and_persists_rounds(tmp_p
     assert run_record.final_score == 500
     assert run_record.correct_answers == 5
     assert [round_record.round_index for round_record in rounds] == [0, 1]
-    assert [round_record.total_questions for round_record in rounds] == [5, 5]
 
 
 def test_arcade_starts_next_round_after_perfect_round_and_persists_rounds(tmp_path) -> None:
@@ -303,7 +302,6 @@ def test_arcade_starts_next_round_after_perfect_round_and_persists_rounds(tmp_pa
     assert run_record.final_score == 750
     assert run_record.correct_answers == 5
     assert [round_record.round_index for round_record in rounds] == [0, 1]
-    assert [round_record.total_questions for round_record in rounds] == [5, 5]
 
 
 def test_non_historical_run_ends_after_each_fetched_game_is_played(tmp_path) -> None:
@@ -607,11 +605,6 @@ def test_historical_carries_configured_total_questions_into_next_round(tmp_path)
     assert snapshot.total_questions == 6
     assert snapshot.current_question is not None
 
-    with Session(engine) as session:
-        rounds = RoundRepository(session).list_by_run(start_snapshot.run_id)
-
-    assert [round_record.total_questions for round_record in rounds[:2]] == [6, 6]
-
 
 def test_historical_wrong_answer_keeps_run_active_and_applies_score(tmp_path) -> None:
     engine = _make_engine(tmp_path)
@@ -628,7 +621,7 @@ def test_historical_wrong_answer_keeps_run_active_and_applies_score(tmp_path) ->
     assert question is not None
 
     wrong_guess = _opposite_guess(question.correct_guess)
-    result = asyncio.run(service.submit_guess(wrong_guess, response_time_ms=700))
+    result = asyncio.run(service.submit_guess(wrong_guess))
     snapshot = service.snapshot()
 
     assert result.is_correct is False

@@ -55,7 +55,7 @@ def _format_question(question: QuestionHistory) -> str:
         f"{question.player_a_name} ({question.player_a_team_abbreviation}) "
         f"{question.player_a_points} pts  →  "
         f"{question.player_b_name} ({question.player_b_team_abbreviation}) "
-        f"{question.revealed_points} pts  |  {guess_label} {outcome} "
+        f"{question.player_b_points} pts  |  {guess_label} {outcome} "
         f"{score_sign}{question.score_delta}"
     )
 

@@ -10,7 +10,6 @@ from textual.widgets import Button, Label, Static
 import hoophigher.tui.screens.game as game_screen_module
 from hoophigher.data import (
     QuestionRecord,
-    QuestionRepository,
     RoundRecord,
     RunRecord,
     RunRepository,
@@ -346,7 +345,6 @@ def test_run_history_opens_selected_run_details(tmp_path) -> None:
             round_index=0,
             game_id="history-game",
             game_date=date(2025, 1, 12),
-            total_questions=1,
             correct_answers=1,
             wrong_answers=0,
             score_delta=100,
@@ -358,23 +356,16 @@ def test_run_history_opens_selected_run_details(tmp_path) -> None:
                 run_id=run_id,
                 round_id=round_record.id or 0,
                 question_index=0,
-                player_a_id="a",
                 player_a_name="Known Player",
-                player_a_team_id="home",
                 player_a_team_abbreviation="HOM",
                 player_a_points=20,
-                player_a_minutes=30,
-                player_b_id="b",
                 player_b_name="Revealed Player",
-                player_b_team_id="away",
                 player_b_team_abbreviation="AWY",
                 player_b_points=25,
-                player_b_minutes=31,
                 difficulty="medium",
                 guess="higher",
                 is_correct=True,
                 score_delta=100,
-                revealed_points=25,
             )
         )
         session.commit()
@@ -702,57 +693,6 @@ def test_game_screen_enter_confirms_focused_guess() -> None:
             assert app.gameplay_service.snapshot().question_index == starting_index + 1
 
     asyncio.run(scenario())
-
-
-def test_game_screen_persists_monotonic_response_times(tmp_path, monkeypatch) -> None:
-    database_url = f"sqlite:///{tmp_path / 'hoophigher.db'}"
-    clock = 100.0
-    monkeypatch.setattr(game_screen_module, "monotonic", lambda: clock)
-    monkeypatch.setattr(
-        game_screen_module.GameScreen,
-        "set_timer",
-        lambda _self, _duration, callback: callback(),
-    )
-
-    async def scenario() -> None:
-        nonlocal clock
-        app = HoopHigherApp(database_url=database_url)
-
-        async with app.run_test() as pilot:
-            await pilot.press("enter")
-            await pilot.press("1")
-            await pilot.pause()
-
-            clock = 101.5
-            await pilot.press(_correct_guess_key(app))
-            await pilot.pause()
-
-            clock = 102.25
-            await pilot.press(_correct_guess_key(app))
-            await pilot.pause()
-
-            for next_clock in (103.0, 104.0, 105.0):
-                clock = next_clock
-                await pilot.press(_correct_guess_key(app))
-                await pilot.pause()
-
-            clock = 200.0
-            await pilot.press("enter")
-            await pilot.pause()
-
-            clock = 200.5
-            await pilot.press(_correct_guess_key(app))
-            await pilot.pause()
-
-    asyncio.run(scenario())
-
-    engine = create_sqlite_engine(database_url)
-    with Session(engine) as session:
-        response_times = [
-            question.response_time_ms for question in QuestionRepository(session).list_by_run(1)
-        ]
-
-    assert response_times == [1500, 750, 750, 1000, 1000, 500]
 
 
 def test_game_screen_footer_keeps_confirm_binding_visible(monkeypatch) -> None:
