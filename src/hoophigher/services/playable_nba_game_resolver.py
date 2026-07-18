@@ -127,6 +127,8 @@ class PlayableNBAGameResolver:
         mode: GameMode,
         candidate_dates: Sequence[date],
         total_questions: int,
+        minimum_game_shells: int = 0,
+        terminal_error: str | None = None,
     ) -> tuple[date, tuple[NBAGame, ...]]:
         last_error: Exception | None = None
         saw_games = False
@@ -146,6 +148,8 @@ class PlayableNBAGameResolver:
                 continue
             if game_shells:
                 saw_games = True
+            if len(game_shells) < minimum_game_shells:
+                continue
 
             full_games = await self._fetch_playable_nba_games(
                 tuple(sorted(game_shells, key=lambda game: game.game_id)),
@@ -157,6 +161,11 @@ class PlayableNBAGameResolver:
                     return current_date, self._sample_historical_nba_games(current_date, full_games)
                 return current_date, full_games
 
+        if terminal_error is not None:
+            error = LookupError(terminal_error)
+            if last_error is not None:
+                raise error from last_error
+            raise error
         if saw_games:
             raise LookupError("No playable games found for provided candidate dates.")
         if last_error is not None:
@@ -190,38 +199,15 @@ class PlayableNBAGameResolver:
             )
             enforce_min_games = True
 
-        last_error: Exception | None = None
-        for candidate_date in probe_dates:
-            try:
-                game_shells = tuple(
-                    sorted(
-                        await self._stats_source.get_games_by_date(candidate_date),
-                        key=lambda game: game.game_id,
-                    )
-                )
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
-                last_error = exc
-                continue
-
-            if enforce_min_games and len(game_shells) < self._required_historical_games:
-                continue
-
-            full_games = await self._fetch_playable_nba_games(
-                game_shells,
-                total_questions=total_questions,
-                max_games=self._historical_rounds,
-            )
-            if full_games:
-                return candidate_date, self._sample_historical_nba_games(candidate_date, full_games)
-
-        error = LookupError(
-            f"No historical date with playable games was found after {len(probe_dates)} probes."
+        return await self._resolve_nba_games_from_candidate_source_dates(
+            mode=GameMode.HISTORICAL,
+            candidate_dates=probe_dates,
+            total_questions=total_questions,
+            minimum_game_shells=(self._required_historical_games if enforce_min_games else 0),
+            terminal_error=(
+                f"No historical date with playable games was found after {len(probe_dates)} probes."
+            ),
         )
-        if last_error is not None:
-            raise error from last_error
-        raise error
 
     async def _fetch_playable_nba_games(
         self,
@@ -243,49 +229,43 @@ class PlayableNBAGameResolver:
                 needs_fetch.append(game)
 
         self._rng.shuffle(needs_fetch)
-        step = self._playable_game_fetch_concurrency
-        next_fetch_index = 0
-        pending: set[asyncio.Task[NBAGame | None]] = set()
-        task_order: dict[asyncio.Task[NBAGame | None], int] = {}
+        remaining = None if max_games is None else max_games - len(playable)
+        if remaining is not None and remaining <= 0:
+            return tuple(playable)
+
+        concurrency = min(
+            self._playable_game_fetch_concurrency,
+            remaining if remaining is not None else len(needs_fetch),
+        )
+        semaphore = asyncio.Semaphore(concurrency)
+
+        async def fetch(index: int, game_shell: NBAGame) -> tuple[int, NBAGame | None]:
+            async with semaphore:
+                return index, await self._fetch_playable_nba_game(
+                    game_shell,
+                    total_questions=total_questions,
+                )
+
+        tasks = [
+            asyncio.create_task(fetch(index, game_shell))
+            for index, game_shell in enumerate(needs_fetch)
+        ]
+        fetched: list[tuple[int, NBAGame]] = []
 
         try:
-            while next_fetch_index < len(needs_fetch) or pending:
-                while (
-                    next_fetch_index < len(needs_fetch)
-                    and len(pending) < step
-                    and (max_games is None or len(playable) < max_games)
-                ):
-                    game_shell = needs_fetch[next_fetch_index]
-                    task = asyncio.create_task(
-                        self._fetch_playable_nba_game(
-                            game_shell,
-                            total_questions=total_questions,
-                        )
-                    )
-                    pending.add(task)
-                    task_order[task] = next_fetch_index
-                    next_fetch_index += 1
-
-                if not pending:
-                    break
-
-                done, pending = await asyncio.wait(
-                    pending,
-                    return_when=asyncio.FIRST_COMPLETED,
-                )
-                for task in sorted(done, key=task_order.__getitem__):
-                    full_game = task.result()
-                    if full_game is None:
-                        continue
-                    playable.append(full_game)
-                    if max_games is not None and len(playable) >= max_games:
-                        return tuple(playable)
+            for completed in asyncio.as_completed(tasks):
+                index, full_game = await completed
+                if full_game is not None:
+                    fetched.append((index, full_game))
+                    if remaining is not None and len(fetched) >= remaining:
+                        break
         finally:
-            for task in pending:
+            for task in tasks:
                 task.cancel()
-            if pending:
-                await asyncio.gather(*pending, return_exceptions=True)
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
 
+        playable.extend(game for _, game in sorted(fetched))
         return tuple(playable)
 
     async def _fetch_playable_nba_game(
