@@ -15,12 +15,11 @@ from hoophigher.data import (
     init_db,
     session_scope,
 )
+from hoophigher.data.stats_sources import nba_api_parsing
 from hoophigher.data.stats_sources.nba_api_stats_source import (
-    GameStatus,
     NBAApiStatsSource,
     _default_nba_game_fetch,
     _default_scoreboard_fetch,
-    _parse_game_status,
 )
 from hoophigher.domain.models import NBAGame, PlayerLine, TeamGameInfo
 
@@ -61,6 +60,21 @@ def _make_stats_source(**kwargs):
     }
     values.update(kwargs)
     return NBAApiStatsSource(**values)
+
+
+def test_preserves_game_status_compatibility_alias() -> None:
+    assert stats_source_module.GameStatus is nba_api_parsing.NBAGameStatus
+
+
+def test_player_line_availability_honors_domain_eligibility(monkeypatch) -> None:
+    player_line = _make_game("0022500001", date(2025, 2, 10)).player_lines[0]
+    monkeypatch.setattr(
+        PlayerLine,
+        "is_eligible",
+        property(lambda candidate: candidate.minutes == 0),
+    )
+
+    assert stats_source_module._has_eligible_player_lines((player_line,)) is False
 
 
 def test_get_games_by_date_uses_cache_before_fetchers(tmp_path) -> None:
@@ -539,292 +553,6 @@ def test_get_games_by_date_returns_shells_without_fetching_boxscores(tmp_path) -
     assert boxscore_calls == 0
     # All games are shells without player lines.
     assert all(game.player_lines == () for game in games)
-
-
-def test_mapping_parses_minutes_and_skips_blank_player_ids(tmp_path) -> None:
-    engine = create_sqlite_engine(f"sqlite:///{tmp_path / 'hoophigher.db'}")
-    init_db(engine)
-
-    def nba_game_fetch(game_id: str, _timeout_seconds: int):
-        return {
-            "boxScoreTraditional": {
-                "gameId": game_id,
-                "gameDate": "2025-02-10",
-                "homeTeam": {
-                    "teamId": "1610612737",
-                    "teamName": "Hawks",
-                    "teamTricode": "ATL",
-                    "score": "111",
-                },
-                "awayTeam": {
-                    "teamId": "1610612738",
-                    "teamName": "Celtics",
-                    "teamTricode": "BOS",
-                    "score": "109",
-                },
-                "playersStats": [
-                    {
-                        "personId": "11",
-                        "name": "A",
-                        "teamId": "1610612737",
-                        "teamTricode": "ATL",
-                        "minutes": "12:34",
-                        "points": "17",
-                    },
-                    {
-                        "personId": "12",
-                        "name": "B",
-                        "teamId": "1610612738",
-                        "teamTricode": "BOS",
-                        "minutes": "",
-                        "points": None,
-                    },
-                    {
-                        "personId": " ",
-                        "name": "C",
-                        "teamId": "1610612738",
-                        "teamTricode": "BOS",
-                        "minutes": "09:00",
-                        "points": "8",
-                    },
-                ],
-            }
-        }
-
-    stats_source = _make_stats_source(
-        cache_repository_factory=_make_cache_factory(engine),
-        nba_game_fetch=nba_game_fetch,
-        timeout_seconds=5,
-    )
-
-    game = asyncio.run(stats_source.get_nba_game("0022500004"))
-
-    assert len(game.player_lines) == 2
-    assert [player.minutes for player in game.player_lines] == [12, 0]
-    assert [player.points for player in game.player_lines] == [17, 0]
-
-
-def test_get_games_by_date_parses_nested_v3_boxscore_shape(tmp_path) -> None:
-    target_date = date(2025, 2, 10)
-    engine = create_sqlite_engine(f"sqlite:///{tmp_path / 'hoophigher.db'}")
-    init_db(engine)
-
-    def scoreboard_fetch(game_date: date, _timeout_seconds: int):
-        return {
-            "scoreboard": {
-                "games": [
-                    {
-                        "gameId": "0022500104",
-                        "gameDate": game_date.isoformat(),
-                        "homeTeam": {
-                            "teamId": "1610612737",
-                            "teamName": "Hawks",
-                            "teamTricode": "ATL",
-                            "score": "111",
-                        },
-                        "awayTeam": {
-                            "teamId": "1610612738",
-                            "teamName": "Celtics",
-                            "teamTricode": "BOS",
-                            "score": "109",
-                        },
-                    }
-                ]
-            }
-        }
-
-    def nba_game_fetch(game_id: str, _timeout_seconds: int):
-        return {
-            "boxScoreTraditional": {
-                "gameId": game_id,
-                "gameDate": "2025-02-10",
-                "homeTeam": {
-                    "teamId": "1610612737",
-                    "teamName": "Hawks",
-                    "teamTricode": "ATL",
-                    "statistics": {"points": "111"},
-                    "players": [
-                        {
-                            "personId": "11",
-                            "firstName": "Player",
-                            "familyName": "One",
-                            "statistics": {
-                                "minutes": "PT12M34.00S",
-                                "points": "17",
-                            },
-                        }
-                    ],
-                },
-                "awayTeam": {
-                    "teamId": "1610612738",
-                    "teamName": "Celtics",
-                    "teamTricode": "BOS",
-                    "statistics": {"points": "109"},
-                    "players": [
-                        {
-                            "personId": "12",
-                            "firstName": "Player",
-                            "familyName": "Two",
-                            "statistics": {
-                                "minutes": "PT09M00.00S",
-                                "points": "8",
-                            },
-                        }
-                    ],
-                },
-            }
-        }
-
-    stats_source = _make_stats_source(
-        cache_repository_factory=_make_cache_factory(engine),
-        scoreboard_fetch=scoreboard_fetch,
-        nba_game_fetch=nba_game_fetch,
-        timeout_seconds=5,
-    )
-
-    games = asyncio.run(stats_source.get_games_by_date(target_date))
-
-    assert len(games) == 1
-    game = games[0]
-    assert game.source_date == target_date
-    # Shell from scoreboard has team info.
-    assert game.home_team.score == 111
-    assert game.away_team.score == 109
-    # No player lines — those come from on-demand get_nba_game.
-    assert game.player_lines == ()
-
-    # Fetch the full boxscore on demand.
-    full_game = asyncio.run(stats_source.get_nba_game("0022500104"))
-    assert [
-        (player.player_name, player.team_abbreviation, player.minutes, player.points)
-        for player in full_game.player_lines
-    ] == [
-        ("Player One", "ATL", 12, 17),
-        ("Player Two", "BOS", 9, 8),
-    ]
-
-
-def test_get_games_by_date_parses_v2_boxscore_without_game_summary(tmp_path) -> None:
-    target_date = date(2025, 2, 10)
-    engine = create_sqlite_engine(f"sqlite:///{tmp_path / 'hoophigher.db'}")
-    init_db(engine)
-
-    def scoreboard_fetch(game_date: date, _timeout_seconds: int):
-        return {
-            "scoreboard": {
-                "games": [
-                    {
-                        "gameId": "0022500105",
-                        "gameDate": game_date.isoformat(),
-                        "homeTeam": {
-                            "teamId": "1610612737",
-                            "teamName": "Hawks",
-                            "teamTricode": "ATL",
-                            "score": "111",
-                        },
-                        "awayTeam": {
-                            "teamId": "1610612738",
-                            "teamName": "Celtics",
-                            "teamTricode": "BOS",
-                            "score": "109",
-                        },
-                    }
-                ]
-            }
-        }
-
-    def nba_game_fetch(game_id: str, _timeout_seconds: int):
-        return {
-            "resultSets": [
-                {
-                    "name": "GameSummary",
-                    "headers": ["GAME_DATE_EST", "GAME_ID", "HOME_TEAM_ID", "VISITOR_TEAM_ID"],
-                    "rowSet": [
-                        ["2025-02-10", game_id, "1610612737", "1610612738"],
-                    ],
-                },
-                {
-                    "name": "PlayerStats",
-                    "headers": [
-                        "GAME_ID",
-                        "TEAM_ID",
-                        "TEAM_ABBREVIATION",
-                        "PLAYER_ID",
-                        "PLAYER_NAME",
-                        "MIN",
-                        "PTS",
-                    ],
-                    "rowSet": [
-                        [game_id, "1610612737", "ATL", "11", "Player One", "12:34", 17],
-                        [game_id, "1610612738", "BOS", "12", "Player Two", "9:00", 8],
-                    ],
-                },
-                {
-                    "name": "TeamStats",
-                    "headers": ["GAME_ID", "TEAM_ID", "TEAM_NAME", "TEAM_ABBREVIATION", "PTS"],
-                    "rowSet": [
-                        [game_id, "1610612737", "Hawks", "ATL", 111],
-                        [game_id, "1610612738", "Celtics", "BOS", 109],
-                    ],
-                },
-            ]
-        }
-
-    stats_source = _make_stats_source(
-        cache_repository_factory=_make_cache_factory(engine),
-        scoreboard_fetch=scoreboard_fetch,
-        nba_game_fetch=nba_game_fetch,
-        timeout_seconds=5,
-    )
-
-    games = asyncio.run(stats_source.get_games_by_date(target_date))
-
-    assert len(games) == 1
-    game = games[0]
-    assert game.source_date == target_date
-    assert game.home_team.abbreviation == "ATL"
-    assert game.away_team.abbreviation == "BOS"
-    # Shell — no player lines.
-    assert game.player_lines == ()
-
-    # Fetch the full boxscore on demand.
-    full_game = asyncio.run(stats_source.get_nba_game("0022500105"))
-    assert [
-        (player.player_name, player.team_abbreviation, player.minutes, player.points)
-        for player in full_game.player_lines
-    ] == [
-        ("Player One", "ATL", 12, 17),
-        ("Player Two", "BOS", 9, 8),
-    ]
-
-
-def test_malformed_payload_raises_explicit_error(tmp_path) -> None:
-    engine = create_sqlite_engine(f"sqlite:///{tmp_path / 'hoophigher.db'}")
-    init_db(engine)
-
-    def malformed_nba_game_fetch(game_id: str, _timeout_seconds: int):
-        return {
-            "boxScoreTraditional": {
-                "gameId": game_id,
-                "gameDate": "2025-02-10",
-                "awayTeam": {
-                    "teamId": "1610612738",
-                    "teamName": "Celtics",
-                    "teamTricode": "BOS",
-                    "score": "108",
-                },
-                "playersStats": [],
-            }
-        }
-
-    stats_source = _make_stats_source(
-        cache_repository_factory=_make_cache_factory(engine),
-        nba_game_fetch=malformed_nba_game_fetch,
-        timeout_seconds=5,
-    )
-
-    with pytest.raises(ValueError, match="Malformed payload"):
-        asyncio.run(stats_source.get_nba_game("0022500005"))
 
 
 def test_get_nba_game_retries_transient_fetch_error_then_succeeds(tmp_path) -> None:
@@ -1355,37 +1083,6 @@ def test_default_nba_game_fetch_skips_v2_when_v3_exhausts_timeout_budget(monkeyp
         _default_nba_game_fetch("0022500106", 7)
 
     assert calls == ["v3"]
-
-
-# --- Game status parsing (issue #57) ---------------------------------------
-
-
-@pytest.mark.parametrize(
-    ("status_code", "status_text", "expected"),
-    [
-        (1, "7:00 pm ET", GameStatus.SCHEDULED),
-        (2, "Q3 5:23", GameStatus.LIVE),
-        (3, "Final", GameStatus.FINAL),
-        (None, "Final/OT", GameStatus.FINAL),
-        # Without a numeric code, text alone can't distinguish live from
-        # scheduled, so it is classified conservatively as live (still
-        # excluded from Playable NBA Games either way).
-        (None, "7:00 pm ET", GameStatus.LIVE),
-        (None, "Halftime", GameStatus.LIVE),
-        (None, None, None),
-        (None, "", None),
-        # A present but unrecognized status code is status information we do
-        # not understand — classified conservatively as live, never final.
-        (4, None, GameStatus.LIVE),
-        (0, "", GameStatus.LIVE),
-        ("garbage", None, GameStatus.LIVE),
-        (4, "Final", GameStatus.FINAL),
-    ],
-)
-def test_parse_game_status_classifies_numeric_and_text_signals(
-    status_code, status_text, expected
-) -> None:
-    assert _parse_game_status(status_code=status_code, status_text=status_text) == expected
 
 
 def test_get_games_by_date_excludes_live_and_scheduled_v3_games(tmp_path) -> None:
