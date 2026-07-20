@@ -66,6 +66,17 @@ def test_preserves_game_status_compatibility_alias() -> None:
     assert stats_source_module.GameStatus is nba_api_parsing.NBAGameStatus
 
 
+def test_player_line_availability_honors_domain_eligibility(monkeypatch) -> None:
+    player_line = _make_game("0022500001", date(2025, 2, 10)).player_lines[0]
+    monkeypatch.setattr(
+        PlayerLine,
+        "is_eligible",
+        property(lambda candidate: candidate.minutes == 0),
+    )
+
+    assert stats_source_module._has_eligible_player_lines((player_line,)) is False
+
+
 def test_get_games_by_date_uses_cache_before_fetchers(tmp_path) -> None:
     target_date = date(2025, 2, 10)
     cached_game = _make_game("0022500001", target_date)

@@ -9,6 +9,7 @@ from hoophigher.data.stats_sources.nba_api_parsing import (
     parse_nba_game_payload,
     parse_scoreboard_payload,
 )
+from hoophigher.domain.models import PlayerLine
 
 
 @pytest.mark.parametrize(
@@ -172,6 +173,46 @@ def test_parse_flat_v3_boxscore_parses_minutes_and_skips_blank_player_ids() -> N
     assert [player.player_id for player in game.player_lines] == ["11", "12"]
     assert [player.minutes for player in game.player_lines] == [12, 0]
     assert [player.points for player in game.player_lines] == [17, 0]
+
+
+def test_parse_boxscore_availability_honors_player_line_eligibility(monkeypatch) -> None:
+    monkeypatch.setattr(
+        PlayerLine,
+        "is_eligible",
+        property(lambda player_line: player_line.minutes == 0),
+    )
+
+    game = parse_nba_game_payload(
+        {
+            "boxScoreTraditional": {
+                "gameId": "0022500005",
+                "gameDate": "2025-02-10",
+                "homeTeam": {
+                    "teamId": "1",
+                    "teamName": "Home",
+                    "teamTricode": "HOM",
+                },
+                "awayTeam": {
+                    "teamId": "2",
+                    "teamName": "Away",
+                    "teamTricode": "AWY",
+                },
+                "playersStats": [
+                    {
+                        "personId": "11",
+                        "name": "Bench Player",
+                        "teamId": "1",
+                        "teamTricode": "HOM",
+                        "minutes": "0:00",
+                        "points": 0,
+                    }
+                ],
+            }
+        },
+        expected_game_id="0022500005",
+    )
+
+    assert game.player_lines[0].is_eligible is True
 
 
 def test_parse_nested_v3_boxscore() -> None:

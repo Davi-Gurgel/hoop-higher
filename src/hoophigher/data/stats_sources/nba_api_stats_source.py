@@ -22,10 +22,9 @@ from hoophigher.data.stats_sources.nba_api_parsing import (
 )
 from hoophigher.domain.models import NBAGame, PlayerLine, TeamGameInfo
 
-# Compatibility aliases for callers that imported these parser details from
-# this module before parsing moved to ``nba_api_parsing``.
+# Compatibility alias for callers that imported this public parser detail
+# from this module before parsing moved to ``nba_api_parsing``.
 GameStatus = nba_api_parsing.NBAGameStatus
-_parse_game_status = nba_api_parsing.parse_game_status
 
 ScoreboardFetch = Callable[[date, float], Mapping[str, object]]
 NBAGameFetch = Callable[[str, float], Mapping[str, object]]
@@ -66,7 +65,7 @@ class NBAApiStatsSource(StatsSource):
         with self._cache_repository_factory() as cache_repository:
             cached_games = cache_repository.get_games_by_date(source_date)
         if cached_games is not None and all(
-            _is_game_shell(game) or _has_available_player_stats(game.player_lines)
+            _is_game_shell(game) or _has_eligible_player_lines(game.player_lines)
             for game in cached_games
         ):
             return cached_games
@@ -98,7 +97,7 @@ class NBAApiStatsSource(StatsSource):
             # Check if this individual game is already cached with stats.
             with self._cache_repository_factory() as cache_repository:
                 cached_game = cache_repository.get_nba_game(parsed_game.game_id)
-            if cached_game is not None and _has_available_player_stats(cached_game.player_lines):
+            if cached_game is not None and _has_eligible_player_lines(cached_game.player_lines):
                 games.append(
                     _merge_parsed_scoreboard_game(
                         parsed_game=parsed_game,
@@ -145,7 +144,7 @@ class NBAApiStatsSource(StatsSource):
     ) -> NBAGame:
         with self._cache_repository_factory() as cache_repository:
             cached_game = cache_repository.get_nba_game(game_id)
-        if cached_game is not None and _has_available_player_stats(cached_game.player_lines):
+        if cached_game is not None and _has_eligible_player_lines(cached_game.player_lines):
             return cached_game
 
         payload = await self._fetch_with_retries(
@@ -281,8 +280,8 @@ def _remaining_timeout_seconds(
     return remaining
 
 
-def _has_available_player_stats(players: tuple[PlayerLine, ...]) -> bool:
-    return any(player.minutes > 0 for player in players)
+def _has_eligible_player_lines(player_lines: tuple[PlayerLine, ...]) -> bool:
+    return any(player_line.is_eligible for player_line in player_lines)
 
 
 def _is_game_shell(game: NBAGame) -> bool:

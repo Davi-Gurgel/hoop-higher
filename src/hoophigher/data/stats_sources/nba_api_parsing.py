@@ -99,18 +99,16 @@ def _parse_scoreboard_v3_payload(
                 home_team=_parse_team(
                     home_raw,
                     field="scoreboard.games[].homeTeam",
-                    team_id_keys=("teamId",),
-                    abbreviation_keys=("teamTricode", "teamAbbreviation"),
-                    name_keys=("teamName",),
-                    score_keys=("score",),
+                    abbreviation_value=_first_value(home_raw, ("teamTricode", "teamAbbreviation")),
+                    abbreviation_error_field="scoreboard.games[].homeTeam.abbreviation",
+                    score_value=home_raw.get("score"),
                 ),
                 away_team=_parse_team(
                     away_raw,
                     field="scoreboard.games[].awayTeam",
-                    team_id_keys=("teamId",),
-                    abbreviation_keys=("teamTricode", "teamAbbreviation"),
-                    name_keys=("teamName",),
-                    score_keys=("score",),
+                    abbreviation_value=_first_value(away_raw, ("teamTricode", "teamAbbreviation")),
+                    abbreviation_error_field="scoreboard.games[].awayTeam.abbreviation",
+                    score_value=away_raw.get("score"),
                 ),
                 status=status,
             )
@@ -256,28 +254,40 @@ def _parse_nba_game_v3_payload(
     home_raw = _require_mapping(box.get("homeTeam"), field="boxScoreTraditional.homeTeam")
     away_raw = _require_mapping(box.get("awayTeam"), field="boxScoreTraditional.awayTeam")
 
-    home_team = _parse_v3_team(home_raw, field="boxScoreTraditional.homeTeam")
-    away_team = _parse_v3_team(away_raw, field="boxScoreTraditional.awayTeam")
+    home_team = _parse_team(
+        home_raw,
+        field="boxScoreTraditional.homeTeam",
+        abbreviation_value=home_raw.get("teamTricode") or home_raw.get("teamAbbreviation"),
+        abbreviation_error_field="boxScoreTraditional.homeTeam.teamTricode",
+        score_value=_v3_boxscore_team_score(home_raw),
+    )
+    away_team = _parse_team(
+        away_raw,
+        field="boxScoreTraditional.awayTeam",
+        abbreviation_value=away_raw.get("teamTricode") or away_raw.get("teamAbbreviation"),
+        abbreviation_error_field="boxScoreTraditional.awayTeam.teamTricode",
+        score_value=_v3_boxscore_team_score(away_raw),
+    )
 
-    flat_players_raw = box.get("playersStats") or box.get("playerStats")
-    if flat_players_raw is None:
-        players = _parse_v3_nested_player_rows(
+    flat_player_rows_raw = box.get("playersStats") or box.get("playerStats")
+    if flat_player_rows_raw is None:
+        player_lines = _parse_v3_nested_player_rows(
             home_raw, team=home_team, field="boxScoreTraditional.homeTeam.players"
         ) + _parse_v3_nested_player_rows(
             away_raw, team=away_team, field="boxScoreTraditional.awayTeam.players"
         )
     else:
-        players = _parse_player_rows(
-            _require_list(flat_players_raw, field="boxScoreTraditional.playersStats"),
+        player_lines = _parse_player_rows(
+            _require_list(flat_player_rows_raw, field="boxScoreTraditional.playersStats"),
             field="boxScoreTraditional.playersStats",
         )
-    _require_available_player_stats(players, field="boxScoreTraditional")
+    _require_eligible_player_lines(player_lines, field="boxScoreTraditional")
     return NBAGame(
         game_id=game_id,
         source_date=source_date,
         home_team=home_team,
         away_team=away_team,
-        player_lines=tuple(players),
+        player_lines=tuple(player_lines),
     )
 
 
@@ -332,7 +342,7 @@ def _parse_nba_game_v2_payload(
             "Malformed boxscore payload: missing TeamStats rows for home or away team."
         )
 
-    players = _parse_player_rows(
+    player_lines = _parse_player_rows(
         [
             row
             for row in player_rows
@@ -340,13 +350,13 @@ def _parse_nba_game_v2_payload(
         ],
         field="PlayerStats",
     )
-    _require_available_player_stats(players, field="PlayerStats")
+    _require_eligible_player_lines(player_lines, field="PlayerStats")
     return NBAGame(
         game_id=expected_game_id,
         source_date=source_date,
         home_team=home_team,
         away_team=away_team,
-        player_lines=tuple(players),
+        player_lines=tuple(player_lines),
     )
 
 
@@ -400,33 +410,25 @@ def _parse_team(
     payload: Mapping[str, object],
     *,
     field: str,
-    team_id_keys: Sequence[str],
-    abbreviation_keys: Sequence[str],
-    name_keys: Sequence[str],
-    score_keys: Sequence[str],
+    abbreviation_value: object,
+    abbreviation_error_field: str,
+    score_value: object,
 ) -> TeamGameInfo:
-    team_id = _require_str(_first_value(payload, team_id_keys), field=f"{field}.teamId")
-    abbreviation = _require_str(
-        _first_value(payload, abbreviation_keys), field=f"{field}.abbreviation"
-    )
-    name = _optional_str(_first_value(payload, name_keys)) or abbreviation
-    score = _optional_int(_first_value(payload, score_keys))
-    return TeamGameInfo(team_id=team_id, name=name, abbreviation=abbreviation, score=score)
-
-
-def _parse_v3_team(payload: Mapping[str, object], *, field: str) -> TeamGameInfo:
     team_id = _require_str(payload.get("teamId"), field=f"{field}.teamId")
-    abbreviation = _require_str(
-        payload.get("teamTricode") or payload.get("teamAbbreviation"),
-        field=f"{field}.teamTricode",
-    )
+    abbreviation = _require_str(abbreviation_value, field=abbreviation_error_field)
     name = _optional_str(payload.get("teamName")) or abbreviation
-    statistics = payload.get("statistics")
-    stats = statistics if isinstance(statistics, Mapping) else {}
-    score = _optional_int(
-        payload.get("score") if payload.get("score") is not None else stats.get("points")
-    )
+    score = _optional_int(score_value)
     return TeamGameInfo(team_id=team_id, name=name, abbreviation=abbreviation, score=score)
+
+
+def _v3_boxscore_team_score(payload: Mapping[str, object]) -> object:
+    score = payload.get("score")
+    if score is not None:
+        return score
+    statistics = payload.get("statistics")
+    if isinstance(statistics, Mapping):
+        return statistics.get("points")
+    return None
 
 
 def _parse_v3_nested_player_rows(
@@ -435,15 +437,15 @@ def _parse_v3_nested_player_rows(
     team: TeamGameInfo,
     field: str,
 ) -> list[PlayerLine]:
-    players_raw = _require_list(team_payload.get("players"), field=field)
-    flattened_players: list[Mapping[str, object]] = []
-    for player in players_raw:
-        if not isinstance(player, Mapping):
+    raw_player_rows = _require_list(team_payload.get("players"), field=field)
+    flattened_player_rows: list[Mapping[str, object]] = []
+    for raw_player_row in raw_player_rows:
+        if not isinstance(raw_player_row, Mapping):
             raise ValueError(f"Malformed payload: expected mapping rows for {field}.")
-        statistics = player.get("statistics")
+        statistics = raw_player_row.get("statistics")
         stats = statistics if isinstance(statistics, Mapping) else {}
-        flattened_players.append({**player, **stats})
-    return _parse_player_rows(flattened_players, field=field, team=team)
+        flattened_player_rows.append({**raw_player_row, **stats})
+    return _parse_player_rows(flattened_player_rows, field=field, team=team)
 
 
 def _parse_player_rows(
@@ -452,7 +454,7 @@ def _parse_player_rows(
     field: str,
     team: TeamGameInfo | None = None,
 ) -> list[PlayerLine]:
-    players: list[PlayerLine] = []
+    player_lines: list[PlayerLine] = []
     for row in rows:
         if not isinstance(row, Mapping):
             raise ValueError(f"Malformed payload: expected mapping rows for {field}.")
@@ -473,7 +475,7 @@ def _parse_player_rows(
         points = _int_or_zero(row.get("points") if "points" in row else row.get("PTS"))
         minutes = _parse_minutes(row.get("minutes") if "minutes" in row else row.get("MIN"))
 
-        players.append(
+        player_lines.append(
             PlayerLine(
                 player_id=player_id,
                 player_name=player_name,
@@ -485,7 +487,7 @@ def _parse_player_rows(
                 minutes=minutes,
             )
         )
-    return players
+    return player_lines
 
 
 def _parse_player_name(row: Mapping[str, object]) -> str | None:
@@ -501,8 +503,8 @@ def _parse_player_name(row: Mapping[str, object]) -> str | None:
     return first_name or family_name or _optional_str(row.get("nameI"))
 
 
-def _require_available_player_stats(players: Sequence[PlayerLine], *, field: str) -> None:
-    if any(player.minutes > 0 for player in players):
+def _require_eligible_player_lines(player_lines: Sequence[PlayerLine], *, field: str) -> None:
+    if any(player_line.is_eligible for player_line in player_lines):
         return
     raise LookupError(f"Boxscore stats are unavailable in {field}.")
 
