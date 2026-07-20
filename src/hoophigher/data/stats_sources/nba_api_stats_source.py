@@ -14,8 +14,8 @@ from hoophigher.data.cache_repository import CacheRepository
 from hoophigher.data.db import create_sqlite_engine, default_sqlite_url, init_db, session_scope
 from hoophigher.data.stats_sources import nba_api_parsing
 from hoophigher.data.stats_sources.nba_api_parsing import (
-    NON_FINAL_GAME_STATUSES,
-    ScoreboardSeed,
+    NON_FINAL_NBA_GAME_STATUSES,
+    ParsedScoreboardGame,
     looks_like_scoreboard_v3_payload,
     parse_nba_game_payload,
     parse_scoreboard_payload,
@@ -24,7 +24,7 @@ from hoophigher.domain.models import NBAGame, PlayerLine, TeamGameInfo
 
 # Compatibility aliases for callers that imported these parser details from
 # this module before parsing moved to ``nba_api_parsing``.
-GameStatus = nba_api_parsing.GameStatus
+GameStatus = nba_api_parsing.NBAGameStatus
 _parse_game_status = nba_api_parsing.parse_game_status
 
 ScoreboardFetch = Callable[[date, float], Mapping[str, object]]
@@ -77,33 +77,42 @@ class NBAApiStatsSource(StatsSource):
             operation_name="scoreboard",
             operation_context=f"source_date={source_date.isoformat()}",
         )
-        seeds = parse_scoreboard_payload(payload, expected_date=source_date)
+        parsed_scoreboard_games = parse_scoreboard_payload(payload, expected_date=source_date)
 
         # Only final games are Playable NBA Games. Live and scheduled games
         # are excluded before shells are built. A payload with no status
         # information at all preserves historical behavior (treated as
         # final).
-        final_seeds = [seed for seed in seeds if seed.status not in NON_FINAL_GAME_STATUSES]
-        all_games_final = len(final_seeds) == len(seeds)
+        final_scoreboard_games = [
+            parsed_game
+            for parsed_game in parsed_scoreboard_games
+            if parsed_game.status not in NON_FINAL_NBA_GAME_STATUSES
+        ]
+        all_games_final = len(final_scoreboard_games) == len(parsed_scoreboard_games)
 
         # Build lightweight game shells from scoreboard data.
         # No NBA game API calls are made here — those happen on demand
         # via get_nba_game when the gameplay service needs them.
         games: list[NBAGame] = []
-        for seed in final_seeds:
+        for parsed_game in final_scoreboard_games:
             # Check if this individual game is already cached with stats.
             with self._cache_repository_factory() as cache_repository:
-                cached_game = cache_repository.get_nba_game(seed.game_id)
+                cached_game = cache_repository.get_nba_game(parsed_game.game_id)
             if cached_game is not None and _has_available_player_stats(cached_game.player_lines):
-                games.append(_merge_game_seed(seed=seed, game=cached_game))
+                games.append(
+                    _merge_parsed_scoreboard_game(
+                        parsed_game=parsed_game,
+                        game=cached_game,
+                    )
+                )
             else:
                 # Return a shell with no player lines — caller fetches on demand.
                 games.append(
                     NBAGame(
-                        game_id=seed.game_id,
-                        source_date=seed.source_date,
-                        home_team=seed.home_team,
-                        away_team=seed.away_team,
+                        game_id=parsed_game.game_id,
+                        source_date=parsed_game.source_date,
+                        home_team=parsed_game.home_team,
+                        away_team=parsed_game.away_team,
                         player_lines=(),
                     )
                 )
@@ -280,24 +289,32 @@ def _is_game_shell(game: NBAGame) -> bool:
     return not game.player_lines
 
 
-def _merge_game_seed(*, seed: ScoreboardSeed, game: NBAGame) -> NBAGame:
-    if game.game_id != seed.game_id:
-        raise LookupError(f"Game id '{seed.game_id}' not found in fetched payload.")
+def _merge_parsed_scoreboard_game(*, parsed_game: ParsedScoreboardGame, game: NBAGame) -> NBAGame:
+    if game.game_id != parsed_game.game_id:
+        raise LookupError(f"Game id '{parsed_game.game_id}' not found in fetched payload.")
     home_team = TeamGameInfo(
         team_id=game.home_team.team_id,
         name=game.home_team.name,
-        abbreviation=seed.home_team.abbreviation or game.home_team.abbreviation,
-        score=seed.home_team.score if seed.home_team.score is not None else game.home_team.score,
+        abbreviation=parsed_game.home_team.abbreviation or game.home_team.abbreviation,
+        score=(
+            parsed_game.home_team.score
+            if parsed_game.home_team.score is not None
+            else game.home_team.score
+        ),
     )
     away_team = TeamGameInfo(
         team_id=game.away_team.team_id,
         name=game.away_team.name,
-        abbreviation=seed.away_team.abbreviation or game.away_team.abbreviation,
-        score=seed.away_team.score if seed.away_team.score is not None else game.away_team.score,
+        abbreviation=parsed_game.away_team.abbreviation or game.away_team.abbreviation,
+        score=(
+            parsed_game.away_team.score
+            if parsed_game.away_team.score is not None
+            else game.away_team.score
+        ),
     )
     return NBAGame(
         game_id=game.game_id,
-        source_date=seed.source_date,
+        source_date=parsed_game.source_date,
         home_team=home_team,
         away_team=away_team,
         player_lines=game.player_lines,

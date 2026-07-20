@@ -15,6 +15,7 @@ from hoophigher.data import (
     init_db,
     session_scope,
 )
+from hoophigher.data.stats_sources import nba_api_parsing
 from hoophigher.data.stats_sources.nba_api_stats_source import (
     NBAApiStatsSource,
     _default_nba_game_fetch,
@@ -59,6 +60,10 @@ def _make_stats_source(**kwargs):
     }
     values.update(kwargs)
     return NBAApiStatsSource(**values)
+
+
+def test_preserves_game_status_compatibility_alias() -> None:
+    assert stats_source_module.GameStatus is nba_api_parsing.NBAGameStatus
 
 
 def test_get_games_by_date_uses_cache_before_fetchers(tmp_path) -> None:

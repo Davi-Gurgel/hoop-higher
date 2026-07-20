@@ -8,12 +8,12 @@ from enum import StrEnum
 from hoophigher.domain.models import NBAGame, PlayerLine, TeamGameInfo
 
 
-class GameStatus(StrEnum):
-    """Scoreboard game status values recognized when the source reports them.
+class NBAGameStatus(StrEnum):
+    """NBA game status values recognized when the source reports them.
 
-    A seed's status is ``None`` when the payload carried no status
+    A parsed NBA game's status is ``None`` when the payload carried no status
     information at all, in which case historical behavior is preserved: the
-    game is treated as final.
+    NBA game is treated as final.
     """
 
     FINAL = "final"
@@ -21,22 +21,22 @@ class GameStatus(StrEnum):
     SCHEDULED = "scheduled"
 
 
-NON_FINAL_GAME_STATUSES = (GameStatus.LIVE, GameStatus.SCHEDULED)
+NON_FINAL_NBA_GAME_STATUSES = (NBAGameStatus.LIVE, NBAGameStatus.SCHEDULED)
 
-_STATUS_BY_NUMERIC_CODE: dict[int, GameStatus] = {
-    1: GameStatus.SCHEDULED,
-    2: GameStatus.LIVE,
-    3: GameStatus.FINAL,
+_STATUS_BY_NUMERIC_CODE: dict[int, NBAGameStatus] = {
+    1: NBAGameStatus.SCHEDULED,
+    2: NBAGameStatus.LIVE,
+    3: NBAGameStatus.FINAL,
 }
 
 
 @dataclass(frozen=True, slots=True)
-class ScoreboardSeed:
+class ParsedScoreboardGame:
     game_id: str
     source_date: date
     home_team: TeamGameInfo
     away_team: TeamGameInfo
-    status: GameStatus | None = None
+    status: NBAGameStatus | None = None
 
 
 def looks_like_scoreboard_v3_payload(payload: object) -> bool:
@@ -51,10 +51,10 @@ def looks_like_scoreboard_v3_payload(payload: object) -> bool:
 
 def parse_scoreboard_payload(
     payload: Mapping[str, object], *, expected_date: date
-) -> list[ScoreboardSeed]:
-    v3_seeds = _parse_scoreboard_v3_payload(payload, expected_date=expected_date)
-    if v3_seeds is not None:
-        return v3_seeds
+) -> list[ParsedScoreboardGame]:
+    parsed_v3_games = _parse_scoreboard_v3_payload(payload, expected_date=expected_date)
+    if parsed_v3_games is not None:
+        return parsed_v3_games
     return _parse_scoreboard_v2_payload(payload, expected_date=expected_date)
 
 
@@ -62,7 +62,7 @@ def _parse_scoreboard_v3_payload(
     payload: Mapping[str, object],
     *,
     expected_date: date,
-) -> list[ScoreboardSeed] | None:
+) -> list[ParsedScoreboardGame] | None:
     scoreboard = payload.get("scoreboard")
     if scoreboard is None:
         return None
@@ -75,7 +75,7 @@ def _parse_scoreboard_v3_payload(
             "Malformed scoreboard payload: expected list at payload['scoreboard']['games']."
         )
 
-    seeds: list[ScoreboardSeed] = []
+    parsed_games: list[ParsedScoreboardGame] = []
     for raw_game in games:
         if not isinstance(raw_game, Mapping):
             raise ValueError("Malformed scoreboard payload: expected mapping for each game entry.")
@@ -92,8 +92,8 @@ def _parse_scoreboard_v3_payload(
             status_text=_optional_str(raw_game.get("gameStatusText")),
         )
 
-        seeds.append(
-            ScoreboardSeed(
+        parsed_games.append(
+            ParsedScoreboardGame(
                 game_id=game_id,
                 source_date=source_date,
                 home_team=_parse_team(
@@ -115,14 +115,14 @@ def _parse_scoreboard_v3_payload(
                 status=status,
             )
         )
-    return seeds
+    return parsed_games
 
 
 def _parse_scoreboard_v2_payload(
     payload: Mapping[str, object],
     *,
     expected_date: date,
-) -> list[ScoreboardSeed]:
+) -> list[ParsedScoreboardGame]:
     result_sets = _require_list(payload.get("resultSets"), field="payload['resultSets']")
     game_headers = _parse_v2_result_set(result_sets, set_name="GameHeader")
     line_scores = _parse_v2_result_set(result_sets, set_name="LineScore", optional=True)
@@ -135,7 +135,7 @@ def _parse_scoreboard_v2_payload(
         if game_id and team_id and tricode:
             tricode_by_game_and_team[(game_id, team_id)] = tricode
 
-    seeds: list[ScoreboardSeed] = []
+    parsed_games: list[ParsedScoreboardGame] = []
     for row in game_headers:
         game_id = _require_str(row.get("GAME_ID"), field="resultSets.GameHeader.GAME_ID")
         source_date = _parse_date_field(
@@ -157,8 +157,8 @@ def _parse_scoreboard_v2_payload(
             status_text=_optional_str(row.get("GAME_STATUS_TEXT")),
         )
 
-        seeds.append(
-            ScoreboardSeed(
+        parsed_games.append(
+            ParsedScoreboardGame(
                 game_id=game_id,
                 source_date=source_date,
                 home_team=TeamGameInfo(
@@ -176,7 +176,7 @@ def _parse_scoreboard_v2_payload(
                 status=status,
             )
         )
-    return seeds
+    return parsed_games
 
 
 def _parse_v2_result_set(
@@ -507,8 +507,8 @@ def _require_available_player_stats(players: Sequence[PlayerLine], *, field: str
     raise LookupError(f"Boxscore stats are unavailable in {field}.")
 
 
-def parse_game_status(*, status_code: object, status_text: str | None) -> GameStatus | None:
-    """Classify a scoreboard game's status as final, live, or scheduled.
+def parse_game_status(*, status_code: object, status_text: str | None) -> NBAGameStatus | None:
+    """Classify an NBA game's status as final, live, or scheduled.
 
     Both supported scoreboard payload shapes (V3's ``gameStatus`` and V2's
     ``GAME_STATUS_ID``) reliably provide a numeric status code, so that code
@@ -536,8 +536,8 @@ def parse_game_status(*, status_code: object, status_text: str | None) -> GameSt
 
     lowered = (status_text or "").strip().lower()
     if lowered:
-        return GameStatus.FINAL if "final" in lowered else GameStatus.LIVE
-    return None if status_code is None else GameStatus.LIVE
+        return NBAGameStatus.FINAL if "final" in lowered else NBAGameStatus.LIVE
+    return None if status_code is None else NBAGameStatus.LIVE
 
 
 def _first_value(payload: Mapping[str, object], keys: Sequence[str]) -> object | None:

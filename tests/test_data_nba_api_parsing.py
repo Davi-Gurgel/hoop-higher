@@ -3,7 +3,8 @@ from datetime import date
 import pytest
 
 from hoophigher.data.stats_sources.nba_api_parsing import (
-    GameStatus,
+    NBAGameStatus,
+    ParsedScoreboardGame,
     parse_game_status,
     parse_nba_game_payload,
     parse_scoreboard_payload,
@@ -13,18 +14,18 @@ from hoophigher.data.stats_sources.nba_api_parsing import (
 @pytest.mark.parametrize(
     ("status_code", "status_text", "expected"),
     [
-        (1, "7:00 pm ET", GameStatus.SCHEDULED),
-        (2, "Q3 5:23", GameStatus.LIVE),
-        (3, "Final", GameStatus.FINAL),
-        (None, "Final/OT", GameStatus.FINAL),
-        (None, "7:00 pm ET", GameStatus.LIVE),
-        (None, "Halftime", GameStatus.LIVE),
+        (1, "7:00 pm ET", NBAGameStatus.SCHEDULED),
+        (2, "Q3 5:23", NBAGameStatus.LIVE),
+        (3, "Final", NBAGameStatus.FINAL),
+        (None, "Final/OT", NBAGameStatus.FINAL),
+        (None, "7:00 pm ET", NBAGameStatus.LIVE),
+        (None, "Halftime", NBAGameStatus.LIVE),
         (None, None, None),
         (None, "", None),
-        (4, None, GameStatus.LIVE),
-        (0, "", GameStatus.LIVE),
-        ("garbage", None, GameStatus.LIVE),
-        (4, "Final", GameStatus.FINAL),
+        (4, None, NBAGameStatus.LIVE),
+        (0, "", NBAGameStatus.LIVE),
+        ("garbage", None, NBAGameStatus.LIVE),
+        (4, "Final", NBAGameStatus.FINAL),
     ],
 )
 def test_parse_game_status_classifies_numeric_and_text_signals(
@@ -35,7 +36,7 @@ def test_parse_game_status_classifies_numeric_and_text_signals(
 
 def test_parse_scoreboard_payload_preserves_missing_status_as_unknown() -> None:
     source_date = date(2025, 2, 10)
-    seeds = parse_scoreboard_payload(
+    parsed_games = parse_scoreboard_payload(
         {
             "scoreboard": {
                 "games": [
@@ -61,13 +62,14 @@ def test_parse_scoreboard_payload_preserves_missing_status_as_unknown() -> None:
         expected_date=source_date,
     )
 
-    assert len(seeds) == 1
-    assert seeds[0].game_id == "0022500010"
-    assert seeds[0].status is None
+    assert len(parsed_games) == 1
+    assert isinstance(parsed_games[0], ParsedScoreboardGame)
+    assert parsed_games[0].game_id == "0022500010"
+    assert parsed_games[0].status is None
 
 
 def test_parse_v2_scoreboard_maps_team_scores_and_status() -> None:
-    seeds = parse_scoreboard_payload(
+    parsed_games = parse_scoreboard_payload(
         {
             "resultSets": [
                 {
@@ -94,10 +96,16 @@ def test_parse_v2_scoreboard_maps_team_scores_and_status() -> None:
         expected_date=date(2025, 2, 10),
     )
 
-    assert len(seeds) == 1
-    assert seeds[0].status is GameStatus.FINAL
-    assert (seeds[0].home_team.abbreviation, seeds[0].home_team.score) == ("ATL", 111)
-    assert (seeds[0].away_team.abbreviation, seeds[0].away_team.score) == ("BOS", 109)
+    assert len(parsed_games) == 1
+    assert parsed_games[0].status is NBAGameStatus.FINAL
+    assert (parsed_games[0].home_team.abbreviation, parsed_games[0].home_team.score) == (
+        "ATL",
+        111,
+    )
+    assert (parsed_games[0].away_team.abbreviation, parsed_games[0].away_team.score) == (
+        "BOS",
+        109,
+    )
 
 
 @pytest.mark.parametrize(
